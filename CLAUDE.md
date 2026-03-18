@@ -6,10 +6,10 @@ Custom fork of obra/superpowers. Installed via symlinks to ~/.claude/, NOT as a 
 - Full setup runbook: `docs/ARaymond-custom-fork-setup-runbook-v1.md`
 
 ## Installation Architecture
-- Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, creates `superpowers:` namespace)
+- Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, loads into context for auto-invocation)
+- Commands: `~/.claude/commands/superpowers/*.md` — thin stubs that delegate to the corresponding skill. These provide the `superpowers:` namespace in the `/skills` picker (personal skills don't support nested directory namespacing; commands do via `commands/<group>/<name>.md`)
 - Agent: `~/.claude/agents/superpowers-code-reviewer.md` → `./agents/code-reviewer.md`
 - Hook: SessionStart in `~/.claude/settings.json` calls `./hooks/session-start` with `CLAUDE_PLUGIN_ROOT` set
-- Commands: NOT installed (deprecated stubs, unnecessary)
 
 ## Fork Customizations (preserve during upstream merge)
 - `agents/code-reviewer.md` — `name:` changed to `superpowers-code-reviewer`
@@ -26,6 +26,8 @@ Conflict files: `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.
 ```bash
 # Skills: expect 14
 find -L ~/.claude/skills/superpowers -name "SKILL.md" | wc -l
+# Commands: expect 14 (powers /skills picker)
+ls ~/.claude/commands/superpowers/*.md | wc -l
 # Agent symlink intact
 ls -la ~/.claude/agents/superpowers-code-reviewer.md
 # Hook present in settings
@@ -47,5 +49,5 @@ Real-world issues from using superpowers in production projects. Use these to in
 ## Key Architecture Notes
 - Skills use inline prompt templates (`./implementer-prompt.md`) for subagent dispatch, NOT formal agent files
 - Only 1 formal agent exists (`code-reviewer.md`) — used for final whole-implementation review
-- Nested skill directories create colon namespaces (`skills/superpowers/brainstorming/` → `superpowers:brainstorming`)
+- Personal skills (`~/.claude/skills/`) only support one level of nesting for the `/skills` picker. The `superpowers:` namespace in the picker comes from command stubs at `~/.claude/commands/superpowers/`, NOT from the skills directory structure
 - Agents do NOT support nested directory namespacing — must use flat files with unique names
