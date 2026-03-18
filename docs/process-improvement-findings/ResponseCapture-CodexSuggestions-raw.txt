@@ -1,0 +1,162 @@
+Yes. Here is a patch-ready Markdown block you can add to docs/plans/CLAUDE.md.
+
+  ### Canonical Names Verification (Required)
+
+  Any plan that references seeded data values, enum strings, source names, status names, user-facing
+  labels, or field names must verify those literals against the current codebase or schema before
+  approval.
+
+  Required checks:
+  - `sources.source_name` values used in migrations, seeds, or tests must match current canonical
+  names in code or database.
+  - Repeated identifiers must use the actual canonical name everywhere (`cycle.account_prefix` vs
+  `cycle.source`, `statement_matches` vs `stmt_matches`, etc.).
+  - If a mapping table is introduced, the plan must identify the source of truth for each side of the
+  mapping.
+
+  Common failure mode:
+  - A plan uses source names or enum values remembered from an older implementation and silently
+  writes no-op `UPDATE` statements or incorrect comparisons.
+
+  ### Reference Hygiene
+
+  Only include external references that are necessary for implementation.
+  If a referenced document is historical context only, label it explicitly as:
+
+  - `Historical only — do not implement from`
+
+  If a plan stands on its own without a reference, omit the reference.
+  Do not include broad “prior art” sections that mix canonical sources with obsolete documents.
+
+  ### Executable Snippet Accuracy
+
+  Any code snippet presented as an implementation step must be copy-safe.
+
+  Required checks:
+  - Required imports are included
+  - Import paths match current repo conventions
+  - Router prefixes and dependency patterns match the current app structure
+  - If a snippet is illustrative rather than exact, label it `pseudocode` explicitly
+
+  Do not present approximate code as if it can be pasted directly.
+
+  ### Query Cardinality Audit (Required)
+
+  For every planned JOIN, subquery, aggregate, or UNION that feeds list/detail endpoints, verify
+  cardinality explicitly.
+
+  Required checks:
+  - Is the relationship guaranteed 1:1, 1:many, or many:many?
+  - If history rows exist, define which row is joined (`active`, `latest`, `approved`, etc.).
+  - If a query relies on a partial unique index, state the exact predicate that makes the join safe.
+  - If a broader join predicate would duplicate rows, state that explicitly and forbid it.
+
+  Common failure mode:
+  - A plan broadens a JOIN to include history rows and accidentally duplicates list results or makes
+  status fields ambiguous.
+
+  ### Schema Shape Consistency (Required)
+
+  When a plan defines both storage schema and API schema for the same data:
+  - State whether the API is a direct projection of storage or a transformed view
+  - If transformed, provide the exact field mapping
+  - Do not use shorthand names in one section and canonical names in another without an explicit
+  mapping table
+
+  Examples:
+  - `statement_matches` in JSONB vs `stmt_matches` in API
+  - `match_results_json` storage shape vs `GET /results` response shape
+
+  ### Async API Contract Audit (Required)
+
+  For any async workflow (job start, polling, completion, retry, reset):
+  - Define the identity used at each step (`job_id`, `cycle_id`, batch ID, etc.)
+  - Confirm that start, status, results, retry, and reset endpoints use a coherent identity model
+  - Specify whether response models reuse existing async infrastructure shapes or intentionally define
+  a new shape
+  - If introducing new async job metadata (for example `error_type`), state whether it already exists
+  or must be added to storage/models/services
+
+  Common failure mode:
+  - Start endpoint returns `job_id`, but polling is cycle-scoped or assumes fields that the async job
+  infrastructure does not provide.
+
+  ### Spec Lock For Implementation Plans
+
+  When writing an implementation plan from an approved design/spec:
+  - Treat the approved spec as the canonical source of behavioral truth
+  - Do not silently broaden, narrow, or reinterpret approved decisions
+  - If the implementation plan intentionally diverges, include an explicit `Implementation Deviation`
+  note with rationale and affected sections
+  - Reviewers must compare the implementation plan back to the approved spec for drift
+
+  Common failure mode:
+  - The implementation plan reintroduces a JOIN predicate, gate behavior, or API contract that the
+  approved spec had already corrected.
+
+  ### Legacy Removal Verification
+
+  If a feature replaces existing functionality, the plan must include:
+  - Legacy endpoints/services/components to remove
+  - Legacy concepts that must not reappear in new docs, UI, or tests
+  - Any legacy helpers retained for tests only, labeled explicitly as `test-only`
+  - A final grep/audit step to check for stale references to removed concepts
+
+  Common failure modes:
+  - Deleted API paths still referenced in frontend hooks
+  - Removed concepts (for example separate boundary-review UI) still mentioned in tests or component
+  copy
+
+  ### Subagent Write-Scope Partitioning (Required for execution plans)
+
+  If a plan is intended for subagent execution, include a write-scope table:
+
+  | Worker / Task Group | Owned Files | Must Not Edit | Depends On |
+  |---|---|---|---|
+
+  Rules:
+  - Do not mark tasks as parallelizable if they edit the same files or tightly coupled interfaces
+  - Explicitly call out serialized tasks caused by overlapping write sets
+  - If two tasks touch the same file, they must be assigned to the same worker or run strictly in
+  sequence
+
+  Common failure mode:
+  - A plan labels frontend work as parallelizable at a high level, but multiple workers edit the same
+  modal or panel files and create merge conflicts.
+
+  ### Handoff vs Spec Reconciliation
+
+  If both a handoff package and an approved spec exist:
+  - The plan must state which document is authoritative for behavior
+  - The handoff package may inform implementation details, but must not override approved behavior
+  - Any intentional reclassification from experiment behavior to production behavior must be listed
+  explicitly
+
+  Examples:
+  - Experiment says a validator is a hard reject
+  - Approved spec says it is a soft warning or approval gate
+
+  In that case, the plan must name the production behavior as the canonical one and explain the
+  change.
+
+  ### Copy-Safe Review Addendum For Reviewers
+
+  When reviewing an implementation plan, verify not only that the architecture is sound, but also
+  that:
+  - migration literals match current canonical values
+  - endpoint shapes match existing response wrappers or explicitly define a new wrapper
+  - router registration instructions match current app wiring
+  - query predicates preserve the cardinality assumptions described in the spec
+  - subagent partitions have disjoint write scopes
+
+  If any of those checks fail, flag them as implementation-blocking even if the high-level design is
+  otherwise correct.
+
+  Recommended insertion points:
+
+  - Add Canonical Names Verification, Reference Hygiene, and Executable Snippet Accuracy under Content
+    Standards
+  - Add Query Cardinality Audit, Schema Shape Consistency, Async API Contract Audit, Spec Lock For
+    Implementation Plans, Legacy Removal Verification, Subagent Write-Scope Partitioning, and Handoff
+    vs Spec Reconciliation after Pre-Approval Review Gate
+  - Add Copy-Safe Review Addendum For Reviewers under Plan Review Process
