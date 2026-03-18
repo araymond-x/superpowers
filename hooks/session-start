@@ -14,6 +14,32 @@ if [ -d "$legacy_skills_dir" ]; then
     warning_message="\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER:⚠️ **WARNING:** Superpowers now uses Claude Code's skills system. Custom skills in ~/.config/superpowers/skills will not be read. Move custom skills to ~/.claude/skills instead. To make this message go away, remove ~/.config/superpowers/skills</important-reminder>"
 fi
 
+# Symlink integrity pre-flight check
+EXPECTED_SKILL_COUNT=14
+EXPECTED_CMD_COUNT=14
+SKILLS_DIR="${HOME}/.claude/skills/superpowers"
+COMMANDS_DIR="${HOME}/.claude/commands/superpowers"
+AGENT_LINK="${HOME}/.claude/agents/superpowers-code-reviewer.md"
+integrity_failures=""
+
+actual_skill_count=$(find -L "$SKILLS_DIR" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ') || actual_skill_count=0
+if [ "$actual_skill_count" -ne "$EXPECTED_SKILL_COUNT" ]; then
+    integrity_failures="${integrity_failures}\n- Skills: expected ${EXPECTED_SKILL_COUNT} SKILL.md files under ~/.claude/skills/superpowers/, found ${actual_skill_count}. The skills symlink may be broken."
+fi
+
+actual_cmd_count=$(ls "${COMMANDS_DIR}"/*.md 2>/dev/null | wc -l | tr -d ' ') || actual_cmd_count=0
+if [ "$actual_cmd_count" -ne "$EXPECTED_CMD_COUNT" ]; then
+    integrity_failures="${integrity_failures}\n- Commands: expected ${EXPECTED_CMD_COUNT} stubs under ~/.claude/commands/superpowers/, found ${actual_cmd_count}. Command stubs may be missing or the directory may not exist."
+fi
+
+if [ ! -e "$AGENT_LINK" ]; then
+    integrity_failures="${integrity_failures}\n- Agent: ~/.claude/agents/superpowers-code-reviewer.md does not resolve. The symlink may be broken or the target file deleted."
+fi
+
+if [ -n "$integrity_failures" ]; then
+    warning_message="${warning_message}\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER: WARNING: Superpowers installation integrity check failed. The following issues were detected:${integrity_failures}\n\nRun the verification steps in the CLAUDE.md for this fork to diagnose.</important-reminder>"
+fi
+
 # Read using-superpowers content
 using_superpowers_content=$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md" 2>&1 || echo "Error reading using-superpowers skill")
 

@@ -68,6 +68,8 @@ done
 ## Testing
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
+- `tests/ARaymond-installation/verify-symlink-install.sh` — verifies symlink+command-stub architecture (87 static checks, no API calls). Run after upstream merges or installation changes.
+- All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
 
 ## Process Improvement Findings (`docs/process-improvement-findings/`)
 Real-world issues from using superpowers in production projects. Use these to inform fork customizations.
@@ -80,8 +82,16 @@ Real-world issues from using superpowers in production projects. Use these to in
 ## `.superpowers/` Directory
 The visual brainstorming companion writes session data to `.superpowers/brainstorm/` in the project root. Each session gets a timestamped subdirectory containing HTML mockups, browser click events (`.events`), and server info. This directory is gitignored — it's ephemeral working state, not project artifacts.
 
+## Editing Skills
+- **Skill content**: Edit `./skills/<name>/SKILL.md` in the repo — live immediately via symlink
+- **Skill description in `/skills` picker**: Edit `~/.claude/commands/superpowers/<name>.md` frontmatter — these are standalone files outside the repo
+- **Gotcha**: Changing `description:` in SKILL.md does NOT update the picker. You must update BOTH the SKILL.md and the command stub's frontmatter. The `!`cat`` preprocessing only pulls body content, not frontmatter.
+- **Hook** (`hooks/session-start`): Referenced by absolute path in `settings.json` — edits are live immediately, no symlink
+
 ## Key Architecture Notes
 - Skills use inline prompt templates (`./implementer-prompt.md`) for subagent dispatch, NOT formal agent files
 - Only 1 formal agent exists (`code-reviewer.md`) — used for final whole-implementation review
 - Personal skills (`~/.claude/skills/`) only support one level of nesting for the `/skills` picker. The `superpowers:` namespace in the picker comes from command stubs at `~/.claude/commands/superpowers/`, NOT from the skills directory structure
 - Agents do NOT support nested directory namespacing — must use flat files with unique names
+- Brainstorm visual companion server: `skills/brainstorming/scripts/start-server.sh` (NOT repo root `scripts/`)
+- macOS gotcha: BSD `sed` fails on curly brace range expressions. Use `awk 'BEGIN{c=0} /^---$/{c++; next} c>=2{print}'` to strip YAML frontmatter
