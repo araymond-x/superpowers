@@ -70,6 +70,9 @@ done
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — verifies symlink+command-stub architecture (87 static checks, no API calls). Run after upstream merges or installation changes.
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
+- macOS has no `timeout` command — test scripts use background-process-kill pattern instead
+- `claude -p --output-format stream-json` requires `--verbose` flag — headless tests must include both
+- Avoid running `claude -p` integration tests from within an active Claude session — nested API calls exhaust quota quickly
 
 ## Process Improvement Findings (`docs/process-improvement-findings/`)
 Real-world issues from using superpowers in production projects. Use these to inform fork customizations.
@@ -78,6 +81,15 @@ Real-world issues from using superpowers in production projects. Use these to in
 - `2026-03-16-plan-review-findings-aws-explore.md` — Plan review gaps found during aws-explore project
 - `2026-03-16-handoff-quality-recommendations-aws-explore.md` — Recommendations for improving subagent handoff quality
 - `ResponseCapture-*.txt` — Raw session captures documenting failure modes
+
+## Process Improvement Implementation Status
+Findings in `docs/process-improvement-findings/` have been decomposed into 5 independent skill modification areas:
+1. **Controller discipline** → `skills/subagent-driven-development/` (review skipping, source file reading, deviation tracking)
+2. **Handoff contract clarity** → `skills/brainstorming/`, `skills/writing-plans/` (contract constraints sections, wrong-way/right-way examples)
+3. **Plan review rigor** → `skills/writing-plans/` (cross-document consistency, error name drift, transformation tracing)
+4. **CLAUDE.md enforcement** → `skills/subagent-driven-development/` (already applied to implementer-prompt.md and spec-reviewer-prompt.md — verify intact)
+5. **TDD against real contracts** → `skills/test-driven-development/` (fixtures must match real data formats, not plan assumptions)
+Start with Area 1 (controller discipline) — if the orchestrator skips reviews or misfeeds context, other improvements don't matter.
 
 ## `.superpowers/` Directory
 The visual brainstorming companion writes session data to `.superpowers/brainstorm/` in the project root. Each session gets a timestamped subdirectory containing HTML mockups, browser click events (`.events`), and server info. This directory is gitignored — it's ephemeral working state, not project artifacts.
