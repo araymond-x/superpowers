@@ -567,7 +567,49 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
             "detail": "First task — no previous report to validate",
         }
 
-    # Check 4: Pending deviations count
+    # Check 4: Previous task spec review report exists
+    if task_number > 0:
+        spec_review_pattern = os.path.join(args.reports_dir, f"task-{previous_task}-spec-review*")
+        spec_review_files = sorted(glob.glob(spec_review_pattern))
+        if spec_review_files:
+            checks["previous_spec_review"] = {
+                "status": "PASS",
+                "detail": f"reports/task-{previous_task}-spec-review exists",
+            }
+        else:
+            checks["previous_spec_review"] = {
+                "status": "FAIL",
+                "detail": f"No spec review report for Task {previous_task}. Dispatch spec compliance review and save to reports/task-{previous_task}-spec-review.md",
+            }
+            blockers.append("previous_spec_review")
+    else:
+        checks["previous_spec_review"] = {
+            "status": "OK",
+            "detail": "First task — no previous spec review to verify",
+        }
+
+    # Check 5: Previous task quality review report exists
+    if task_number > 0:
+        quality_review_pattern = os.path.join(args.reports_dir, f"task-{previous_task}-quality-review*")
+        quality_review_files = sorted(glob.glob(quality_review_pattern))
+        if quality_review_files:
+            checks["previous_quality_review"] = {
+                "status": "PASS",
+                "detail": f"reports/task-{previous_task}-quality-review exists",
+            }
+        else:
+            checks["previous_quality_review"] = {
+                "status": "FAIL",
+                "detail": f"No quality review report for Task {previous_task}. Dispatch code quality review and save to reports/task-{previous_task}-quality-review.md (or save reports/task-{previous_task}-quality-review-minimum-tier.md if minimum tier declared)",
+            }
+            blockers.append("previous_quality_review")
+    else:
+        checks["previous_quality_review"] = {
+            "status": "OK",
+            "detail": "First task — no previous quality review to verify",
+        }
+
+    # Check 6: Pending deviations count
     pending_count = count_pending_deviations(deviations_content)
     if pending_count == 0:
         checks["pending_deviations"] = {
@@ -584,7 +626,7 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
         blockers.append("pending_deviations")
 
-    # Check 5: Context load estimate
+    # Check 7: Context load estimate
     load = estimate_context_load(args.plan_file, args.deviations_file, args.reports_dir)
     load_detail = (
         f"Accumulated files: ~{load['total_kb']}KB "

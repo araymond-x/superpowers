@@ -1,6 +1,13 @@
 ---
 name: subagent-driven-development
 description: "Orchestrates implementation plans by dispatching a fresh subagent per task with two-stage review (spec compliance + code quality) after each. Use when executing a plan with independent tasks in the current session."
+hooks:
+  PreToolUse:
+    - matcher: "Agent"
+      hooks:
+        - type: command
+          command: "~/.claude/skills/superpowers/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+          statusMessage: "Checking SDD dispatch requirements..."
 ---
 
 # Subagent-Driven Development
