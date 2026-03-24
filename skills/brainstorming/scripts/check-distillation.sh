@@ -16,7 +16,8 @@ ARTIFACTS=()
 # Check for exploration artifact patterns
 while IFS= read -r line; do
   ARTIFACTS+=("$line")
-done < <(grep -niE '(options?\s+considered|rationale|we\s+considered|earlier\s+design|prior\s+art|rejected\s+alternative|we\s+chose.*instead|we\s+decided\s+against)' "$FILE" 2>/dev/null || true)
+# Exclude blockquote lines (> ...) which contain template boilerplate like "For full rationale, see source"
+done < <(grep -niE '(options?\s+considered|rationale|we\s+considered|earlier\s+design|prior\s+art|rejected\s+alternative|we\s+chose.*instead|we\s+decided\s+against)' "$FILE" 2>/dev/null | grep -v '^\s*[0-9]*:>' || true)
 
 LINE_COUNT=$(wc -l < "$FILE")
 WORD_COUNT=$(wc -w < "$FILE")

@@ -75,9 +75,9 @@ WRITE_SCOPE_RE = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
-# File Map / New Files / Modified Files section
+# File Map / File Structure / New Files / Modified Files section
 FILE_MAP_RE = re.compile(
-    r"^#{1,4}\s*(?:File\s+Map|New\s+Files?|Modified\s+Files?)",
+    r"^#{1,4}\s*(?:File\s+(?:Map|Structure)|New\s+Files?|Modified\s+Files?|Code\s+Footprint)",
     re.MULTILINE | re.IGNORECASE,
 )
 
@@ -331,7 +331,7 @@ def validate_plan(content: str) -> Dict:
 
     # If File Map is absent, emit a warning (not a blocker)
     if not sections["file_map"]["present"]:
-        warnings.append("No File Map section found — recommended for plan clarity")
+        warnings.append("No File Map / File Structure / Code Footprint section found — recommended for plan clarity")
 
     # If Source Contracts is present and non-empty, Task 0 must exist
     sc_present = sections["source_contracts"]["present"]

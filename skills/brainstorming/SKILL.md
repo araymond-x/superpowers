@@ -191,6 +191,12 @@ After producing the distilled spec, dispatch a distillation reviewer subagent (s
 
 Use the same dispatch pattern as the spec review loop — fix issues and re-dispatch until approved.
 
+After the distillation reviewer approves, run the artifact checker:
+```bash
+bash ~/.claude/skills/superpowers/brainstorming/scripts/check-distillation.sh <distilled-spec.md>
+```
+This greps for exploration artifact patterns ("Options Considered", "rationale", "we considered", etc.). Fix any findings before proceeding.
+
 ## Key Principles
 
 - **One question at a time** - Don't overwhelm with multiple questions
