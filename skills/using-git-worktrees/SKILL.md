@@ -72,6 +72,18 @@ Per Jesse's rule "Fix broken things immediately":
 
 No .gitignore verification needed - outside project entirely.
 
+## Branch Name Collisions
+
+If the branch name you want already exists, an existing worktree or prior implementation attempt may be using it.
+
+**Do not delete existing branches or worktrees to resolve a naming collision.** The prior work may be needed for comparison, rollback, or reference.
+
+Instead:
+- Check if a worktree already exists: `git worktree list | grep <branch-name>`
+- If it does, ask the user whether to reuse it, remove it, or create a versioned branch
+- For re-implementations of the same feature, use a versioned branch name: `feature/<name>-v2`, `feature/<name>-v3`
+- Only delete a branch/worktree with explicit user confirmation
+
 ## Creation Steps
 
 ### 1. Detect Project Name
