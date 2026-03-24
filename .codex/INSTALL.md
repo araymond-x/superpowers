@@ -27,6 +27,8 @@ Enable superpowers skills in Codex via native skill discovery. Just clone and sy
 
 3. **Restart Codex** (quit and relaunch the CLI) to discover the skills.
 
+Subagent skills like `dispatching-parallel-agents` and `subagent-driven-development` rely on Codex multi-agent tools. In current Codex releases, `features.multi_agent` is stable and enabled by default, so no extra config is normally required.
+
 ## Migrating from old bootstrap
 
 If you installed superpowers before native skill discovery, you need to:
@@ -56,7 +58,9 @@ You should see a symlink (or junction on Windows) pointing to your superpowers s
 cd ~/.codex/superpowers && git pull
 ```
 
-Skills update instantly through the symlink.
+If your Codex CLI itself is outdated, upgrade it separately using the install method you originally used, then restart Codex.
+
+Skills update instantly through the symlink once the repo is updated.
 
 ## Uninstalling
 

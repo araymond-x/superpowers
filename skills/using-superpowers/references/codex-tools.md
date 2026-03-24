@@ -15,11 +15,6 @@ Skills use Claude Code tool names. When you encounter these in a skill, use your
 
 ## Subagent dispatch requires multi-agent support
 
-Add to your Codex config (`~/.codex/config.toml`):
+Current Codex releases expose multi-agent support by default. Skills like `dispatching-parallel-agents` and `subagent-driven-development` can use `spawn_agent`, `send_input`, `wait_agent`, and `close_agent` without extra config in the normal case.
 
-```toml
-[features]
-multi_agent = true
-```
-
-This enables `spawn_agent`, `wait`, and `close_agent` for skills like `dispatching-parallel-agents` and `subagent-driven-development`.
+If those tools are missing in an older Codex build, update Codex first and then retry.

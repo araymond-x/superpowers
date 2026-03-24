@@ -72,6 +72,8 @@ Fetch and follow instructions from https://raw.githubusercontent.com/obra/superp
 
 **Detailed docs:** [docs/README.codex.md](docs/README.codex.md)
 
+If Superpowers is already installed, update the repo with `cd ~/.codex/superpowers && git pull`, then restart Codex so it rescans the skills directory.
+
 ### OpenCode
 
 Tell OpenCode:

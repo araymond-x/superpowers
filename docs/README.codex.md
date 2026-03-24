@@ -32,11 +32,7 @@ Fetch and follow instructions from https://raw.githubusercontent.com/obra/superp
 
 3. Restart Codex.
 
-4. **For subagent skills** (optional): Skills like `dispatching-parallel-agents` and `subagent-driven-development` require Codex's multi-agent feature. Add to your Codex config:
-   ```toml
-   [features]
-   multi_agent = true
-   ```
+Subagent skills like `dispatching-parallel-agents` and `subagent-driven-development` use Codex's multi-agent tools. In current Codex releases, `features.multi_agent` is stable and enabled by default, so no extra config is normally required.
 
 ### Windows
 
@@ -93,7 +89,9 @@ The `description` field is how Codex decides when to activate a skill automatica
 cd ~/.codex/superpowers && git pull
 ```
 
-Skills update instantly through the symlink.
+If your Codex CLI itself is outdated, upgrade it separately using the install method you originally used, then restart Codex so it rescans skills.
+
+Skills update instantly through the symlink once the repo is updated.
 
 ## Uninstalling
 
