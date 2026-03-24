@@ -410,6 +410,42 @@ def check_cross_references(skills_dir):
                 "SDD SKILL: script paths do not use ~/.claude/skills/superpowers/ prefix (bare 'scripts/' paths would break outside install dir)",
             )
 
+        # SDD SKILL has hooks frontmatter for process-level enforcement
+        if "hooks:" in sdd_content and "PreToolUse" in sdd_content and 'matcher: "Agent"' in sdd_content:
+            check_pass(
+                CATEGORY_4,
+                "SDD SKILL: has PreToolUse hook on Agent tool in frontmatter",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "SDD SKILL: missing hooks frontmatter (PreToolUse on Agent) — process-level enforcement not active",
+            )
+
+        # Hook script exists and is executable
+        hook_script = os.path.join(
+            skills_dir, "subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+        )
+        if os.path.isfile(hook_script) and os.access(hook_script, os.X_OK):
+            check_pass(
+                CATEGORY_4,
+                "SDD SKILL: sdd-pre-dispatch-hook.sh exists and is executable",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "SDD SKILL: sdd-pre-dispatch-hook.sh missing or not executable — hook will fail silently",
+            )
+
+        # Branch safety script exists
+        branch_script = os.path.join(
+            skills_dir, "subagent-driven-development/scripts/check-safe-branch.sh"
+        )
+        if os.path.isfile(branch_script) and os.access(branch_script, os.X_OK):
+            check_pass(CATEGORY_4, "SDD SKILL: check-safe-branch.sh exists and is executable")
+        else:
+            check_fail(CATEGORY_4, "SDD SKILL: check-safe-branch.sh missing or not executable")
+
         # SDD SKILL references implementer, spec-reviewer, code-quality-reviewer prompt templates
         for prompt_file in [
             "./implementer-prompt.md",
