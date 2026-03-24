@@ -7,7 +7,7 @@ Use this template when a plan is decomposed into modules (plan exceeds 800 lines
 ```markdown
 # [Feature Name] — Module N: [Module Name]
 
-> **Parent plan:** `docs/superpowers/plans/YYYY-MM-DD-<feature>-plan.md`
+> **Parent plan:** `docs/imp-plans/YYYY-MM-DD-<feature>-plan.md`
 > **Module:** N of M
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
 

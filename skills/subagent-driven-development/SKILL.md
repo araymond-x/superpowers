@@ -412,6 +412,14 @@ Before invoking `superpowers:finishing-a-development-branch`, verify all of the 
 6. **Full test suite passes from clean state.** Run the complete test suite (not just individual task tests). All tests must pass. If any test fails, investigate — do not mark as complete with failing tests.
 7. **Cross-task wiring audit.** For every component, hook, or module created by one task and consumed by another: verify it is actually imported, registered, or wired in the consuming code. Check the UI renders the component, the router registers the endpoint, the hook is called. Components that exist but are never wired are incomplete work.
 
+8. **Execution trace audit.** Extract and audit the session trace:
+   ```bash
+   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/extract-execution-trace.py --session-file <session.jsonl> --deviations-file DEVIATIONS.md --reports-dir reports/ --output execution-trace.json
+   ```
+   Then dispatch the trace auditor subagent (see `trace-auditor-prompt.md`) with the trace JSON and DEVIATIONS.md contents. The auditor reviews for skipped reviews, unlogged concerns, missing reports, and other process anomalies. If the auditor returns ISSUES_FOUND, address the issues before proceeding.
+
+   To find the current session file: `ls -t ~/.claude/projects/*/$(pwd | sed 's|/|%|g')/*.jsonl | head -1`
+
 These checks are not bureaucratic overhead. They exist because the failure mode — shipping work that silently diverged from the plan — is invisible without them.
 
 ## Session Recovery
@@ -430,6 +438,8 @@ This is why file-based persistence matters: the plan file, DEVIATIONS.md, and `r
 
 - `./implementer-prompt.md` - Dispatch implementer subagent
 - `./spec-reviewer-prompt.md` - Dispatch spec compliance reviewer subagent
+- `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
+- `./trace-auditor-prompt.md` - Dispatch execution trace auditor (Pre-Completion Gate step 8)
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
 
 ## Example Workflow

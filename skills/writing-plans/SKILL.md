@@ -18,7 +18,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 - Path to any handoff packages (verify they passed `superpowers:handoff-acceptance` first)
 - The working directory for the plan output
 
-**Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
+**Save plans to:** `docs/imp-plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
 
 ## Scope Check
@@ -34,9 +34,9 @@ A single massive plan file exhausts subagent context windows, makes parallelism 
 ### Module File Naming
 
 ```
-docs/superpowers/plans/YYYY-MM-DD-<feature>-plan.md          ← parent plan
-docs/superpowers/plans/YYYY-MM-DD-<feature>-module-1-<name>.md
-docs/superpowers/plans/YYYY-MM-DD-<feature>-module-2-<name>.md
+docs/imp-plans/YYYY-MM-DD-<feature>-plan.md          ← parent plan
+docs/imp-plans/YYYY-MM-DD-<feature>-module-1-<name>.md
+docs/imp-plans/YYYY-MM-DD-<feature>-module-2-<name>.md
 ```
 
 ### Module Decomposition Criteria
@@ -332,7 +332,7 @@ Approve unless there are serious gaps — missing requirements from the spec, co
 
 After saving the plan, offer execution choice:
 
-**"Plan complete and saved to `docs/superpowers/plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `docs/imp-plans/<filename>.md`. Two execution options:**
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
