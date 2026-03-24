@@ -13,7 +13,10 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** This should be run in a dedicated worktree (created by brainstorming skill).
+**Context:** This skill is designed to follow `superpowers:brainstorming`, which produces a spec and sets up a worktree. If invoked directly (skipping brainstorming), provide:
+- Path to the spec or requirements document
+- Path to any handoff packages (verify they passed `superpowers:handoff-acceptance` first)
+- The working directory for the plan output
 
 **Save plans to:** `docs/superpowers/plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
@@ -264,8 +267,35 @@ git commit -m "feat: add specific feature"
 
 After writing the complete plan:
 
+### Automated Plan Validation
+
+Before dispatching the plan reviewer, run the deterministic plan validator:
+
+```bash
+python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-plan.py --plan-file <plan.md>
+```
+
+This checks: plan size (<800 lines), task size (<200 lines), required sections (Source Contracts, Contract Constraints, Feature Archetype, Code Footprint, Write-Scope Partitioning), Task 0 presence when Source Contracts exist, and checkbox syntax. Fix any FAIL or WARNING issues before dispatching the human reviewer.
+
+**Two-layer validation:** The `validate-plan.py` script catches structural issues (missing sections, oversized tasks, absent Task 0). It does NOT catch semantic issues — type mismatches between plan snippets and source contracts, tolerance inconsistencies, implicit return type conventions, or cross-document drift. A structural PASS does not mean the plan is correct.
+
+The plan-document-reviewer dispatch below is the semantic layer. It reads source contracts independently and compares them against the plan's code snippets, field names, and assumptions. Both layers are required — do not skip the reviewer dispatch because the script passed.
+
 1. Dispatch a single plan-document-reviewer subagent (see plan-document-reviewer-prompt.md) with precisely crafted review context — never your session history. This keeps the reviewer focused on the plan, not your thought process.
    - Provide: path to the plan document, path to spec document
+
+### Reviewer Dispatch Example
+
+```
+Agent tool (general-purpose):
+  description: "Review plan document"
+  prompt: |
+    [Fill in the template from plan-document-reviewer-prompt.md with:]
+    - PLAN_FILE_PATH: path to the plan you wrote
+    - SPEC_FILE_PATH: path to the spec (or distilled spec)
+    - SOURCE_FILE_PATHS: paths to handoff/contract files (or "None")
+```
+
 2. If Issues Found: fix the issues, re-dispatch reviewer for the whole plan
 3. If Approved: proceed to execution handoff
 

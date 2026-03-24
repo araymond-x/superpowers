@@ -55,9 +55,10 @@ UNCHECKED_PATTERN = re.compile(r"^\s*-\s+\[ \]", re.MULTILINE)
 # Pattern for checked checkboxes
 CHECKED_PATTERN = re.compile(r"^\s*-\s+\[x\]", re.MULTILINE | re.IGNORECASE)
 
-# Pattern for "Source Contracts:" header
+# Pattern for "Source Contracts" — matches ATX headers and bold markdown variants
 SOURCE_CONTRACTS_PATTERN = re.compile(
-    r"^#+\s*Source\s+Contracts?\s*:?\s*$", re.MULTILINE | re.IGNORECASE
+    r"(?:^#+\s*Source\s+Contracts?\s*:?\s*$|\*\*Source\s+Contracts?:?\*\*\s*:?|\*\*Source\s+Contracts?\*\*\s*:?)",
+    re.MULTILINE | re.IGNORECASE,
 )
 
 # Pattern for pending entries in DEVIATIONS.md
@@ -319,8 +320,13 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
             "pre-execution", None, "FAIL", checks, warnings, blockers, None
         )
 
-    # Check 2: DEVIATIONS.md exists
-    if os.path.isfile(args.deviations_file):
+    # Check 2: DEVIATIONS.md exists (optional for pre-execution)
+    if args.deviations_file is None:
+        checks["deviations_file"] = {
+            "status": "SKIP",
+            "detail": "Not provided — will be created during execution",
+        }
+    elif os.path.isfile(args.deviations_file):
         checks["deviations_file"] = {
             "status": "PASS",
             "detail": f"{args.deviations_file} exists",
@@ -332,8 +338,13 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
         }
         blockers.append("deviations_file")
 
-    # Check 3: reports/ directory exists
-    if os.path.isdir(args.reports_dir):
+    # Check 3: reports/ directory exists (optional for pre-execution)
+    if args.reports_dir is None:
+        checks["reports_dir"] = {
+            "status": "SKIP",
+            "detail": "Not provided — will be created during execution",
+        }
+    elif os.path.isdir(args.reports_dir):
         checks["reports_dir"] = {
             "status": "PASS",
             "detail": f"{args.reports_dir} exists",
@@ -408,6 +419,22 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
     if args.task_number is None:
         print(
             json.dumps({"error": "--task-number is required for phase pre-dispatch"}),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    if args.deviations_file is None:
+        print(
+            json.dumps(
+                {"error": "--deviations-file is required for phase pre-dispatch"}
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    if args.reports_dir is None:
+        print(
+            json.dumps({"error": "--reports-dir is required for phase pre-dispatch"}),
             file=sys.stderr,
         )
         sys.exit(3)
@@ -591,6 +618,22 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     Phase: pre-completion
     Checks before declaring implementation complete.
     """
+    if args.deviations_file is None:
+        print(
+            json.dumps(
+                {"error": "--deviations-file is required for phase pre-completion"}
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    if args.reports_dir is None:
+        print(
+            json.dumps({"error": "--reports-dir is required for phase pre-completion"}),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
     checks = {}
     blockers = []
     warnings = []
@@ -766,15 +809,25 @@ def main() -> int:
     )
     parser.add_argument(
         "--deviations-file",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
-        help="Path to DEVIATIONS.md.",
+        help=(
+            "Path to DEVIATIONS.md. "
+            "Optional for --phase pre-execution (skipped with SKIP status if absent). "
+            "Required for --phase pre-dispatch and pre-completion."
+        ),
     )
     parser.add_argument(
         "--reports-dir",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
-        help="Path to the reports/ directory where task report files are stored.",
+        help=(
+            "Path to the reports/ directory where task report files are stored. "
+            "Optional for --phase pre-execution (skipped with SKIP status if absent). "
+            "Required for --phase pre-dispatch and pre-completion."
+        ),
     )
     parser.add_argument(
         "--task-number",

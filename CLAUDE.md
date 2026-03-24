@@ -139,6 +139,9 @@ The visual brainstorming companion writes session data to `.superpowers/brainsto
 - **Gotcha**: Changing `description:` in SKILL.md does NOT update the picker. You must update BOTH the SKILL.md and the command stub's frontmatter. The `!`cat`` preprocessing only pulls body content, not frontmatter.
 - **Hook** (`hooks/session-start`): Referenced by absolute path in `settings.json` — edits are live immediately, no symlink
 
+## Handoff Package Specification
+- `skills/handoff-acceptance/references/handoff-package-spec.md` — Required structure for handoff packages consumed by the Superpowers pipeline. Bundled inside the handoff-acceptance skill so agents discover it automatically — when a handoff fails acceptance, the skill surfaces the spec in the failure report. Also used in "producer mode" when an agent is asked to create a handoff package.
+
 ## Prompting Best Practices
 - `docs/prompting-best-practices.md` — Comprehensive Claude 4.6 prompt engineering reference covering clarity, examples, XML structuring, thinking, tool use, and agentic systems. Source of truth for all prompt optimization decisions. Consult when writing or improving any skill, prompt template, or agent file.
 

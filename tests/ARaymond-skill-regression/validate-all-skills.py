@@ -464,6 +464,75 @@ def check_cross_references(skills_dir):
                 "writing-plans SKILL: missing reference to plan-document-reviewer-prompt.md",
             )
 
+        # F1: validate-plan.py cross-reference from writing-plans
+        if "validate-plan.py" in wp_content:
+            check_pass(
+                CATEGORY_4,
+                "writing-plans SKILL: references validate-plan.py",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "writing-plans SKILL: missing reference to validate-plan.py — agents won't find the plan validator",
+            )
+
+        # F6: standalone invocation guidance
+        if "skipping brainstorming" in wp_content or "invoked directly" in wp_content:
+            check_pass(
+                CATEGORY_4,
+                "writing-plans SKILL: has standalone invocation guidance",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "writing-plans SKILL: missing standalone invocation guidance (F6)",
+            )
+
+    # F4: handoff-acceptance has ACCEPTED_WITH_REMEDIATION verdict
+    ha_path = os.path.join(skills_dir, "handoff-acceptance/SKILL.md")
+    ha_content = read_file(ha_path)
+
+    if ha_content is None:
+        check_fail(CATEGORY_4, "handoff-acceptance SKILL.md: file not found")
+    else:
+        if "ACCEPTED_WITH_REMEDIATION" in ha_content:
+            check_pass(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: has ACCEPTED_WITH_REMEDIATION verdict",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: missing ACCEPTED_WITH_REMEDIATION verdict (F4)",
+            )
+
+        # F7: contextually illustrative snippet classification
+        if (
+            "contextually illustrative" in ha_content.lower()
+            or "Contextually illustrative" in ha_content
+        ):
+            check_pass(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: has contextually-illustrative snippet category",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: missing contextually-illustrative snippet category (F7)",
+            )
+
+        # handoff-package-spec.md reference
+        if "handoff-package-spec.md" in ha_content:
+            check_pass(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: references handoff-package-spec.md",
+            )
+        else:
+            check_fail(
+                CATEGORY_4,
+                "handoff-acceptance SKILL: missing reference to handoff-package-spec.md",
+            )
+
 
 # ---------------------------------------------------------------------------
 # Category 5: Required Sections

@@ -329,6 +329,10 @@ def validate_plan(content: str) -> Dict:
 
     # --- Cross-section rules ---
 
+    # If File Map is absent, emit a warning (not a blocker)
+    if not sections["file_map"]["present"]:
+        warnings.append("No File Map section found — recommended for plan clarity")
+
     # If Source Contracts is present and non-empty, Task 0 must exist
     sc_present = sections["source_contracts"]["present"]
     if sc_present and source_contracts_non_none(content):

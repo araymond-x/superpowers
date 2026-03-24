@@ -12,16 +12,29 @@ Exit codes:
   2 - Script error (bad arguments, file not found, etc.)
 
 Usage:
+  # Read task text directly from a file:
   python scripts/estimate-task-tokens.py \
     --task-file /path/to/task-section.txt \
     --constraints-file /path/to/constraints.txt \
     --context "additional context string" \
     --context-budget 200000
+
+  # Extract a task section from a plan file by task number:
+  python scripts/estimate-task-tokens.py \
+    --plan-file /path/to/plan.md \
+    --task 3 \
+    --constraints-file /path/to/constraints.txt \
+    --context "additional context string"
+
+When --plan-file and --task are both provided they take precedence over
+--task-file.  The script extracts the text from the matching "### Task N"
+header through the next "### Task" header (or end of file).
 """
 
 import argparse
 import json
 import os
+import re
 import sys
 
 # Approximate token overhead for the implementer-prompt.md template itself
@@ -49,6 +62,47 @@ def read_file_tokens(path: str) -> int:
     with open(path, "r", encoding="utf-8") as f:
         content = f.read()
     return chars_to_tokens(len(content))
+
+
+def extract_task_from_plan(plan_path: str, task_number: int) -> str:
+    """
+    Read a plan markdown file and extract the text for the given task number.
+
+    Finds the section starting at "### Task N" (case-insensitive) and ending
+    at the next "### Task" header or end of file.
+
+    Args:
+        plan_path: Path to the plan markdown file.
+        task_number: The task number to extract (matches "### Task N").
+
+    Returns:
+        The extracted task text as a string.
+
+    Raises:
+        OSError: If the file cannot be read.
+        ValueError: If no matching task section is found.
+    """
+    with open(plan_path, "r", encoding="utf-8") as f:
+        content = f.read()
+
+    # Find the start of the target task section
+    start_pattern = re.compile(
+        rf"^###\s+Task\s+{task_number}\b",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    start_match = start_pattern.search(content)
+    if not start_match:
+        raise ValueError(f"Task {task_number} not found in plan file: {plan_path}")
+
+    # Find the start of the next task section
+    next_task_pattern = re.compile(
+        r"^###\s+Task\s+\d+\b",
+        re.MULTILINE | re.IGNORECASE,
+    )
+    next_match = next_task_pattern.search(content, start_match.end())
+    end = next_match.start() if next_match else len(content)
+
+    return content[start_match.start() : end]
 
 
 def build_result(
@@ -106,9 +160,36 @@ def main() -> int:
     )
     parser.add_argument(
         "--task-file",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
-        help="Path to the file containing the task text extracted from the plan.",
+        help=(
+            "Path to the file containing the task text. "
+            "Mutually exclusive with --plan-file/--task. "
+            "One of --task-file or (--plan-file + --task) is required."
+        ),
+    )
+    parser.add_argument(
+        "--plan-file",
+        required=False,
+        default=None,
+        metavar="PATH",
+        help=(
+            "Path to the implementation plan markdown file. "
+            "Use with --task to extract a specific task section. "
+            "Takes precedence over --task-file when both are provided."
+        ),
+    )
+    parser.add_argument(
+        "--task",
+        required=False,
+        default=None,
+        type=int,
+        metavar="N",
+        help=(
+            "Task number to extract from the plan file (used with --plan-file). "
+            "Matches '### Task N' headers (case-insensitive)."
+        ),
     )
     parser.add_argument(
         "--constraints-file",
@@ -144,13 +225,55 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    # Validate task file
-    if not os.path.isfile(args.task_file):
+    # Determine task input mode and resolve task text
+    use_plan_mode = args.plan_file is not None and args.task is not None
+    use_file_mode = args.task_file is not None
+
+    if not use_plan_mode and not use_file_mode:
         print(
-            json.dumps({"error": f"Task file not found: {args.task_file}"}),
+            json.dumps(
+                {"error": ("One of --task-file or (--plan-file + --task) is required.")}
+            ),
             file=sys.stderr,
         )
         return 2
+
+    if use_plan_mode:
+        # --plan-file + --task mode: extract the task section from the plan
+        if not os.path.isfile(args.plan_file):
+            print(
+                json.dumps({"error": f"Plan file not found: {args.plan_file}"}),
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            task_text = extract_task_from_plan(args.plan_file, args.task)
+        except ValueError as e:
+            print(json.dumps({"error": str(e)}), file=sys.stderr)
+            return 2
+        except OSError as e:
+            print(
+                json.dumps({"error": f"Could not read plan file: {e}"}),
+                file=sys.stderr,
+            )
+            return 2
+        task_tokens = chars_to_tokens(len(task_text))
+    else:
+        # --task-file mode: read the file directly
+        if not os.path.isfile(args.task_file):
+            print(
+                json.dumps({"error": f"Task file not found: {args.task_file}"}),
+                file=sys.stderr,
+            )
+            return 2
+        try:
+            task_tokens = read_file_tokens(args.task_file)
+        except OSError as e:
+            print(
+                json.dumps({"error": f"Could not read task file: {e}"}),
+                file=sys.stderr,
+            )
+            return 2
 
     # Validate constraints file (optional)
     if args.constraints_file and not os.path.isfile(args.constraints_file):
@@ -170,13 +293,7 @@ def main() -> int:
         )
         return 2
 
-    # Compute token estimates
-    try:
-        task_tokens = read_file_tokens(args.task_file)
-    except OSError as e:
-        print(json.dumps({"error": f"Could not read task file: {e}"}), file=sys.stderr)
-        return 2
-
+    # Compute constraints token estimate
     constraints_tokens = 0
     if args.constraints_file:
         try:

@@ -9,12 +9,32 @@ Verify that external handoff packages are accurate, complete, and implementation
 
 **Why this exists**: A handoff package that looks authoritative but contains wrong assumptions will poison every downstream step. Code snippets with wrong types get copy-pasted into plans. Type declarations buried in prose get missed. Missing acceptance tests mean no ground truth anchor. This skill catches those problems at the gate.
 
+**For agents producing handoff packages**: See `references/handoff-package-spec.md` for the complete specification. Following it ensures your package will pass this acceptance gate on the first try.
+
 ## When to Use
 
+**Reviewing a received handoff (default mode):**
 - Receiving a handoff package from another agent or team
 - Starting brainstorming that references external schemas, APIs, or code
 - Writing a plan that consumes external documentation
 - Any time the phrase "handoff package", "reference implementation", or "sample code" appears in requirements
+
+**Creating or fixing a handoff (producer mode):**
+- When asked to create a handoff package, experiment output, or reference implementation for another agent
+- When a handoff fails acceptance and needs to be revised
+- When the user asks an agent to "prepare something for the next step" or "hand this off"
+
+In producer mode, read `references/handoff-package-spec.md` FIRST and follow it as a construction guide.
+
+## On BLOCKING Failure
+
+When any BLOCKING check fails during acceptance:
+
+1. Report the failure to the user
+1b. **Assess whether the information exists but is misplaced**: If the contract facts, field types, or other blocking information IS present in the document but not in the required location (e.g., buried at line 226 instead of the first 50 lines), use ACCEPTED_WITH_REMEDIATION instead of REJECTED. This allows the downstream agent to proceed while noting that structural remediation is needed. The downstream agent must extract and consolidate the scattered information before using it for planning.
+2. Read `references/handoff-package-spec.md` and include the relevant section in your failure report — show the producer exactly what was expected and how to fix it
+3. If you are the same agent that produced the handoff, fix it yourself using the spec as a guide
+4. If the handoff came from another agent, provide the spec path so the user can direct the producer to fix it: `~/.claude/skills/superpowers/handoff-acceptance/references/handoff-package-spec.md`
 
 ## Acceptance Checklist
 
@@ -40,6 +60,7 @@ If contract-critical information is buried beyond line 50 in prose, the handoff 
 Every code snippet in the handoff must be one of:
 - **Executable**: Syntactically valid, includes required imports, uses correct function signatures. Can be copied into a file and run.
 - **Labeled pseudocode**: Explicitly marked as `# pseudocode` or `# illustrative — do not copy directly`. Not presented as if it can be pasted.
+- **Contextually illustrative**: Code presented within an explanatory section (e.g., "How to Invoke Bedrock") where the surrounding prose makes clear this is a usage pattern, not a copy-paste snippet. These are acceptable without an explicit pseudocode label if the context is unambiguous. When in doubt, flag as a concern rather than a blocking failure.
 
 A code snippet that looks executable but is missing imports, uses wrong types, or references non-existent functions fails this check.
 
@@ -48,6 +69,7 @@ A code snippet that looks executable but is missing imports, uses wrong types, o
 - Do function signatures match the actual API?
 - Do field names match the Contract Summary?
 - Are type assertions consistent with declared types?
+- If the snippet lacks an explicit label, is the surrounding context (section title, prose) sufficient to identify it as illustrative?
 
 ### 3. Acceptance Fixtures [BLOCKING]
 
@@ -120,7 +142,17 @@ After running the checklist, produce an acceptance report:
 
 - [issue with file:line reference]
 
-### Verdict: ACCEPTED / REJECTED — [reason]
+### Remediation Required (if ACCEPTED_WITH_REMEDIATION)
+
+| # | What's Wrong | Where the Info Actually Is | What Must Be Done |
+|---|-------------|---------------------------|-------------------|
+| 1 | [e.g., No Contract Constraints section] | [e.g., Field types at lines 226-231] | [e.g., Extract and consolidate into first 50 lines] |
+
+### Verdict: ACCEPTED / ACCEPTED_WITH_REMEDIATION / REJECTED
+
+- **ACCEPTED**: All blocking checks pass. Proceed to brainstorming/planning.
+- **ACCEPTED_WITH_REMEDIATION**: Blocking information EXISTS in the document but is structurally wrong (buried, scattered, not in the required location). The downstream agent can proceed but must extract and consolidate the information as a prerequisite. The remediation items below must be completed before implementation begins.
+- **REJECTED**: Blocking information is MISSING entirely. The handoff must be revised by the producing agent before consumption.
 ```
 
 Save this report to the project docs directory. It becomes an input to the brainstorming skill's context exploration phase.
