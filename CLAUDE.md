@@ -153,6 +153,29 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Key changes: `<EXTREMELY-IMPORTANT>` → `<important>`, aggressive MUST/NEVER → direct imperatives, Red Flags → Required Practices/positive framing, role statements added to all prompt templates
 - SDD SKILL-v0.1.md is at 4091/5000 words (82%) — monitor on future additions
 
+## Execution Trace Audit
+- `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
+- `trace-auditor-prompt.md` dispatches a subagent to review the trace for skipped reviews, unlogged concerns, missing reports
+- Integrated as Pre-Completion Gate step 8 in the SDD skill
+- To find current session file: `ls -t ~/.claude/projects/*/$(pwd | sed 's|/|%|g')/*.jsonl | head -1`
+
+## Output Path Convention
+- Design specs → `docs/specs/YYYY-MM-DD-<topic>-design.md` (from brainstorming)
+- Distilled specs → `docs/specs/YYYY-MM-DD-<topic>-design-distilled.md` (from brainstorming)
+- Implementation plans → `docs/imp-plans/YYYY-MM-DD-<feature-name>.md` (from writing-plans)
+- Project plans/reviews → `docs/plans/` (existing convention, not changed)
+
+## Three-Layer Test Strategy
+- **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 105 checks, <1s)
+- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 95 checks, <1s)
+- **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
+- Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
+
+## Behavioral Test Gotchas
+- Test scripts use `grep -E` (ERE): alternation is `|` not `\|` (BRE). Wrong syntax silently fails to match.
+- Content questions to `claude -p` need `--max-turns 5` minimum — Claude uses turns loading skills before answering. 3 turns is insufficient.
+- Scripts that grep for artifact patterns (check-distillation.sh) must exclude template boilerplate lines (blockquotes).
+
 ## Key Architecture Notes
 - Skills use inline prompt templates (`./implementer-prompt.md`) for subagent dispatch, NOT formal agent files
 - Only 1 formal agent exists (`code-reviewer.md`) — used for final whole-implementation review
