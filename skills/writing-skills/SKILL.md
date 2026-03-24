@@ -15,7 +15,7 @@ You write test cases (pressure scenarios with subagents), watch them fail (basel
 
 **Core principle:** If you didn't watch an agent fail without the skill, you don't know if the skill teaches the right thing.
 
-**REQUIRED BACKGROUND:** You MUST understand superpowers:test-driven-development before using this skill. That skill defines the fundamental RED-GREEN-REFACTOR cycle. This skill adapts TDD to documentation.
+**Background:** Understand superpowers:test-driven-development before using this skill. The Red-Green-Refactor cycle is referenced throughout by name — without understanding what those phases mean, the checklist steps are labels without content.
 
 **Official guidance:** For Anthropic's official skill authoring best practices, see anthropic-best-practices.md. This document provides additional patterns and guidelines that complement the TDD-focused approach in this skill.
 
@@ -95,7 +95,7 @@ skills/
 **Frontmatter (YAML):**
 - Only two fields supported: `name` and `description`
 - Max 1024 characters total
-- `name`: Use letters, numbers, and hyphens only (no parentheses, special chars)
+- `name`: Use letters, numbers, and hyphens only (no parentheses, special chars) — special characters in skill names cause failures in shell scripts and the command stub generation loop
 - `description`: Third-person, describes ONLY when to use (NOT what it does)
   - Start with "Use when..." to focus on triggering conditions
   - Include specific symptoms, situations, and contexts
@@ -466,13 +466,13 @@ Skills that enforce discipline (like TDD) need to resist rationalization. Agents
 
 Don't just state the rule - forbid specific workarounds:
 
-<Bad>
+<bad>
 ```markdown
 Write code before test? Delete it.
 ```
-</Bad>
+</bad>
 
-<Good>
+<good>
 ```markdown
 Write code before test? Delete it. Start over.
 
@@ -482,7 +482,7 @@ Write code before test? Delete it. Start over.
 - Don't look at it
 - Delete means delete
 ```
-</Good>
+</good>
 
 ### Address "Spirit vs Letter" Arguments
 
@@ -585,7 +585,7 @@ helper1, helper2, step3, pattern4
 **After writing ANY skill, you MUST STOP and complete the deployment process.**
 
 **Do NOT:**
-- Create multiple skills in batch without testing each
+- Create multiple skills in batch without testing each (each skill iteration may reveal rationalizations that feed into the next skill's design)
 - Move to next skill before current one is verified
 - Skip testing because "batching is more efficient"
 

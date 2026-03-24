@@ -1,19 +1,15 @@
 ---
 name: using-superpowers
-description: Use when starting any conversation - establishes how to find and use skills, requiring Skill tool invocation before ANY response including clarifying questions
+description: "Use when starting any conversation, before responding to any request including clarifying questions"
 ---
 
-<SUBAGENT-STOP>
+<subagent-stop>
 If you were dispatched as a subagent to execute a specific task, skip this skill.
-</SUBAGENT-STOP>
+</subagent-stop>
 
-<EXTREMELY-IMPORTANT>
-If you think there is even a 1% chance a skill might apply to what you are doing, you ABSOLUTELY MUST invoke the skill.
-
-IF A SKILL APPLIES TO YOUR TASK, YOU DO NOT HAVE A CHOICE. YOU MUST USE IT.
-
-This is not negotiable. This is not optional. You cannot rationalize your way out of this.
-</EXTREMELY-IMPORTANT>
+<important>
+When a skill applies to your task, invoke it before responding. When in doubt — even a small chance a skill applies — invoke it to check. If the invoked skill turns out not to fit, you do not need to follow it.
+</important>
 
 ## Instruction Priority
 
@@ -27,7 +23,7 @@ If CLAUDE.md, GEMINI.md, or AGENTS.md says "don't use TDD" and a skill says "alw
 
 ## How to Access Skills
 
-**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files.
+**In Claude Code:** Use the `Skill` tool. When you invoke a skill, its content is loaded and presented to you—follow it directly. Never use the Read tool on skill files (the Read tool loads file content into context, consuming tokens and bypassing the skill loading mechanism).
 
 **In Gemini CLI:** Skills activate via the `activate_skill` tool. Gemini loads skill metadata at session start and activates the full content on demand.
 
@@ -41,7 +37,7 @@ Skills use Claude Code tool names. Non-CC platforms: see `references/codex-tools
 
 ## The Rule
 
-**Invoke relevant or requested skills BEFORE any response or action.** Even a 1% chance a skill might apply means that you should invoke the skill to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
+Invoke relevant or requested skills before any response or action. When in doubt — even a small chance a skill applies — invoke it to check. If an invoked skill turns out to be wrong for the situation, you don't need to use it.
 
 ```dot
 digraph skill_flow {
@@ -73,11 +69,11 @@ digraph skill_flow {
 }
 ```
 
-## Red Flags
+## When to Invoke Skills
 
-These thoughts mean STOP—you're rationalizing:
+These situations all call for checking skills first:
 
-| Thought | Reality |
+| Thought | Why skills apply |
 |---------|---------|
 | "This is just a simple question" | Questions are tasks. Check for skills. |
 | "I need more context first" | Skill check comes BEFORE clarifying questions. |
@@ -85,7 +81,7 @@ These thoughts mean STOP—you're rationalizing:
 | "I can check git/files quickly" | Files lack conversation context. Check for skills. |
 | "Let me gather information first" | Skills tell you HOW to gather information. |
 | "This doesn't need a formal skill" | If a skill exists, use it. |
-| "I remember this skill" | Skills evolve. Read current version. |
+| "I remember this skill" | Skills evolve. Read current version. Skills in this fork are actively maintained based on production incidents — the version in memory may predate a fix for the exact failure mode you're about to encounter. |
 | "This doesn't count as a task" | Action = task. Check for skills. |
 | "The skill is overkill" | Simple things become complex. Use it. |
 | "I'll just do this one thing first" | Check BEFORE doing anything. |
@@ -96,7 +92,7 @@ These thoughts mean STOP—you're rationalizing:
 
 When multiple skills could apply, use this order:
 
-1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task
+1. **Process skills first** (brainstorming, debugging) - these determine HOW to approach the task (implementation skills applied before process skills produce a local-optimum solution to the wrong problem)
 2. **Implementation skills second** (frontend-design, mcp-builder) - these guide execution
 
 "Let's build X" → brainstorming first, then implementation skills.

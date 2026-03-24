@@ -11,8 +11,6 @@ Write the test first. Watch it fail. Write minimal code to pass.
 
 **Core principle:** If you didn't watch the test fail, you don't know if it tests the right thing.
 
-**Violating the letter of the rules is violating the spirit of the rules.**
-
 ## When to Use
 
 **Always:**
@@ -26,7 +24,7 @@ Write the test first. Watch it fail. Write minimal code to pass.
 - Generated code
 - Configuration files
 
-Thinking "skip TDD just this once"? Stop. That's rationalization.
+If you're thinking about skipping TDD "just this once," that's a rationalization.
 
 ## The Iron Law
 
@@ -34,15 +32,9 @@ Thinking "skip TDD just this once"? Stop. That's rationalization.
 NO PRODUCTION CODE WITHOUT A FAILING TEST FIRST
 ```
 
-Write code before the test? Delete it. Start over.
+Write code before the test? Delete it and start over with a failing test.
 
-**No exceptions:**
-- Don't keep it as "reference"
-- Don't "adapt" it while writing tests
-- Don't look at it
-- Delete means delete
-
-Implement fresh from tests. Period.
+Delete completely — do not keep it as reference, adapt it while writing tests, or consult it for guidance. Starting from a clean slate is what makes the Red step meaningful.
 
 ## Red-Green-Refactor
 
@@ -70,9 +62,11 @@ digraph tdd_cycle {
 
 ### RED - Write Failing Test
 
+Write the simplest test that captures the intended behavior — one assertion is often correct for the RED step. If you find yourself planning multiple test cases before running the first one, stop: write one test, run it, confirm it fails.
+
 Write one minimal test showing what should happen.
 
-<Good>
+<good>
 ```typescript
 test('retries failed operations 3 times', async () => {
   let attempts = 0;
@@ -89,9 +83,9 @@ test('retries failed operations 3 times', async () => {
 });
 ```
 Clear name, tests real behavior, one thing
-</Good>
+</good>
 
-<Bad>
+<bad>
 ```typescript
 test('retry works', async () => {
   const mock = jest.fn()
@@ -103,7 +97,7 @@ test('retry works', async () => {
 });
 ```
 Vague name, tests mock not code
-</Bad>
+</bad>
 
 **Requirements:**
 - One behavior
@@ -112,7 +106,7 @@ Vague name, tests mock not code
 
 ### Verify RED - Watch It Fail
 
-**MANDATORY. Never skip.**
+**Required. Do not skip.**
 
 ```bash
 npm test path/to/test.test.ts
@@ -131,7 +125,7 @@ Confirm:
 
 Write simplest code to pass the test.
 
-<Good>
+<good>
 ```typescript
 async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
   for (let i = 0; i < 3; i++) {
@@ -145,9 +139,9 @@ async function retryOperation<T>(fn: () => Promise<T>): Promise<T> {
 }
 ```
 Just enough to pass
-</Good>
+</good>
 
-<Bad>
+<bad>
 ```typescript
 async function retryOperation<T>(
   fn: () => Promise<T>,
@@ -161,13 +155,13 @@ async function retryOperation<T>(
 }
 ```
 Over-engineered
-</Bad>
+</bad>
 
-Don't add features, refactor other code, or "improve" beyond the test.
+Don't add features, refactor other code, or "improve" beyond the test. GREEN phase code only needs to pass the current test. Adding more code adds untested behavior — Refactor phase, with all tests green, is the safe place for improvements.
 
 ### Verify GREEN - Watch It Pass
 
-**MANDATORY.**
+**Required.**
 
 ```bash
 npm test path/to/test.test.ts
@@ -269,7 +263,9 @@ Tests-first force edge case discovery before implementing. Tests-after verify yo
 | "Manual test faster" | Manual doesn't prove edge cases. You'll re-test every change. |
 | "Existing code has no tests" | You're improving it. Add tests for existing code. |
 
-## Red Flags - STOP and Start Over
+## Red Flags — Start Over with TDD
+
+When any of these patterns appear, delete the code and restart with a failing test:
 
 - Code before test
 - Test after implementation
@@ -337,7 +333,8 @@ Before marking work complete:
 - [ ] Tests use real code (mocks only if unavoidable)
 - [ ] Edge cases and errors covered
 
-Can't check all boxes? You skipped TDD. Start over.
+All boxes checked? TDD was followed — mark the work complete.
+If any box is unchecked, TDD was not followed. Start over.
 
 ## When Stuck
 
@@ -368,4 +365,4 @@ Production code → test exists and failed first
 Otherwise → not TDD
 ```
 
-No exceptions without your human partner's permission.
+No exceptions without your human partner's permission. Exceptions to TDD have a documented pattern of being "just this once" in the moment and becoming team norms in practice.

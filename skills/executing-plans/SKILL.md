@@ -33,7 +33,7 @@ For each task:
 
 After all tasks complete and verified:
 - Announce: "I'm using the finishing-a-development-branch skill to complete this work."
-- **REQUIRED SUB-SKILL:** Use superpowers:finishing-a-development-branch
+- **Sub-skill required:** Use superpowers:finishing-a-development-branch
 - Follow that skill to verify tests, present options, execute choice
 
 ## When to Stop and Ask for Help
@@ -52,19 +52,19 @@ After all tasks complete and verified:
 - Partner updates the plan based on your feedback
 - Fundamental approach needs rethinking
 
-**Don't force through blockers** - stop and ask.
+**Don't force through blockers** - stop and ask. Forcing through a blocker means every subsequent task builds on a broken foundation.
 
 ## Remember
 - Review plan critically first
-- Follow plan steps exactly
-- Don't skip verifications
-- Reference skills when plan says to
+- Follow plan steps exactly (plan steps were written with full codebase context — deviating mid-execution introduces assumptions the plan author couldn't anticipate)
+- Don't skip verifications (verifications in the plan are the only objective confirmation that a step produced the expected artifact)
+- Reference skills when plan says to (skills encode additional guardrails the plan author relied on — invoking them is how those guardrails apply)
 - Stop when blocked, don't guess
-- Never start implementation on main/master branch without explicit user consent
+- Never start implementation on main/master branch without explicit user consent (a failed plan execution mid-stream on main leaves the repo in a partial state with no clean rollback path)
 
 ## Integration
 
 **Required workflow skills:**
-- **superpowers:using-git-worktrees** - REQUIRED: Set up isolated workspace before starting
+- **superpowers:using-git-worktrees** - Set up isolated workspace before starting
 - **superpowers:writing-plans** - Creates the plan this skill executes
 - **superpowers:finishing-a-development-branch** - Complete development after all tasks

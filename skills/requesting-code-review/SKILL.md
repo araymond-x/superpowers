@@ -41,7 +41,7 @@ Use Task tool with superpowers-code-reviewer type, fill template at `code-review
 - `{DESCRIPTION}` - Brief summary
 
 **3. Act on feedback:**
-- Fix Critical issues immediately
+- Fix Critical issues immediately (critical issues have cascading effects — an architecture error in Task 2 makes Tasks 3-6 wrong too)
 - Fix Important issues before proceeding
 - Note Minor issues for later
 - Push back if reviewer is wrong (with reasoning)
@@ -91,11 +91,11 @@ You: [Fix progress indicators]
 
 ## Red Flags
 
-**Never:**
-- Skip review because "it's simple"
-- Ignore Critical issues
-- Proceed with unfixed Important issues
-- Argue with valid technical feedback
+**Required:**
+- Run review even for simple changes (the statement-reconciliation incident traced 3 production bugs to tasks that seemed simple)
+- Fix Critical issues before proceeding
+- Fix Important issues before proceeding
+- Engage with valid technical feedback rather than dismissing it
 
 **If reviewer wrong:**
 - Push back with technical reasoning

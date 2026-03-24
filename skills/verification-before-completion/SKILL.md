@@ -1,17 +1,15 @@
 ---
 name: verification-before-completion
-description: Use when about to claim work is complete, fixed, or passing, before committing or creating PRs - requires running verification commands and confirming output before making any success claims; evidence before assertions always
+description: "Use when about to claim work is complete, fixed, or passing, before committing or creating PRs"
 ---
 
 # Verification Before Completion
 
 ## Overview
 
-Claiming work is complete without verification is dishonesty, not efficiency.
+Claiming work is complete without verification is inaccurate, not efficient.
 
 **Core principle:** Evidence before claims, always.
-
-**Violating the letter of this rule is violating the spirit of this rule.**
 
 ## The Iron Law
 
@@ -19,7 +17,7 @@ Claiming work is complete without verification is dishonesty, not efficiency.
 NO COMPLETION CLAIMS WITHOUT FRESH VERIFICATION EVIDENCE
 ```
 
-If you haven't run the verification command in this message, you cannot claim it passes.
+If you haven't run the verification command in this message, you cannot claim it passes. Test results from previous messages may be stale — code changes between messages invalidate prior results.
 
 ## The Gate Function
 
@@ -34,7 +32,7 @@ BEFORE claiming any status or expressing satisfaction:
    - If YES: State claim WITH evidence
 5. ONLY THEN: Make the claim
 
-Skip any step = lying, not verifying
+All five steps are required — skipping any step produces an unverified claim, not a completion.
 ```
 
 ## Common Failures
@@ -49,12 +47,14 @@ Skip any step = lying, not verifying
 | Agent completed | VCS diff shows changes | Agent reports "success" |
 | Requirements met | Line-by-line checklist | Tests passing |
 
-## Red Flags - STOP
+## Red Flags — Run Verification First
+
+When any of these patterns appear, run the verification step before continuing:
 
 - Using "should", "probably", "seems to"
 - Expressing satisfaction before verification ("Great!", "Perfect!", "Done!", etc.)
 - About to commit/push/PR without verification
-- Trusting agent success reports
+- Trusting agent success reports (agent reports describe what was attempted, not what the code does — agents can report DONE on partially-completed work)
 - Relying on partial verification
 - Thinking "just this once"
 - Tired and wanting work over
@@ -112,7 +112,7 @@ From 24 failure memories:
 - Undefined functions shipped - would crash
 - Missing requirements shipped - incomplete features
 - Time wasted on false completion → redirect → rework
-- Violates: "Honesty is a core value. If you lie, you'll be replaced."
+- Unverified completion claims have historically led to re-work and broken trust.
 
 ## When To Apply
 
@@ -126,14 +126,10 @@ From 24 failure memories:
 
 **Rule applies to:**
 - Exact phrases
-- Paraphrases and synonyms
+- Paraphrases and synonyms (incomplete verification expressed in hedged language has caused the same downstream failures as explicit false claims)
 - Implications of success
 - ANY communication suggesting completion/correctness
 
 ## The Bottom Line
 
-**No shortcuts for verification.**
-
-Run the command. Read the output. THEN claim the result.
-
-This is non-negotiable.
+Run the command. Read the output. Then claim the result — in that order, every time.

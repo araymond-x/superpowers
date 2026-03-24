@@ -9,9 +9,7 @@ description: Use when encountering any bug, test failure, or unexpected behavior
 
 Random fixes waste time and create new bugs. Quick patches mask underlying issues.
 
-**Core principle:** ALWAYS find root cause before attempting fixes. Symptom fixes are failure.
-
-**Violating the letter of this process is violating the spirit of debugging.**
+**Core principle:** Find root cause before attempting fixes. Symptom fixes mask the real problem.
 
 ## The Iron Law
 
@@ -37,15 +35,13 @@ Use for ANY technical issue:
 - You've already tried multiple fixes
 - Previous fix didn't work
 - You don't fully understand the issue
-
-**Don't skip when:**
 - Issue seems simple (simple bugs have root causes too)
 - You're in a hurry (rushing guarantees rework)
 - Manager wants it fixed NOW (systematic is faster than thrashing)
 
 ## The Four Phases
 
-You MUST complete each phase before proceeding to the next.
+Complete each phase before proceeding to the next. Each phase depends on outputs from the prior. Phase 2 requires a reproducible symptom from Phase 1. Phase 3 requires knowing what's different between working and broken cases.
 
 ### Phase 1: Root Cause Investigation
 
@@ -107,6 +103,8 @@ You MUST complete each phase before proceeding to the next.
 
    **This reveals:** Which layer fails (secrets → workflow ✓, workflow → build ✗)
 
+After gathering evidence, pause before moving to Phase 2. Ask: Do I know which component boundary is failing? If yes, proceed. If not, identify what additional evidence is needed.
+
 5. **Trace Data Flow**
 
    **WHEN error is deep in call stack:**
@@ -147,6 +145,9 @@ You MUST complete each phase before proceeding to the next.
 **Scientific method:**
 
 1. **Form Single Hypothesis**
+
+   State your hypothesis before testing it. Once stated, commit to testing it fully before reconsidering.
+
    - State clearly: "I think X is the root cause because Y"
    - Write it down
    - Be specific, not vague
@@ -180,7 +181,7 @@ You MUST complete each phase before proceeding to the next.
 
 2. **Implement Single Fix**
    - Address the root cause identified
-   - ONE change at a time
+   - ONE change at a time — multiple simultaneous changes make it impossible to attribute a regression to the fix that caused it.
    - No "while I'm here" improvements
    - No bundled refactoring
 
@@ -208,13 +209,13 @@ You MUST complete each phase before proceeding to the next.
    - Are we "sticking with it through sheer inertia"?
    - Should we refactor architecture vs. continue fixing symptoms?
 
-   **Discuss with your human partner before attempting more fixes**
+   **Discuss with your human partner before attempting more fixes.** Three failed fixes signals an architectural problem, not a local bug.
 
    This is NOT a failed hypothesis - this is a wrong architecture.
 
-## Red Flags - STOP and Follow Process
+## Red Flags — Return to Phase 1
 
-If you catch yourself thinking:
+When any of these thoughts appear, stop and return to Phase 1 (Root Cause Investigation) before proceeding:
 - "Quick fix for now, investigate later"
 - "Just try changing X and see if it works"
 - "Add multiple changes, run tests"
@@ -227,7 +228,7 @@ If you catch yourself thinking:
 - **"One more fix attempt" (when already tried 2+)**
 - **Each fix reveals new problem in different place**
 
-**ALL of these mean: STOP. Return to Phase 1.**
+**Any of these means: stop and return to Phase 1.**
 
 **If 3+ fixes failed:** Question the architecture (see Phase 4.5)
 

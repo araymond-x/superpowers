@@ -60,8 +60,8 @@ Each domain is independent - fixing tool approval doesn't affect abort tests.
 Each agent gets:
 - **Specific scope:** One test file or subsystem
 - **Clear goal:** Make these tests pass
-- **Constraints:** Don't change other code
-- **Expected output:** Summary of what you found and fixed
+- **Constraints:** Don't change other code (subagents have no session context — without an explicit constraint, a subagent that needs to refactor shared code will do so, creating conflicts with other parallel agents)
+- **Expected output:** Summary of what you found and fixed (the controller must synthesize multiple agent results — summaries without a consistent structure cannot be compared reliably)
 
 ### 3. Dispatch in Parallel
 

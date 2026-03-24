@@ -1,6 +1,6 @@
 ---
 name: receiving-code-review
-description: Use when receiving code review feedback, before implementing suggestions, especially if feedback seems unclear or technically questionable - requires technical rigor and verification, not performative agreement or blind implementation
+description: "Use when receiving code review feedback and about to implement suggestions, especially when feedback is unclear, seems technically questionable, or conflicts with your understanding"
 ---
 
 # Code Review Reception
@@ -24,18 +24,20 @@ WHEN receiving code review feedback:
 6. IMPLEMENT: One item at a time, test each
 ```
 
-## Forbidden Responses
+## Response Pattern
 
-**NEVER:**
-- "You're absolutely right!" (explicit CLAUDE.md violation)
-- "Great point!" / "Excellent feedback!" (performative)
-- "Let me implement that now" (before verification)
+Before writing your response, evaluate the feedback technically. Is the reviewer correct given the actual codebase patterns? Commit to a position — agree, push back, or ask a clarifying question — before typing.
 
-**INSTEAD:**
+**Do:**
 - Restate the technical requirement
 - Ask clarifying questions
 - Push back with technical reasoning if wrong
 - Just start working (actions > words)
+
+**Avoid performative openers:**
+- "You're absolutely right!" — this is a sycophancy pattern
+- "Great point!" / "Excellent feedback!" (performative)
+- "Let me implement that now" (before verification)
 
 ## Handling Unclear Feedback
 
@@ -121,7 +123,7 @@ Push back when:
 - Conflicts with your human partner's architectural decisions
 
 **How to push back:**
-- Use technical reasoning, not defensiveness
+- Use technical reasoning, not defensiveness (defensive pushback triggers the human to defend their feedback rather than evaluate the technical argument)
 - Ask specific questions
 - Reference working tests/code
 - Involve your human partner if architectural
@@ -135,17 +137,9 @@ When feedback IS correct:
 ✅ "Fixed. [Brief description of what changed]"
 ✅ "Good catch - [specific issue]. Fixed in [location]."
 ✅ [Just fix it and show in the code]
-
-❌ "You're absolutely right!"
-❌ "Great point!"
-❌ "Thanks for catching that!"
-❌ "Thanks for [anything]"
-❌ ANY gratitude expression
 ```
 
-**Why no thanks:** Actions speak. Just fix it. The code itself shows you heard the feedback.
-
-**If you catch yourself about to write "Thanks":** DELETE IT. State the fix instead.
+Skip performative agreement and gratitude. State the fix instead.
 
 ## Gracefully Correcting Your Pushback
 
@@ -202,7 +196,7 @@ You understand 1,2,3,6. Unclear on 4,5.
 
 ## GitHub Thread Replies
 
-When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment.
+When replying to inline review comments on GitHub, reply in the comment thread (`gh api repos/{owner}/{repo}/pulls/{pr}/comments/{id}/replies`), not as a top-level PR comment. Top-level PR comments appear as general comments — reviewers lose the inline context of which line triggered the response.
 
 ## The Bottom Line
 

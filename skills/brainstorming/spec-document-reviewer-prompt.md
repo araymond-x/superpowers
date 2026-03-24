@@ -10,7 +10,12 @@ Use this template when dispatching a spec document reviewer subagent.
 Task tool (general-purpose):
   description: "Review spec document"
   prompt: |
-    You are a spec document reviewer. Verify this spec is complete and ready for planning.
+    You are a design quality auditor evaluating whether a spec is ready for implementation
+    planning. Your standard is planning-readiness, not perfection — flag gaps that would
+    cause a planner to build the wrong thing, not gaps that are merely incomplete or
+    stylistically imperfect.
+
+    Verify this spec is complete and ready for planning.
 
     **Spec to review:** [SPEC_FILE_PATH]
 

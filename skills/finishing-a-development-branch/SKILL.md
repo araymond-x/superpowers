@@ -1,6 +1,6 @@
 ---
 name: finishing-a-development-branch
-description: Use when implementation is complete, all tests pass, and you need to decide how to integrate the work - guides completion of development work by presenting structured options for merge, PR, or cleanup
+description: "Use when implementation is complete, all tests pass, and you need to decide how to integrate the work (merge, PR, or cleanup)"
 ---
 
 # Finishing a Development Branch
@@ -48,7 +48,7 @@ Or ask: "This branch split from main - is that correct?"
 
 ### Step 3: Present Options
 
-Present exactly these 4 options:
+Present exactly these 4 options (fewer than 4 omits real workflows; more than 4 triggers decision paralysis):
 
 ```
 Implementation complete. What would you like to do?
@@ -61,7 +61,7 @@ Implementation complete. What would you like to do?
 Which option?
 ```
 
-**Don't add explanation** - keep options concise.
+**Don't add explanation** - keep options concise. At completion the human already knows what was built — the decision is the only new information needed.
 
 ### Step 4: Execute Choice
 
@@ -109,7 +109,7 @@ Then: Cleanup worktree (Step 5)
 
 Report: "Keeping branch <name>. Worktree preserved at <path>."
 
-**Don't cleanup worktree.**
+**Don't cleanup worktree.** Options 2 and 3 leave the branch alive — the worktree may still be needed for additional commits after the PR.
 
 #### Option 4: Discard
 
@@ -123,7 +123,7 @@ This will permanently delete:
 Type 'discard' to confirm.
 ```
 
-Wait for exact confirmation.
+Wait for exact confirmation. Typed confirmation prevents accidental discard from ambiguous affirmations like 'yes' or 'ok'.
 
 If confirmed:
 ```bash

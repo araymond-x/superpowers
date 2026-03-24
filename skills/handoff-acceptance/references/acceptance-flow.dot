@@ -1,0 +1,35 @@
+# Acceptance Flow
+
+> Part of the handoff-acceptance skill. Referenced from SKILL.md.
+
+digraph acceptance {
+    "Receive handoff package" [shape=box];
+    "Read README / main doc" [shape=box];
+    "Contract Summary in first 50 lines?" [shape=diamond];
+    "FAIL: Return for Contract Summary" [shape=box style=filled fillcolor=red];
+    "Verify code snippets" [shape=box];
+    "All snippets executable or labeled?" [shape=diamond];
+    "FAIL: Return for snippet fixes" [shape=box style=filled fillcolor=red];
+    "Acceptance fixtures exist?" [shape=diamond];
+    "Create fixtures from descriptions" [shape=box];
+    "Verify fixtures match Contract Summary" [shape=box];
+    "Fixtures match?" [shape=diamond];
+    "FAIL: Contract Summary contradicts fixtures" [shape=box style=filled fillcolor=red];
+    "Check document authority + open decisions" [shape=box];
+    "ACCEPTED" [shape=box style=filled fillcolor=lightgreen];
+
+    "Receive handoff package" -> "Read README / main doc";
+    "Read README / main doc" -> "Contract Summary in first 50 lines?";
+    "Contract Summary in first 50 lines?" -> "FAIL: Return for Contract Summary" [label="no"];
+    "Contract Summary in first 50 lines?" -> "Verify code snippets" [label="yes"];
+    "Verify code snippets" -> "All snippets executable or labeled?";
+    "All snippets executable or labeled?" -> "FAIL: Return for snippet fixes" [label="no"];
+    "All snippets executable or labeled?" -> "Acceptance fixtures exist?" [label="yes"];
+    "Acceptance fixtures exist?" -> "Verify fixtures match Contract Summary" [label="yes"];
+    "Acceptance fixtures exist?" -> "Create fixtures from descriptions" [label="no"];
+    "Create fixtures from descriptions" -> "Verify fixtures match Contract Summary";
+    "Verify fixtures match Contract Summary" -> "Fixtures match?";
+    "Fixtures match?" -> "FAIL: Contract Summary contradicts fixtures" [label="no"];
+    "Fixtures match?" -> "Check document authority + open decisions" [label="yes"];
+    "Check document authority + open decisions" -> "ACCEPTED";
+}

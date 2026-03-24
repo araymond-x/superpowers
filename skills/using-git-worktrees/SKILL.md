@@ -1,6 +1,6 @@
 ---
 name: using-git-worktrees
-description: Use when starting feature work that needs isolation from current workspace or before executing implementation plans - creates isolated git worktrees with smart directory selection and safety verification
+description: "Use when starting feature work that needs isolation from the current workspace, or before executing implementation plans in a dedicated directory"
 ---
 
 # Using Git Worktrees
@@ -52,7 +52,7 @@ Which would you prefer?
 
 ### For Project-Local Directories (.worktrees or worktrees)
 
-**MUST verify directory is ignored before creating worktree:**
+**Verify directory is ignored before creating worktree:**
 
 ```bash
 # Check if directory is ignored (respects local, global, and system gitignore)
@@ -63,7 +63,7 @@ git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/d
 
 Per Jesse's rule "Fix broken things immediately":
 1. Add appropriate line to .gitignore
-2. Commit the change
+2. Commit the change (committing the .gitignore update before creating the worktree ensures contents are excluded from the first git status)
 3. Proceed with worktree creation
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
@@ -100,7 +100,7 @@ cd "$path"
 
 ### 3. Run Project Setup
 
-Auto-detect and run appropriate setup:
+Auto-detect and run appropriate setup (worktrees share the repo but not node_modules or build artifacts — skipping setup causes baseline tests to fail for wrong reasons):
 
 ```bash
 # Node.js
@@ -129,7 +129,7 @@ pytest
 go test ./...
 ```
 
-**If tests fail:** Report failures, ask whether to proceed or investigate.
+**If tests fail:** Report failures, ask whether to proceed or investigate. Some repos have pre-existing failures on main — the human needs to confirm whether failures are known or indicate wrong setup.
 
 **If tests pass:** Report ready.
 

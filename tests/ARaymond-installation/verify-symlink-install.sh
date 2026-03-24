@@ -71,10 +71,10 @@ fi
 
 # Count skills
 skill_count=$(find -L "$SKILLS_DIR" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ')
-if [[ "$skill_count" -ge 14 ]]; then
-  pass "Found $skill_count skills (expected >= 14)"
+if [[ "$skill_count" -ge 15 ]]; then
+  pass "Found $skill_count skills (expected >= 15)"
 else
-  fail "Found $skill_count skills (expected >= 14)"
+  fail "Found $skill_count skills (expected >= 15)"
 fi
 
 # Verify each SKILL.md is readable
@@ -104,10 +104,10 @@ else
 fi
 
 command_count=$(ls "$COMMANDS_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
-if [[ "$command_count" -ge 14 ]]; then
-  pass "Found $command_count command stubs (expected >= 14)"
+if [[ "$command_count" -ge 15 ]]; then
+  pass "Found $command_count command stubs (expected >= 15)"
 else
-  fail "Found $command_count command stubs (expected >= 14)"
+  fail "Found $command_count command stubs (expected >= 15)"
 fi
 
 # Verify skill/command count match
@@ -259,6 +259,30 @@ if grep -q "superpowers-code-reviewer" "$SKILLS_DIR/subagent-driven-development/
   pass "SDD code-quality-reviewer-prompt references superpowers-code-reviewer agent"
 else
   fail "SDD code-quality-reviewer-prompt should reference superpowers-code-reviewer (fork customization)"
+fi
+
+# handoff-acceptance → SKILL.md exists
+ref="$SKILLS_DIR/handoff-acceptance/SKILL.md"
+if [[ -r "$ref" ]]; then
+  pass "handoff-acceptance/SKILL.md exists"
+else
+  fail "handoff-acceptance/SKILL.md missing"
+fi
+
+# handoff-acceptance → scripts/check-handoff.sh
+ref="$SKILLS_DIR/handoff-acceptance/scripts/check-handoff.sh"
+if [[ -r "$ref" ]]; then
+  pass "handoff-acceptance/scripts/check-handoff.sh exists"
+else
+  fail "handoff-acceptance references check-handoff.sh but file missing"
+fi
+
+# handoff-acceptance → references/acceptance-flow.dot
+ref="$SKILLS_DIR/handoff-acceptance/references/acceptance-flow.dot"
+if [[ -r "$ref" ]]; then
+  pass "handoff-acceptance/references/acceptance-flow.dot exists"
+else
+  fail "handoff-acceptance references acceptance-flow.dot but file missing"
 fi
 
 # ─── 6. .gitignore ────────────────────────────────────────────────────────────

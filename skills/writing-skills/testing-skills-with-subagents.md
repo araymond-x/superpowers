@@ -181,13 +181,13 @@ For each new rationalization, add:
 
 ### 1. Explicit Negation in Rules
 
-<Before>
+<good>
 ```markdown
 Write code before test? Delete it.
 ```
-</Before>
+</good>
 
-<After>
+<bad>
 ```markdown
 Write code before test? Delete it. Start over.
 
@@ -197,7 +197,7 @@ Write code before test? Delete it. Start over.
 - Don't look at it
 - Delete means delete
 ```
-</After>
+</bad>
 
 ### 2. Entry in Rationalization Table
 
