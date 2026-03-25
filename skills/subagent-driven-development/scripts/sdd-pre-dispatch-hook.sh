@@ -110,7 +110,19 @@ if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
   echo "WARNING: You are on the '$CURRENT_BRANCH' branch. Consider using a feature branch or worktree for implementation work." >&2
 fi
 
-# Check 2: DEVIATIONS.md must exist
+# Check 2: Pre-execution audit report must exist with substantive content
+AUDIT_RESULT=$(check_report_file "reports/pre-execution-audit*" "pre-execution audit")
+case "$AUDIT_RESULT" in
+  MISSING)
+    ERRORS+=("BLOCKED: No pre-execution audit report found (reports/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to reports/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to reports/pre-execution-audit.md.")
+    ;;
+  TOO_SMALL*)
+    FILE_SIZE=$(echo "$AUDIT_RESULT" | cut -d: -f2)
+    ERRORS+=("BLOCKED: Pre-execution audit report exists but is only $FILE_SIZE bytes — likely a placeholder. The audit report must contain the auditor's verdict and any remediation order resolutions (minimum $MIN_REPORT_BYTES bytes).")
+    ;;
+esac
+
+# Check 3: DEVIATIONS.md must exist
 if [ ! -f "DEVIATIONS.md" ]; then
   ERRORS+=("BLOCKED: DEVIATIONS.md does not exist. Create it with the SDD template before dispatching tasks. The SDD skill's Plan Ingestion step 5 requires this.")
 fi
