@@ -164,11 +164,22 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
 
+## Worktree Sessions
+- Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`
+- `! cd` changes the prompt CWD but NOT the hook CWD — hooks always run from the original session directory
+- Branch check blocks on main when SDD artifacts exist (agent drifted out of worktree). Override with `.allow-main` file.
+
+## Hook Development Gotchas
+- Stop hooks: use `systemMessage` not `hookSpecificOutput.additionalContext` (not supported for Stop events)
+- Bash hooks: avoid `set -u` — jq pipe chains produce empty vars that cause silent exits with no stderr
+- Permission globs: `Bash(cat ~/.claude/skills/superpowers/*)` doesn't match subdirs — use `**` for nested paths
+- Pre-execution audit gate: `reports/pre-execution-audit.md` must exist (>50 bytes) before any Task dispatch. Creates a mandatory honesty checkpoint between planning and execution.
+
 ## Global Settings Changes (2026-03-24)
 Three additions to `~/.claude/settings.json`:
 1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
 2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
-3. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/*)` for skill command stub loading
+3. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/**)` for skill command stub loading (** for subdirectory matching)
 
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
