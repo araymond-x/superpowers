@@ -475,6 +475,7 @@ This is why file-based persistence matters: the plan file, DEVIATIONS.md, and `r
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
 - `./pre-execution-audit-prompt.md` - Dispatch pre-execution auditor (mandatory gate before Task 0)
 - `./trace-auditor-prompt.md` - Dispatch execution trace auditor (Pre-Completion Gate step 8)
+- `./honesty-check-prompt.md` - User prompt for compliance verification (use at module boundaries and before Pre-Completion Gate)
 
 ## Example Workflow
 
