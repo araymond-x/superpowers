@@ -7,7 +7,9 @@
 # Exit codes:
 #   0 — Always (advisory injection, never blocks)
 
-set -uo pipefail
+set -o pipefail
+# Note: not using -u (strict unset vars) because jq pipe chains can produce
+# empty variables that would cause silent exit with no error message
 
 CHECKPOINT_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/controller-checkpoint.py"
 
