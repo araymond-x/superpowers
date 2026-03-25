@@ -2,6 +2,9 @@
 
 Custom fork of obra/superpowers. Installed via symlinks to ~/.claude/, NOT as a marketplace plugin.
 
+## Skill Invocation Rule
+When a prompt says "invoke skill X" or "use skill X" → load it via the **Skill tool** before ANY implementation. Direct implementation without the Skill tool bypasses all enforcement hooks. (See `docs/ARaymond-skills-best-practices.md` for why.)
+
 ## Key Documentation
 - **Customization Manifest**: `docs/ARaymond-customization-manifest.md` — complete inventory of every modification, installation steps, upstream sync, rollback procedures. Start here for "what was changed and why."
 - **Skills Best Practices**: `docs/ARaymond-skills-best-practices.md` — operational learnings: enforcement layers, hook patterns, testing strategy, common failure modes. Consult when building or modifying skills.
