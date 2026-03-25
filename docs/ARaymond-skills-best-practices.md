@@ -315,7 +315,19 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Scripts in skill dirs | `skills/<name>/scripts/` | kebab-case `.py` or `.sh` |
 | Reference files | `skills/<name>/references/` | kebab-case `.md` |
 | Custom test suites | `tests/ARaymond-*/` | descriptive directory name |
-| SDD execution artifacts | Project root (worktree) | `DEVIATIONS.md`, `reports/task-N-*.md` |
+| SDD execution artifacts | Project root (worktree) | `DEVIATIONS.md`, `reports/task-NNN-*.md` (3-digit zero-padded) |
+
+## Report Naming Convention
+
+| Rule | Standard |
+|------|----------|
+| Format | `task-NNN-{type}.md` — 3-digit zero-padded sequential |
+| Numbering | Sequential across ALL modules (Module 1 tasks 000-003, Module 2 tasks 004-011, etc.) |
+| Types | `implementer-report`, `spec-review`, `quality-review`, `quality-review-minimum-tier` |
+| Prohibited | Module-prefixed names (`m2-task-1-*`), symlinks between conventions |
+| Why | Pre-dispatch hook checks task N-1 reports before allowing task N. Module-prefixed names break sequential checking. |
+| Backward compat | Hook finds both `task-007-*` (new) and `task-7-*` (old) |
+| Incident | Module 2 controller used `m2-task-N-*` naming, created symlinks to satisfy hook. Symlinks are fragile. |
 
 ---
 
@@ -333,6 +345,8 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Dead code not removed | Statement Reconciliation: old hooks still present after Task 10 | `code-quality-reviewer-prompt.md` flags dead code as BLOCKING (not Minor) + Obsolescence Verification Task in writing-plans |
 | Handoff package has buried contract info | Field types buried at line 200 of README | `check-handoff.sh` verifies contract summary within first 50 lines; `handoff-gate-hook.sh` blocks planning if acceptance report missing |
 | Script shared logic duplicated | `validate-report.py` and `controller-checkpoint.py` both parse section headers (C2, final audit) | `_report_utils.py` shared library — single source of truth for all report parsing |
+| Agent bypasses SDD skill entirely | Module 3: agent read plan, implemented directly — zero reviews, 5 uncertainties found via honesty prompt | Write/Edit transcript hook injects warning + CLAUDE.md Skill Invocation Rule + honesty check before gate |
+| Controller uses module-prefixed report names | Module 2: `m2-task-1-*` naming broke sequential hook check; controller created symlinks as workaround | `task-NNN` 3-digit sequential naming enforced across all modules; module-prefixed names prohibited |
 | Context compaction drops discipline rules | Long sessions: agent resumes with only task description | File-based enforcement (reports must exist) survives compaction; hook state is filesystem state |
 | Wrong test fixtures | Statement Reconciliation: fixtures used numeric types, real output uses strings with commas | "Ground-truth fixtures" step: derive fixtures from real system output BEFORE writing any code |
 | Agent bypasses SDD skill entirely — reads plan, implements directly without subagents | Module 3 of Statement Reconciliation: agent admitted to zero reviews, 5 uncertainties post-execution | `Write\|Edit` transcript hook injects warning + CLAUDE.md Skill Invocation Rule + honesty check before Pre-Completion Gate |
