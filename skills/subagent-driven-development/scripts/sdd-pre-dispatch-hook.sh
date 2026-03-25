@@ -104,10 +104,21 @@ check_report_file() {
 
 ERRORS=()
 
-# Check 1: Branch safety (WARN, not block — user may intentionally work on main)
+# Check 1: Branch safety
+# If SDD artifacts exist (reports/ + DEVIATIONS.md) AND on main → BLOCK
+# Unless .allow-main exists (explicit user opt-in for main branch SDD)
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-  echo "WARNING: You are on the '$CURRENT_BRANCH' branch. Consider using a feature branch or worktree for implementation work." >&2
+  SDD_ARTIFACTS_EXIST=false
+  if [ -d "reports" ] && [ -f "DEVIATIONS.md" ]; then
+    SDD_ARTIFACTS_EXIST=true
+  fi
+
+  if [ "$SDD_ARTIFACTS_EXIST" = true ] && [ ! -f ".allow-main" ]; then
+    ERRORS+=("BLOCKED: You are on the '$CURRENT_BRANCH' branch with SDD artifacts present (reports/ + DEVIATIONS.md). This usually means you drifted out of your worktree. Either: (1) cd to your worktree directory, or (2) create a .allow-main file in the project root if you intentionally want to run SDD on $CURRENT_BRANCH.")
+  else
+    echo "WARNING: You are on the '$CURRENT_BRANCH' branch. Consider using a feature branch or worktree for implementation work." >&2
+  fi
 fi
 
 # Check 2: Pre-execution audit report must exist with substantive content
