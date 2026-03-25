@@ -145,13 +145,41 @@ go test ./...
 
 **If tests pass:** Report ready.
 
-### 5. Report Location
+### 5. Session Handoff (MANDATORY — do not skip or continue past this step)
+
+After the worktree is created, set up, and baseline-verified, you MUST hand off to a new session. Claude Code hooks receive CWD from the session start directory — `! cd` does not change hook CWD. SDD enforcement hooks (review gates, audit gates, token checks) will not work unless the session was started from inside the worktree.
+
+**You cannot continue implementation in this session.** Present this exact output to the user and STOP:
 
 ```
-Worktree ready at <full-path>
-Tests passing (<N> tests, 0 failures)
-Ready to implement <feature-name>
+════════════════════════════════════════════════════════════════
+ WORKTREE READY — NEW SESSION REQUIRED
+════════════════════════════════════════════════════════════════
+
+ Worktree: <full-path>
+ Branch:   <branch-name>
+ Tests:    <N> passing, 0 failures
+
+ SDD enforcement hooks require the session to start FROM the
+ worktree directory. This session started from the project root
+ and cannot be used for implementation.
+
+ To continue, start a new Claude Code session:
+
+   cd <full-path> && claude
+
+ Then give it this prompt:
+
+   Resume SDD execution. Read the plan files in docs/imp-plans/
+   to see progress (checkboxes). Invoke superpowers:subagent-driven-development
+   and continue from the next unchecked task.
+
+════════════════════════════════════════════════════════════════
 ```
+
+After presenting this output, STOP. Do not dispatch any implementation tasks, do not invoke SDD, do not continue with "let me just start the first task." The user must start a new session from the worktree directory.
+
+Why this is mandatory: In previous implementations, the agent continued from the project root, causing all SDD hooks to check the wrong directory. Reports, DEVIATIONS.md, and audit artifacts were invisible to the hooks, and enforcement silently failed.
 
 ## Quick Reference
 
@@ -198,9 +226,21 @@ You: I'm using the using-git-worktrees skill to set up an isolated workspace.
 [Run npm install]
 [Run npm test - 47 passing]
 
-Worktree ready at /Users/jesse/myproject/.worktrees/auth
-Tests passing (47 tests, 0 failures)
-Ready to implement auth feature
+════════════════════════════════════════════════════════════════
+ WORKTREE READY — NEW SESSION REQUIRED
+════════════════════════════════════════════════════════════════
+
+ Worktree: /Users/jesse/myproject/.worktrees/auth
+ Branch:   feature/auth
+ Tests:    47 passing, 0 failures
+
+ To continue, start a new Claude Code session:
+
+   cd /Users/jesse/myproject/.worktrees/auth && claude
+
+════════════════════════════════════════════════════════════════
+
+[STOP — do not continue implementation in this session]
 ```
 
 ## Red Flags
