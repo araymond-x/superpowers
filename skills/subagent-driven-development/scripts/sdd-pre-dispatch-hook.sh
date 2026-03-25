@@ -1,17 +1,22 @@
 #!/usr/bin/env bash
 # sdd-pre-dispatch-hook.sh — Process-level enforcement for SDD task dispatches
 #
-# Runs as a PreToolUse hook on the Agent tool via SDD skill frontmatter.
+# Runs as a global PreToolUse hook on the Agent tool (settings.json).
 # Blocks implementer task dispatches that haven't completed the review cycle.
 #
 # Exit codes:
-#   0 — Allow the dispatch
+#   0 — Allow the dispatch (with optional additionalContext injection)
 #   2 — Block the dispatch (error message on stderr fed to Claude)
 #
 # Input: JSON on stdin with tool_input.description, tool_input.prompt, etc.
-# Output: JSON on stdout (optional — for additionalContext injection)
+# Output: JSON on stdout (additionalContext reminder on allowed dispatches)
 
 set -uo pipefail
+
+# Minimum file size (bytes) for report files to be considered valid.
+# Prevents forgery via `touch` or `echo "PASS" > file` (0-49 bytes).
+# Real review reports are 500+ bytes.
+MIN_REPORT_BYTES=50
 
 # Read stdin
 INPUT=$(cat)
@@ -66,6 +71,35 @@ if [ "$IS_IMPLEMENTER" = false ]; then
   exit 0
 fi
 
+# ─── Helper: check report file exists AND has meaningful content ──────────
+
+check_report_file() {
+  local pattern="$1"
+  local label="$2"
+
+  # Find matching files
+  local matches
+  matches=$(ls $pattern 2>/dev/null)
+
+  if [ -z "$matches" ]; then
+    echo "MISSING"
+    return
+  fi
+
+  # Check the most recent matching file has meaningful content
+  local latest
+  latest=$(echo "$matches" | sort | tail -1)
+  local size
+  size=$(wc -c < "$latest" 2>/dev/null | tr -d ' ')
+
+  if [ "$size" -lt "$MIN_REPORT_BYTES" ] 2>/dev/null; then
+    echo "TOO_SMALL:${size}:${latest}"
+    return
+  fi
+
+  echo "OK"
+}
+
 # ─── Enforcement checks (implementer dispatches only) ─────────────────────
 
 ERRORS=()
@@ -86,29 +120,52 @@ if [ ! -d "reports" ]; then
   ERRORS+=("BLOCKED: reports/ directory does not exist. Create it before dispatching tasks. Reports from each task are saved here for persistence and audit.")
 fi
 
-# Check 4: If Task N > 0, verify previous task was fully reviewed
+# Check 4: If Task N > 0, verify previous task was fully reviewed with real content
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   PREV=$((TASK_NUMBER - 1))
 
   # Previous task implementer report
-  if ! ls reports/task-${PREV}-implementer-report* 1>/dev/null 2>&1; then
-    ERRORS+=("BLOCKED: No implementer report found for Task $PREV (reports/task-${PREV}-implementer-report*). The previous task must have its report saved before dispatching the next task.")
-  fi
+  RESULT=$(check_report_file "reports/task-${PREV}-implementer-report*" "implementer report")
+  case "$RESULT" in
+    MISSING)
+      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (reports/task-${PREV}-implementer-report*). The previous task must have its report saved before dispatching the next task.")
+      ;;
+    TOO_SMALL*)
+      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+      ERRORS+=("BLOCKED: Implementer report for Task $PREV exists ($FILE_NAME) but is only $FILE_SIZE bytes — likely an empty placeholder. A valid report must contain the subagent's actual output (minimum $MIN_REPORT_BYTES bytes). Save the full subagent response, not an empty file.")
+      ;;
+  esac
 
   # Previous task spec review report
-  if ! ls reports/task-${PREV}-spec-review* 1>/dev/null 2>&1; then
-    ERRORS+=("BLOCKED: No spec compliance review report found for Task $PREV (reports/task-${PREV}-spec-review*). Spec review must be dispatched and its report saved before proceeding to the next task.")
-  fi
+  RESULT=$(check_report_file "reports/task-${PREV}-spec-review*" "spec review")
+  case "$RESULT" in
+    MISSING)
+      ERRORS+=("BLOCKED: No spec compliance review report found for Task $PREV (reports/task-${PREV}-spec-review*). Spec review must be dispatched and its report saved before proceeding to the next task.")
+      ;;
+    TOO_SMALL*)
+      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+      ERRORS+=("BLOCKED: Spec review report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the actual reviewer output. If minimum review tier was declared, the report should still document the tier decision and rationale.")
+      ;;
+  esac
 
   # Previous task quality review report
-  if ! ls reports/task-${PREV}-quality-review* 1>/dev/null 2>&1; then
-    ERRORS+=("BLOCKED: No code quality review report found for Task $PREV (reports/task-${PREV}-quality-review*). Quality review must be dispatched and its report saved before proceeding. If minimum review tier was declared, save a reports/task-${PREV}-quality-review-minimum-tier.md noting the tier declaration.")
-  fi
+  RESULT=$(check_report_file "reports/task-${PREV}-quality-review*" "quality review")
+  case "$RESULT" in
+    MISSING)
+      ERRORS+=("BLOCKED: No code quality review report found for Task $PREV (reports/task-${PREV}-quality-review*). Quality review must be dispatched and its report saved before proceeding. If minimum review tier was declared, save a reports/task-${PREV}-quality-review-minimum-tier.md documenting the tier decision.")
+      ;;
+    TOO_SMALL*)
+      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+      ERRORS+=("BLOCKED: Quality review report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the actual reviewer output.")
+      ;;
+  esac
 fi
 
 # Check 5: If Task N > 0 and plan has Source Contracts, verify Task 0 completed
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
-  # Look for any plan file that has Source Contracts (not "None")
   HAS_SOURCE_CONTRACTS=false
   for plan_file in docs/imp-plans/*.md docs/plans/*.md; do
     if [ -f "$plan_file" ]; then
@@ -120,16 +177,22 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   done
 
   if [ "$HAS_SOURCE_CONTRACTS" = true ]; then
-    if ! ls reports/task-0-implementer-report* 1>/dev/null 2>&1; then
-      ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (reports/task-0-implementer-report*). Task 0 (Contract Verification) must complete before any other task is dispatched.")
-    fi
+    RESULT=$(check_report_file "reports/task-0-implementer-report*" "Task 0 report")
+    case "$RESULT" in
+      MISSING)
+        ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (reports/task-0-implementer-report*). Task 0 (Contract Verification) must complete before any other task is dispatched.")
+        ;;
+      TOO_SMALL*)
+        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+        ERRORS+=("BLOCKED: Task 0 report exists but is only $FILE_SIZE bytes — likely an empty placeholder. Task 0 must produce real contract verification output.")
+        ;;
+    esac
   fi
 fi
 
 # ─── Report results ───────────────────────────────────────────────────────
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
-  # Build error message
   ERROR_MSG=""
   for err in "${ERRORS[@]}"; do
     ERROR_MSG="${ERROR_MSG}${err}\n"
@@ -139,5 +202,17 @@ if [ ${#ERRORS[@]} -gt 0 ]; then
   exit 2
 fi
 
-# All checks passed — allow the dispatch
+# ─── All checks passed — inject reminder context and allow ────────────────
+
+# Inject additionalContext to remind the controller about post-task requirements.
+# This appears in the controller's context at the moment of dispatch.
+cat << 'HOOKJSON'
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "additionalContext": "SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to reports/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to reports/task-N-spec-review.md, (3) Dispatch code quality review and save to reports/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to DEVIATIONS.md, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+  }
+}
+HOOKJSON
+
 exit 0
