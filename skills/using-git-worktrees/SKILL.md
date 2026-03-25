@@ -17,35 +17,24 @@ Git worktrees create isolated workspaces sharing the same repository, allowing w
 
 Follow this priority order:
 
-### 1. Check Existing Directories
+### Standard Location: `.worktrees/` Inside the Project
+
+All worktrees are created at `<project-root>/.worktrees/<feature-name>/`. This is the ONLY supported location.
 
 ```bash
-# Check in priority order
-ls -d .worktrees 2>/dev/null     # Preferred (hidden)
-ls -d worktrees 2>/dev/null      # Alternative
+# Check if .worktrees/ exists
+ls -d .worktrees 2>/dev/null
 ```
 
-**If found:** Use that directory. If both exist, `.worktrees` wins.
+**If found:** Use it. **If not found:** Create it, add to `.gitignore`, commit.
 
-### 2. Check CLAUDE.md
+Do NOT create worktrees as sibling directories (`~/projects/project-name-feature/`), in global locations (`~/.config/.../`), or anywhere else. Sibling worktrees clutter the projects directory and create naming inconsistency. The SDD enforcement hooks verify the session CWD contains `.worktrees` in the path — worktrees created elsewhere will trigger warnings during execution.
 
-```bash
-grep -i "worktree.*director" CLAUDE.md 2>/dev/null
+**Naming convention:** `.worktrees/<feature-name>/` matching the branch name.
 ```
-
-**If preference specified:** Use it without asking.
-
-### 3. Ask User
-
-If no directory exists and no CLAUDE.md preference:
-
-```
-No worktree directory found. Where should I create worktrees?
-
-1. .worktrees/ (project-local, hidden)
-2. ~/.config/superpowers/worktrees/<project-name>/ (global location)
-
-Which would you prefer?
+.worktrees/statement-reconciliation-v1/
+.worktrees/auth-system/
+.worktrees/notification-service/
 ```
 
 ## Safety Verification
@@ -67,10 +56,6 @@ Per Jesse's rule "Fix broken things immediately":
 3. Proceed with worktree creation
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
-
-### For Global Directory (~/.config/superpowers/worktrees)
-
-No .gitignore verification needed - outside project entirely.
 
 ## Branch Name Collisions
 
@@ -95,15 +80,11 @@ project=$(basename "$(git rev-parse --show-toplevel)")
 ### 2. Create Worktree
 
 ```bash
-# Determine full path
-case $LOCATION in
-  .worktrees|worktrees)
-    path="$LOCATION/$BRANCH_NAME"
-    ;;
-  ~/.config/superpowers/worktrees/*)
-    path="~/.config/superpowers/worktrees/$project/$BRANCH_NAME"
-    ;;
-esac
+# Always use .worktrees/ inside the project
+path=".worktrees/$BRANCH_NAME"
+
+# Create .worktrees/ if it doesn't exist
+mkdir -p .worktrees
 
 # Create worktree with new branch
 git worktree add "$path" -b "$BRANCH_NAME"
@@ -186,12 +167,11 @@ Why this is mandatory: In previous implementations, the agent continued from the
 | Situation | Action |
 |-----------|--------|
 | `.worktrees/` exists | Use it (verify ignored) |
-| `worktrees/` exists | Use it (verify ignored) |
-| Both exist | Use `.worktrees/` |
-| Neither exists | Check CLAUDE.md → Ask user |
-| Directory not ignored | Add to .gitignore + commit |
+| `.worktrees/` doesn't exist | Create it, add to `.gitignore`, commit |
+| Directory not ignored | Add to `.gitignore` + commit before creating worktree |
 | Tests fail during baseline | Report failures + ask |
 | No package.json/Cargo.toml | Skip dependency install |
+| Branch name already exists | Use versioned name (`-v2`, `-v3`) — do NOT delete |
 
 ## Common Mistakes
 

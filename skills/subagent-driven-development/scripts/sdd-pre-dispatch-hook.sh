@@ -121,6 +121,26 @@ if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
   fi
 fi
 
+# Check 1b: Worktree location convention
+# Standard: worktrees should be at <project>/.worktrees/<feature>/
+# Warn if CWD is a worktree but NOT under .worktrees/ (sibling worktree)
+if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
+  # We're on a feature branch — check if we're in the standard location
+  if ! echo "$CWD" | grep -q '\.worktrees/'; then
+    # Not under .worktrees/ — could be a sibling worktree or unusual location
+    GIT_TOPLEVEL=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
+    if [ -n "$GIT_TOPLEVEL" ]; then
+      # Check if this IS a worktree (not the main repo)
+      GIT_COMMON=$(git rev-parse --git-common-dir 2>/dev/null || echo "")
+      GIT_DIR=$(git rev-parse --git-dir 2>/dev/null || echo "")
+      if [ "$GIT_COMMON" != "$GIT_DIR" ]; then
+        # This is a worktree, but not under .worktrees/
+        echo "WARNING: This worktree is not in the standard .worktrees/ directory. Standard location: <project-root>/.worktrees/<feature-name>/. Sibling worktrees clutter ~/projects/ and create inconsistency." >&2
+      fi
+    fi
+  fi
+fi
+
 # Check 2: Pre-execution audit report must exist with substantive content
 AUDIT_RESULT=$(check_report_file "reports/pre-execution-audit*" "pre-execution audit")
 case "$AUDIT_RESULT" in
