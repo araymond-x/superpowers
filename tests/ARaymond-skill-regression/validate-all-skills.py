@@ -873,6 +873,41 @@ def check_critical_fixes(skills_dir):
         else:
             check_fail(CATEGORY_6, "SDD hook: missing token budget estimation — oversized tasks not blocked")
 
+        # Report naming: hook supports zero-padded task-NNN format
+        if "task_report_glob" in hook_content or 'printf "%03d"' in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: supports task-NNN zero-padded naming")
+        else:
+            check_fail(CATEGORY_6, "SDD hook: missing task-NNN zero-padded naming support")
+
+        # Report naming: backward compat with unpadded task-N
+        if "task-${task_num}" in hook_content or "task-${PREV}" in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: backward compatible with unpadded task-N naming")
+        else:
+            check_fail(CATEGORY_6, "SDD hook: missing backward compatibility with unpadded task-N")
+
+    # SDD SKILL has report naming convention
+    sdd_skill_path = os.path.join(skills_dir, "subagent-driven-development/SKILL.md")
+    sdd_skill_content = read_file(sdd_skill_path)
+    if sdd_skill_content:
+        if "task-NNN" in sdd_skill_content or "task-000" in sdd_skill_content:
+            check_pass(CATEGORY_6, "SDD SKILL: documents task-NNN naming convention")
+        else:
+            check_fail(CATEGORY_6, "SDD SKILL: missing task-NNN naming convention documentation")
+
+        if "Do NOT use module-prefixed" in sdd_skill_content or "do NOT create symlinks" in sdd_skill_content.lower():
+            check_pass(CATEGORY_6, "SDD SKILL: prohibits module-prefixed names and symlinks")
+        else:
+            check_fail(CATEGORY_6, "SDD SKILL: missing prohibition on module-prefixed names")
+
+    # Skill enforcement hook exists (Write|Edit bypass detection)
+    enforcement_hook = os.path.join(
+        skills_dir, "subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh"
+    )
+    if os.path.isfile(enforcement_hook) and os.access(enforcement_hook, os.X_OK):
+        check_pass(CATEGORY_6, "SDD: sdd-skill-enforcement-hook.sh exists and is executable")
+    else:
+        check_fail(CATEGORY_6, "SDD: sdd-skill-enforcement-hook.sh missing — Write/Edit bypass detection not active")
+
 
 # ---------------------------------------------------------------------------
 # Category 7: Prompt Template Checks
