@@ -70,10 +70,10 @@ fi
 
 ERRORS=()
 
-# Check 1: Branch safety
+# Check 1: Branch safety (WARN, not block — user may intentionally work on main)
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
-  ERRORS+=("BLOCKED: You are on the '$CURRENT_BRANCH' branch. Create a feature branch or worktree before dispatching implementation tasks.")
+  echo "WARNING: You are on the '$CURRENT_BRANCH' branch. Consider using a feature branch or worktree for implementation work." >&2
 fi
 
 # Check 2: DEVIATIONS.md must exist
