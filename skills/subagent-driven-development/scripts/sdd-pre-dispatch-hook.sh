@@ -71,6 +71,25 @@ if [ "$IS_IMPLEMENTER" = false ]; then
   exit 0
 fi
 
+# ─── Helper: format task number for report file glob ─────────────────────
+# Supports both zero-padded (task-007-*) and unpadded (task-7-*) for
+# backward compatibility with existing reports.
+
+task_report_glob() {
+  local task_num="$1"
+  local report_type="$2"
+  local padded
+  padded=$(printf "%03d" "$task_num" 2>/dev/null || echo "$task_num")
+  # Try zero-padded first, fall back to unpadded
+  local padded_match
+  padded_match=$(ls reports/task-${padded}-${report_type}* 2>/dev/null)
+  if [ -n "$padded_match" ]; then
+    echo "reports/task-${padded}-${report_type}*"
+  else
+    echo "reports/task-${task_num}-${report_type}*"
+  fi
+}
+
 # ─── Helper: check report file exists AND has meaningful content ──────────
 
 check_report_file() {
@@ -167,42 +186,47 @@ fi
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   PREV=$((TASK_NUMBER - 1))
 
+  PREV_PADDED=$(printf "%03d" "$PREV" 2>/dev/null || echo "$PREV")
+
   # Previous task implementer report
-  RESULT=$(check_report_file "reports/task-${PREV}-implementer-report*" "implementer report")
+  IMPL_GLOB=$(task_report_glob "$PREV" "implementer-report")
+  RESULT=$(check_report_file "$IMPL_GLOB" "implementer report")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (reports/task-${PREV}-implementer-report*). The previous task must have its report saved before dispatching the next task.")
+      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (expected: reports/task-${PREV_PADDED}-implementer-report.md). Save the implementer's report using the task-NNN naming convention.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
       FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Implementer report for Task $PREV exists ($FILE_NAME) but is only $FILE_SIZE bytes — likely an empty placeholder. A valid report must contain the subagent's actual output (minimum $MIN_REPORT_BYTES bytes). Save the full subagent response, not an empty file.")
+      ERRORS+=("BLOCKED: Implementer report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the full subagent response (minimum $MIN_REPORT_BYTES bytes).")
       ;;
   esac
 
   # Previous task spec review report
-  RESULT=$(check_report_file "reports/task-${PREV}-spec-review*" "spec review")
+  SPEC_GLOB=$(task_report_glob "$PREV" "spec-review")
+  RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No spec compliance review report found for Task $PREV (reports/task-${PREV}-spec-review*). Spec review must be dispatched and its report saved before proceeding to the next task.")
+      ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: reports/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
       FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Spec review report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the actual reviewer output. If minimum review tier was declared, the report should still document the tier decision and rationale.")
+      ERRORS+=("BLOCKED: Spec review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
       ;;
   esac
 
   # Previous task quality review report
-  RESULT=$(check_report_file "reports/task-${PREV}-quality-review*" "quality review")
+  QUAL_GLOB=$(task_report_glob "$PREV" "quality-review")
+  RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No code quality review report found for Task $PREV (reports/task-${PREV}-quality-review*). Quality review must be dispatched and its report saved before proceeding. If minimum review tier was declared, save a reports/task-${PREV}-quality-review-minimum-tier.md documenting the tier decision.")
+      ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: reports/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save reports/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
       FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Quality review report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the actual reviewer output.")
+      ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
       ;;
   esac
 fi
@@ -220,14 +244,15 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   done
 
   if [ "$HAS_SOURCE_CONTRACTS" = true ]; then
-    RESULT=$(check_report_file "reports/task-0-implementer-report*" "Task 0 report")
+    T0_GLOB=$(task_report_glob "0" "implementer-report")
+    RESULT=$(check_report_file "$T0_GLOB" "Task 0 report")
     case "$RESULT" in
       MISSING)
-        ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (reports/task-0-implementer-report*). Task 0 (Contract Verification) must complete before any other task is dispatched.")
+        ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (expected: reports/task-000-implementer-report.md). Task 0 (Contract Verification) must complete first.")
         ;;
       TOO_SMALL*)
         FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-        ERRORS+=("BLOCKED: Task 0 report exists but is only $FILE_SIZE bytes — likely an empty placeholder. Task 0 must produce real contract verification output.")
+        ERRORS+=("BLOCKED: Task 0 report exists but is only $FILE_SIZE bytes — Task 0 must produce real contract verification output.")
         ;;
     esac
   fi

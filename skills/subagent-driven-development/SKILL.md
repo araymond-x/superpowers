@@ -409,19 +409,44 @@ After each task completes, the controller scans the implementer's report for sig
 
 Subagent reports are ephemeral — they exist only in the controller's context. If the controller session ends or compresses, report details are lost. To prevent this:
 
-1. **After each implementer completes**: Save their report to a file:
-   `reports/task-N-implementer-report.md` in the project working directory
-2. **After each reviewer completes**: Save the review result:
-   `reports/task-N-spec-review.md` and `reports/task-N-quality-review.md`
+### Report Naming Convention (enforced by hooks)
+
+All reports use **three-digit zero-padded sequential numbering** across all modules:
+
+```
+reports/task-000-implementer-report.md   (first task in the plan)
+reports/task-000-spec-review.md
+reports/task-000-quality-review.md
+reports/task-001-implementer-report.md   (second task)
+reports/task-001-spec-review.md
+...
+```
+
+| Rule | Convention |
+|------|-----------|
+| Format | `task-NNN-{type}.md` where NNN is zero-padded sequential |
+| Numbering | Sequential across ALL modules (not per-module). Module 1 tasks 0-3, Module 2 tasks 4-11, Module 3 tasks 12-19, etc. |
+| Types | `implementer-report`, `spec-review`, `quality-review`, `quality-review-minimum-tier` |
+| Why sequential | The pre-dispatch hook checks task N-1 reports before allowing task N. Module-prefixed names (m2-task-1) break this check. |
+| Why zero-padded | Clean sorting up to 999 tasks. `task-009` sorts before `task-010`. |
+
+**During Plan Ingestion**, when extracting tasks from multiple modules, assign sequential numbers starting from 000. Map each module's internal task numbers to the global sequence and include the mapping in the TodoWrite.
+
+### Saving Reports
+
+1. **After each implementer completes**: Save their report to `reports/task-NNN-implementer-report.md`
+2. **After each reviewer completes**: Save to `reports/task-NNN-spec-review.md` and `reports/task-NNN-quality-review.md`
 3. **Validate report completeness** using the validation script:
-   `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-report.py --report-file reports/task-N-implementer-report.md`
-   If the script returns INCOMPLETE, do not proceed to review — re-dispatch the implementer with instructions to complete the missing sections.
+   `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-report.py --report-file reports/task-NNN-implementer-report.md`
+   If the script returns INCOMPLETE, do not proceed to review.
+
+Do NOT use module-prefixed names (`m2-task-1-*`), do NOT create symlinks between naming conventions. The hook enforces `task-NNN-*` — use it directly.
 
 The `reports/` directory is the controller's flight recorder. If the session crashes, a new session can read these files to understand what happened and resume execution.
 
 **Report file format**: Each report file should contain the implementer's or reviewer's full output, prefixed with:
 ```
-# Task N Report — [task name]
+# Task NNN Report — [task name]
 # Date: [ISO timestamp]
 # Status: [DONE/DONE_WITH_CONCERNS/BLOCKED/NEEDS_CONTEXT]
 ```
