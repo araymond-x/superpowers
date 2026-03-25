@@ -219,6 +219,54 @@ else
   fail "Settings file not readable: $SETTINGS_FILE"
 fi
 
+# ─── 4b. Enforcement Hooks in Settings ───────────────────────────────────────
+
+section "Enforcement Hooks"
+
+# Check Agent matcher exists in PreToolUse
+if grep -q '"matcher": "Agent"' ~/.claude/settings.json 2>/dev/null; then
+    pass "PreToolUse has Agent matcher (SDD enforcement hook)"
+else
+    fail "PreToolUse missing Agent matcher — SDD enforcement not registered"
+fi
+
+# Check Skill matcher exists in PreToolUse
+if grep -q '"matcher": "Skill"' ~/.claude/settings.json 2>/dev/null; then
+    pass "PreToolUse has Skill matcher (handoff gate hook)"
+else
+    fail "PreToolUse missing Skill matcher — handoff gate not registered"
+fi
+
+# Check Agent hook script (sdd-pre-dispatch-hook.sh) is referenced and exists
+AGENT_HOOK_PATH=$(grep -o '"[^"]*sdd-pre-dispatch-hook\.sh"' ~/.claude/settings.json 2>/dev/null | head -1 | tr -d '"')
+if [ -n "$AGENT_HOOK_PATH" ] && [ -f "$AGENT_HOOK_PATH" ]; then
+    pass "Agent hook script exists at configured path: $AGENT_HOOK_PATH"
+else
+    fail "Agent hook script (sdd-pre-dispatch-hook.sh) missing or not in settings.json"
+fi
+
+# Check Skill hook script (handoff-gate-hook.sh) is referenced and exists
+SKILL_HOOK_PATH=$(grep -o '"[^"]*handoff-gate-hook\.sh"' ~/.claude/settings.json 2>/dev/null | head -1 | tr -d '"')
+if [ -n "$SKILL_HOOK_PATH" ] && [ -f "$SKILL_HOOK_PATH" ]; then
+    pass "Skill hook script exists at configured path: $SKILL_HOOK_PATH"
+else
+    fail "Skill hook script (handoff-gate-hook.sh) missing or not in settings.json"
+fi
+
+# Check sdd-report-guard.sh is in Bash hooks
+if grep -q "sdd-report-guard.sh" ~/.claude/settings.json 2>/dev/null; then
+    pass "Bash hooks include sdd-report-guard.sh"
+else
+    fail "Bash hooks missing sdd-report-guard.sh — report forgery guard not registered"
+fi
+
+# Check sdd-stop-hook.sh is in Stop hooks
+if grep -q "sdd-stop-hook.sh" ~/.claude/settings.json 2>/dev/null; then
+    pass "Stop hooks include sdd-stop-hook.sh"
+else
+    fail "Stop hooks missing sdd-stop-hook.sh — pre-completion enforcement not registered"
+fi
+
 # ─── 5. Cross-Skill References ────────────────────────────────────────────────
 
 section "Cross-Skill References"

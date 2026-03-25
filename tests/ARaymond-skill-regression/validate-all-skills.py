@@ -446,6 +446,42 @@ def check_cross_references(skills_dir):
         else:
             check_fail(CATEGORY_4, "SDD SKILL: check-safe-branch.sh missing or not executable")
 
+        # Hook scripts: sdd-stop-hook.sh
+        stop_hook = os.path.join(
+            skills_dir, "subagent-driven-development/scripts/sdd-stop-hook.sh"
+        )
+        if os.path.isfile(stop_hook) and os.access(stop_hook, os.X_OK):
+            check_pass(CATEGORY_4, "SDD: sdd-stop-hook.sh exists and is executable")
+        else:
+            check_fail(CATEGORY_4, "SDD: sdd-stop-hook.sh missing or not executable")
+
+        # Hook scripts: sdd-report-guard.sh
+        report_guard = os.path.join(
+            skills_dir, "subagent-driven-development/scripts/sdd-report-guard.sh"
+        )
+        if os.path.isfile(report_guard) and os.access(report_guard, os.X_OK):
+            check_pass(CATEGORY_4, "SDD: sdd-report-guard.sh exists and is executable")
+        else:
+            check_fail(CATEGORY_4, "SDD: sdd-report-guard.sh missing or not executable")
+
+        # Hook scripts: handoff-gate-hook.sh
+        handoff_gate = os.path.join(
+            skills_dir, "handoff-acceptance/scripts/handoff-gate-hook.sh"
+        )
+        if os.path.isfile(handoff_gate) and os.access(handoff_gate, os.X_OK):
+            check_pass(CATEGORY_4, "handoff-acceptance: handoff-gate-hook.sh exists and is executable")
+        else:
+            check_fail(CATEGORY_4, "handoff-acceptance: handoff-gate-hook.sh missing or not executable")
+
+        # Pre-execution audit prompt template
+        audit_prompt = os.path.join(
+            skills_dir, "subagent-driven-development/pre-execution-audit-prompt.md"
+        )
+        if os.path.isfile(audit_prompt):
+            check_pass(CATEGORY_4, "SDD: pre-execution-audit-prompt.md exists")
+        else:
+            check_fail(CATEGORY_4, "SDD: pre-execution-audit-prompt.md missing — pre-execution audit gate broken")
+
         # SDD SKILL references implementer, spec-reviewer, code-quality-reviewer prompt templates
         for prompt_file in [
             "./implementer-prompt.md",
@@ -602,6 +638,7 @@ SDD_REQUIRED_SECTIONS = [
     "Plan Status Tracking",
     "Pre-Completion Gate",
     "Session Recovery",
+    "Pre-Execution Audit",
 ]
 
 WRITING_PLANS_REQUIRED_SECTIONS = [
@@ -675,6 +712,15 @@ def check_required_sections(skills_dir):
                     CATEGORY_5,
                     "brainstorming SKILL: section '{}' missing".format(section),
                 )
+
+    # Worktree SKILL has mandatory session handoff
+    wt_path = os.path.join(skills_dir, "using-git-worktrees/SKILL.md")
+    wt_content = read_file(wt_path)
+    if wt_content:
+        if "NEW SESSION REQUIRED" in wt_content:
+            check_pass(CATEGORY_5, "worktree SKILL: has mandatory session handoff block")
+        else:
+            check_fail(CATEGORY_5, "worktree SKILL: missing 'NEW SESSION REQUIRED' handoff block")
 
 
 # ---------------------------------------------------------------------------
@@ -807,6 +853,25 @@ def check_critical_fixes(skills_dir):
                 CATEGORY_6,
                 "brainstorming SKILL: missing using-git-worktrees reference — worktree step not wired",
             )
+
+    # Pre-dispatch hook has audit report check
+    hook_path = os.path.join(skills_dir, "subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh")
+    hook_content = read_file(hook_path)
+    if hook_content:
+        if "pre-execution-audit" in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: checks for pre-execution audit report")
+        else:
+            check_fail(CATEGORY_6, "SDD hook: missing pre-execution audit report check")
+
+        if "MIN_REPORT_BYTES" in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: has content validation threshold (MIN_REPORT_BYTES)")
+        else:
+            check_fail(CATEGORY_6, "SDD hook: missing content validation — empty files would bypass gate")
+
+        if "estimate-task-tokens" in hook_content or "estimate_task_tokens" in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: has token budget estimation check")
+        else:
+            check_fail(CATEGORY_6, "SDD hook: missing token budget estimation — oversized tasks not blocked")
 
 
 # ---------------------------------------------------------------------------
