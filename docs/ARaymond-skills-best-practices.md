@@ -98,8 +98,10 @@ Note: absolute path to the physical file, not a symlink path.
 | `PreToolUse` | `Agent` | `sdd-pre-dispatch-hook.sh` | Review reports + DEVIATIONS.md + branch safety before implementer dispatch |
 | `PreToolUse` | `Bash` | `sdd-report-guard.sh` | Anti-forgery: detects `touch` / empty file writes to reports/ directory |
 | `PreToolUse` | `Skill` | `handoff-gate-hook.sh` | Acceptance report must exist before planning skill invocation |
+| `PreToolUse` | `Write\|Edit` | `sdd-skill-enforcement-hook.sh` | Detects SDD bypass: parses transcript to warn when user requested SDD but agent writes code without loading the skill |
 | `Stop` | (any) | `sdd-stop-hook.sh` | Pre-completion gate: injects 8-check results at session end |
 | `SessionStart` | `startup\|clear\|compact` | `hooks/session-start` | Loads plugin context into session |
+| (user-delivered) | n/a | `honesty-check-prompt.md` | Mandatory compliance check before Pre-Completion Gate: controller outputs 7 questions, user pastes back, controller answers honestly |
 
 ### Hook Patterns That Work
 
@@ -175,6 +177,23 @@ A mandatory self-assessment checkpoint between plan ingestion and first task dis
 
 ---
 
+## Honesty Check (Pre-Completion Gate)
+
+A mandatory user-delivered compliance verification before the Pre-Completion Gate.
+
+**What it is**: The controller outputs 7 questions (from `honesty-check-prompt.md`) for the user to paste back into the session. The controller then answers each question honestly, enumerating any shortcuts, skipped steps, or unresolved uncertainties.
+
+**Why it works**: LLMs honestly enumerate violations when directly asked — the advisory instruction problem does not extend to direct compliance questions. When positioned as a compliance audit rather than self-assessment, the controller has no motivation to rationalize omissions.
+
+**Track record**: Has caught 3 major violations across live sessions:
+- All reviews skipped (controller admitted zero spec/quality reviews dispatched)
+- 5 shortcuts taken prior to audit (undisclosed at pre-execution gate)
+- Skill never loaded (controller implemented directly from plan without invoking SDD skill)
+
+**When it fires**: Mandatory before the 7-condition Pre-Completion Gate. The gate should not proceed until the honesty check is complete and any disclosed violations are remediated.
+
+---
+
 ## Worktree Session Architecture
 
 ### The Problem
@@ -190,7 +209,13 @@ SDD implementations must run in a git worktree (separate directory, separate bra
 
 Session 2 must be started with `cd /path/to/worktree && claude` — not from the project root. The handoff from Session 1 must include a copy-pastable `cd` command for this reason.
 
+**Worktree location convention**: `.worktrees/` (inside the project root) is the ONLY supported location. Sibling directory and global worktree alternatives have been removed from the `using-git-worktrees` SKILL. The SDD enforcement hook warns on worktree locations outside `.worktrees/`.
+
 **Branch check**: The hook blocks implementation dispatches when the session is on `main` or `master` AND SDD artifacts exist (DEVIATIONS.md). This catches the case where the controller drifted out of the worktree. Override with a `.allow-main` file for the rare case where main-branch work is legitimate.
+
+### Mid-Execution Session Handoff
+
+When the controller's context gets heavy during a long SDD execution, it may hand off to a new session. Current gap: no standardized template for mid-execution handoffs. The resume prompt MUST include `/superpowers:subagent-driven-development` (or use the Skill tool to invoke it) as the FIRST ACTION before any code work. Identified as a future improvement to build into the SDD skill.
 
 ---
 
@@ -310,3 +335,4 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Script shared logic duplicated | `validate-report.py` and `controller-checkpoint.py` both parse section headers (C2, final audit) | `_report_utils.py` shared library — single source of truth for all report parsing |
 | Context compaction drops discipline rules | Long sessions: agent resumes with only task description | File-based enforcement (reports must exist) survives compaction; hook state is filesystem state |
 | Wrong test fixtures | Statement Reconciliation: fixtures used numeric types, real output uses strings with commas | "Ground-truth fixtures" step: derive fixtures from real system output BEFORE writing any code |
+| Agent bypasses SDD skill entirely — reads plan, implements directly without subagents | Module 3 of Statement Reconciliation: agent admitted to zero reviews, 5 uncertainties post-execution | `Write\|Edit` transcript hook injects warning + CLAUDE.md Skill Invocation Rule + honesty check before Pre-Completion Gate |

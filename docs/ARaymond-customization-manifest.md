@@ -266,6 +266,7 @@ After merge, resolve conflicts in these files (all contain fork customizations):
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Contract verification, severity gradation, BASE_SHA placeholder |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Dead code blocking, implementer report placeholder, agent ref |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | 15-category mechanical checklist, cross-doc audit |
+| `skills/using-git-worktrees/SKILL.md` | Worktree location convention: `.worktrees/` only; sibling/global alternatives removed |
 
 After merge: if upstream added new skills, create matching command stubs (see Step 3 regeneration script) and run both static test suites.
 
@@ -311,7 +312,7 @@ Key changes applied across all skills:
 
 ---
 
-## Prompt Templates (7 active)
+## Prompt Templates (8 active)
 
 | File | Skill | Purpose | Key Customizations |
 |------|-------|---------|-------------------|
@@ -319,6 +320,7 @@ Key changes applied across all skills:
 | `subagent-driven-development/spec-reviewer-prompt.md` | SDD | Dispatched after each task for spec compliance review | Contract verification, BLOCKING vs ADVISORY severity gradation, BASE_SHA/HEAD_SHA placeholder, role statement |
 | `subagent-driven-development/code-quality-reviewer-prompt.md` | SDD | Dispatched after spec review for code quality review | Dead code = BLOCKING (not Minor), implementer report placeholder `[CONTROLLER: paste full report]`, agent ref `superpowers-code-reviewer`, role statement |
 | `subagent-driven-development/pre-execution-audit-prompt.md` | SDD | NEW: authoritative auditor before Task 1 dispatch | 7 honesty questions, binding remediation orders, role as "authoritative auditor" |
+| `subagent-driven-development/honesty-check-prompt.md` | SDD | User-facing compliance verification prompt. Mandatory before Pre-Completion Gate. | Controller outputs 7 questions for the user to paste back; controller then answers honestly. Has caught 3 major violations. |
 | `subagent-driven-development/trace-auditor-prompt.md` | SDD | NEW: execution trace review at pre-completion gate | Parses `.jsonl` session file via `extract-execution-trace.py`, checks for skipped reviews, unlogged concerns, missing reports |
 | `writing-plans/plan-document-reviewer-prompt.md` | writing-plans | 15-category mechanical review of draft plan | Cross-document consistency audit, snippet-vs-source verification, error name drift detection |
 | `brainstorming/distillation-reviewer-prompt.md` | brainstorming | Verifies distilled spec preserves all decisions | Checks for omitted decisions, altered rationale, added assumptions not in original |
@@ -347,7 +349,7 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 ---
 
-## Hook Scripts (4 enforcement hooks)
+## Hook Scripts (5 enforcement hooks)
 
 | Script | Event | Matcher | What It Enforces |
 |--------|-------|---------|-----------------|
@@ -355,6 +357,7 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 | `sdd-report-guard.sh` | `PreToolUse` | `Bash` | Detects `touch` or trivial writes to `reports/` directory (the 0-byte file bypass path) |
 | `sdd-stop-hook.sh` | `Stop` | (any) | Runs pre-completion gate checks and injects results via `systemMessage` at session end |
 | `handoff-gate-hook.sh` | `PreToolUse` | `Skill` | Checks for acceptance report before planning/SDD skill invocation |
+| `sdd-skill-enforcement-hook.sh` | `PreToolUse` | `Write\|Edit` | Detects SDD bypass — warns when user requested SDD but agent writes code without loading the skill (transcript parsing). Swiss Cheese "Point-of-Decision Routing" pattern. |
 
 **Hook exit codes**:
 - `exit 0` — allow (optional `additionalContext` injection via JSON stdout)
@@ -415,7 +418,7 @@ bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARay
 
 ## Global Settings Changes
 
-Three categories of additions to `~/.claude/settings.json`. These live OUTSIDE the repo.
+Four categories of additions to `~/.claude/settings.json`. These live OUTSIDE the repo.
 
 ### 1. SessionStart hook (required for skill context injection)
 
@@ -430,7 +433,12 @@ Three categories of additions to `~/.claude/settings.json`. These live OUTSIDE t
 
 ### 2. PreToolUse enforcement hooks (added 2026-03-24)
 
-Three matchers in `PreToolUse`: `Bash` (sdd-report-guard.sh), `Agent` (sdd-pre-dispatch-hook.sh), `Skill` (handoff-gate-hook.sh). See Step 5 for exact JSON.
+Four matchers in `PreToolUse`: `Bash` (sdd-report-guard.sh), `Agent` (sdd-pre-dispatch-hook.sh), `Skill` (handoff-gate-hook.sh), `Write|Edit` (sdd-skill-enforcement-hook.sh). See Step 5 for exact JSON.
+
+1. `PreToolUse` → `Bash` matcher: anti-forgery report guard
+2. `PreToolUse` → `Agent` matcher: SDD dispatch enforcement (review reports + branch safety)
+3. `PreToolUse` → `Skill` matcher: handoff acceptance gate
+4. `PreToolUse` → `Write|Edit` matcher: SDD skill enforcement hook (transcript-parsing bypass detection)
 
 ### 3. Stop pre-completion gate (added 2026-03-24)
 
@@ -444,7 +452,9 @@ One additional command in the existing `Stop` array: `sdd-stop-hook.sh`.
 }
 ```
 
-**Rollback procedure**: Remove the three enforcement hook entries (Agent, Skill matchers and the sdd-report-guard.sh entry under Bash). SessionStart and permissions do not need rollback.
+Use `**` (not `*`) — subdirectory paths must match.
+
+**Rollback procedure**: Remove the four enforcement hook entries (Agent, Skill, Write|Edit matchers and the sdd-report-guard.sh entry under Bash). SessionStart and permissions do not need rollback.
 
 ---
 
@@ -464,6 +474,7 @@ Files that will conflict on `git merge upstream/main`:
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref + prompt body | Preserve `superpowers-code-reviewer` + keep fork improvements |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
+| `skills/using-git-worktrees/SKILL.md` | Worktree location convention (`.worktrees/` only) | Keep fork version; remove any sibling or global alternatives |
 
 Files with no expected conflicts (fork-only additions):
 - All files under `skills/handoff-acceptance/` (new skill, no upstream equivalent)
