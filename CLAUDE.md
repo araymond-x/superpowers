@@ -153,6 +153,23 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Key changes: `<EXTREMELY-IMPORTANT>` → `<important>`, aggressive MUST/NEVER → direct imperatives, Red Flags → Required Practices/positive framing, role statements added to all prompt templates
 - SDD SKILL-v0.1.md is at 4091/5000 words (82%) — monitor on future additions
 
+## Hooks-Based Enforcement
+- Skill frontmatter hooks do NOT fire for symlink-installed skills (confirmed 2026-03-24). Use `~/.claude/settings.json` with absolute paths instead.
+- SDD enforcement hook: `PreToolUse` → `Agent` → `/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
+- Bash report guard: `PreToolUse` → `Bash` → same directory `/scripts/sdd-report-guard.sh`
+- Hook blocks implementer dispatches without: DEVIATIONS.md, reports/ dir, previous task's 3 report files (>50 bytes each), Task 0 report (if Source Contracts)
+- Hook injects `additionalContext` reminder on every allowed dispatch
+- Reviewers and non-SDD dispatches always pass through (exit 0)
+- Rollback: remove Agent matcher block and sdd-report-guard.sh entry from PreToolUse in `~/.claude/settings.json`
+- Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
+- Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
+
+## Global Settings Changes (2026-03-24)
+Three additions to `~/.claude/settings.json`:
+1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
+2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
+3. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/*)` for skill command stub loading
+
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
 - `trace-auditor-prompt.md` dispatches a subagent to review the trace for skipped reviews, unlogged concerns, missing reports
