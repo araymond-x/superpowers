@@ -190,6 +190,37 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   fi
 fi
 
+# ─── Check 6: Token budget estimation ─────────────────────────────────────
+
+ESTIMATE_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/estimate-task-tokens.py"
+TOKEN_WARNING=""
+
+if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
+  # Find a plan file to extract the task from
+  PLAN_FILE=""
+  for pf in docs/imp-plans/*.md docs/plans/*.md; do
+    if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
+      PLAN_FILE="$pf"
+      break
+    fi
+  done
+
+  if [ -n "$PLAN_FILE" ]; then
+    ESTIMATE_OUTPUT=$(python3 "$ESTIMATE_SCRIPT" --plan-file "$PLAN_FILE" --task "$TASK_NUMBER" 2>/dev/null || echo "")
+    if [ -n "$ESTIMATE_OUTPUT" ]; then
+      ESTIMATE_STATUS=$(echo "$ESTIMATE_OUTPUT" | jq -r '.status // "OK"' 2>/dev/null)
+      ESTIMATE_TOTAL=$(echo "$ESTIMATE_OUTPUT" | jq -r '.total_estimated // "?"' 2>/dev/null)
+      ESTIMATE_WARNING=$(echo "$ESTIMATE_OUTPUT" | jq -r '.warning // empty' 2>/dev/null)
+
+      if [ "$ESTIMATE_STATUS" = "TOO_LARGE" ]; then
+        ERRORS+=("BLOCKED: Task $TASK_NUMBER estimated at $ESTIMATE_TOTAL tokens — exceeds 50% of context budget. $ESTIMATE_WARNING Split this task into smaller subtasks before dispatching.")
+      elif [ "$ESTIMATE_STATUS" = "WARNING" ]; then
+        TOKEN_WARNING="TOKEN WARNING: Task $TASK_NUMBER estimated at $ESTIMATE_TOTAL tokens (large). $ESTIMATE_WARNING Instruct the subagent to focus narrowly and ask questions rather than reading broadly."
+      fi
+    fi
+  fi
+fi
+
 # ─── Report results ───────────────────────────────────────────────────────
 
 if [ ${#ERRORS[@]} -gt 0 ]; then
@@ -204,13 +235,21 @@ fi
 
 # ─── All checks passed — inject reminder context and allow ────────────────
 
-# Inject additionalContext to remind the controller about post-task requirements.
-# This appears in the controller's context at the moment of dispatch.
-cat << 'HOOKJSON'
+# Build additionalContext with SDD reminder + optional token warning
+CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to reports/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to reports/task-N-spec-review.md, (3) Dispatch code quality review and save to reports/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to DEVIATIONS.md, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+
+if [ -n "$TOKEN_WARNING" ]; then
+  CONTEXT="$CONTEXT | $TOKEN_WARNING"
+fi
+
+# Use python to safely JSON-encode the context string
+ENCODED_CONTEXT=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$CONTEXT" 2>/dev/null || echo "\"$CONTEXT\"")
+
+cat << HOOKJSON
 {
   "hookSpecificOutput": {
     "hookEventName": "PreToolUse",
-    "additionalContext": "SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to reports/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to reports/task-N-spec-review.md, (3) Dispatch code quality review and save to reports/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to DEVIATIONS.md, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+    "additionalContext": $ENCODED_CONTEXT
   }
 }
 HOOKJSON
