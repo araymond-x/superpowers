@@ -2,8 +2,17 @@
 
 Custom fork of obra/superpowers. Installed via symlinks to ~/.claude/, NOT as a marketplace plugin.
 
-## Setup Reference
-- Full setup runbook: `docs/ARaymond-custom-fork-setup-runbook-v1.md`
+## Key Documentation
+- **Customization Manifest**: `docs/ARaymond-customization-manifest.md` — complete inventory of every modification, installation steps, upstream sync, rollback procedures. Start here for "what was changed and why."
+- **Skills Best Practices**: `docs/ARaymond-skills-best-practices.md` — operational learnings: enforcement layers, hook patterns, testing strategy, common failure modes. Consult when building or modifying skills.
+- **Prompting Best Practices**: `docs/prompting-best-practices.md` — Claude 4.6 prompt engineering reference for skill/prompt template authoring.
+
+## Documentation Maintenance
+After each production-deployable update to the fork, review:
+1. `CLAUDE.md` — update sections affected by the change (hooks, settings, test counts)
+2. `docs/ARaymond-customization-manifest.md` — update the relevant inventory section (scripts, hooks, skills, settings)
+3. `docs/ARaymond-skills-best-practices.md` — add any new learnings, gotchas, or failure modes discovered
+4. Run both test suites to verify the documented check counts are still accurate
 
 ## Installation Architecture
 - Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, loads into context for auto-invocation)
