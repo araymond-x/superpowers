@@ -230,13 +230,13 @@ You: I'm using the using-git-worktrees skill to set up an isolated workspace.
  WORKTREE READY — NEW SESSION REQUIRED
 ════════════════════════════════════════════════════════════════
 
- Worktree: /Users/jesse/myproject/.worktrees/auth
+ Worktree: /Users/aaron/myproject/.worktrees/auth
  Branch:   feature/auth
  Tests:    47 passing, 0 failures
 
  To continue, start a new Claude Code session:
 
-   cd /Users/jesse/myproject/.worktrees/auth && claude
+   cd /Users/aaron/myproject/.worktrees/auth && claude
 
 ════════════════════════════════════════════════════════════════
 
