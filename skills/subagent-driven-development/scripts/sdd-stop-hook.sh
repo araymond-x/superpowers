@@ -98,24 +98,20 @@ if [ -z "$BLOCKERS" ] || [ "$BLOCKERS" = "null" ]; then
   ' 2>/dev/null || echo "see checkpoint output")
 fi
 
-# ─── Inject additionalContext based on checkpoint result ──────────────────────
+# ─── Inject result based on checkpoint status ────────────────────────────────
 
 if [ "$STATUS" = "FAIL" ]; then
   CONTEXT_MSG="Pre-Completion Gate FAILED. Issues: ${BLOCKERS:-see checkpoint output}. Address these before declaring implementation complete."
-else
-  CONTEXT_MSG="Pre-Completion Gate PASSED. All checks green."
-fi
-
-# Emit the Stop hook JSON response with additionalContext
-ESCAPED_MSG=$(echo "$CONTEXT_MSG" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read().rstrip()))')
-
-cat << HOOKJSON
+  ESCAPED_MSG=$(echo "$CONTEXT_MSG" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read().rstrip()))')
+  # Use systemMessage for Stop hooks (hookSpecificOutput not supported for Stop events)
+  cat << HOOKJSON
 {
-  "hookSpecificOutput": {
-    "hookEventName": "Stop",
-    "additionalContext": ${ESCAPED_MSG}
-  }
+  "systemMessage": ${ESCAPED_MSG}
 }
 HOOKJSON
+else
+  # Gate passed — no output needed (exit 0 silently)
+  :
+fi
 
 exit 0
