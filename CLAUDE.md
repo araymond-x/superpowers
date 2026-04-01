@@ -28,26 +28,8 @@ After each production-deployable update to the fork, review:
 - `skills/requesting-code-review/SKILL.md` — agent refs changed to `superpowers-code-reviewer`
 - `skills/subagent-driven-development/code-quality-reviewer-prompt.md` — agent ref changed to `superpowers-code-reviewer`
 
-## v0.1 Skill Improvements (2026-03-23)
-Improved versions of 3 core skills + 1 new skill, with deterministic scripts and structured prompt templates. v0.1 files coexist with originals until promoted.
-
-### v0.1 Files (not yet promoted to active)
-- `skills/brainstorming/SKILL-v0.1.md` — spec distillation, feature archetypes, worktree step
-- `skills/writing-plans/SKILL-v0.1.md` — plan modules (<800 lines), Task 0, Contract Constraints, Feature Footprint, 15-category reviewer
-- `skills/subagent-driven-development/SKILL-v0.1.md` — controller discipline, review enforcement, DEVIATIONS.md, file-based reports, context health, 7-condition pre-completion gate
-- `skills/subagent-driven-development/implementer-prompt-v0.1.md` — 10-section structured report, Contract Constraints passthrough, Source Files mandate
-- `skills/subagent-driven-development/spec-reviewer-prompt-v0.1.md` — contract verification, severity gradation (BLOCKING/ADVISORY), BASE_SHA placeholder
-- `skills/subagent-driven-development/code-quality-reviewer-prompt-v0.1.md` — dead code blocking, implementer report placeholder
-- `skills/writing-plans/plan-document-reviewer-prompt-v0.1.md` — 15-category mechanical checklist, cross-doc audit, snippet verification
-- `skills/brainstorming/distillation-reviewer-prompt.md` — verifies distilled spec preserves all decisions
-- `skills/handoff-acceptance/SKILL.md` — NEW: verifies external handoff packages before consumption
-
-### Promotion Checklist (when ready to go live)
-1. For each v0.1 file: `mv SKILL-v0.1.md SKILL.md` (archive original as `SKILL-original.md` if desired)
-2. Same for prompt templates: `mv implementer-prompt-v0.1.md implementer-prompt.md`
-3. Create command stub for `handoff-acceptance` (see Regenerate Command Stubs)
-4. Update "Verify Installation" expected count from 14 to 15
-5. Run regression test: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+## v0.1 Skill Improvements (2026-03-23) — PROMOTED
+All v0.1 files have been promoted to active and the originals removed. The improvements are now live in the main SKILL.md and prompt template files. See `docs/ARaymond-customization-manifest.md` for the complete inventory of customizations per skill.
 
 ### Deterministic Scripts (`skills/subagent-driven-development/scripts/`)
 - `_report_utils.py` — shared library for report parsing (single source of truth — do NOT duplicate logic)
@@ -74,7 +56,12 @@ Large templates and flowcharts moved from SKILL bodies to `references/` per Anth
 ```bash
 git fetch upstream && git merge upstream/main
 ```
-Conflict files: `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.md`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md`
+**All 15 SKILL.md files have diverged from upstream.** Any upstream change to a SKILL.md will conflict. Before merging, run a three-way comparison (merge-base vs ours vs upstream) for each conflicted file — do NOT rely on this documentation alone. See `docs/ARaymond-customization-manifest.md` "Upstream Conflict Files" for the full list and resolution guide.
+
+Known conflict files (always): `CLAUDE.md`, `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.md`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md`
+Likely conflict files (when upstream touches these): `brainstorming/SKILL.md`, `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `using-superpowers/SKILL.md`, `writing-skills/SKILL.md`
+
+Last sync: v5.0.7 (`dd23728`) on 2026-03-31
 
 **After merge:** If upstream added new skills, create a matching command stub for each:
 ```bash
@@ -120,10 +107,11 @@ done
 ```
 
 ## Testing
-- `tests/ARaymond-skill-regression/validate-all-skills.py` — 100-check regression test for all v0.1 skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+- `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
-- `tests/ARaymond-installation/verify-symlink-install.sh` — 95 checks for symlink+command-stub architecture (no API calls). Run after upstream merges or installation changes.
+- `tests/ARaymond-installation/verify-symlink-install.sh` — 101 checks for symlink+command-stub architecture (no API calls). Run after upstream merges or installation changes.
+- `tests/unit/` — 20 pytest tests for validate-plan.py (task numbering collisions) and controller-checkpoint.py (stale artifact detection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -140,10 +128,10 @@ Real-world issues from using superpowers in production projects. Use these to in
 - `ResponseCapture-*.txt` — Raw session captures documenting failure modes
 
 ## Process Improvement Implementation Status
-All 5 areas addressed by v0.1 skill improvements (2026-03-23 session). See `docs/plans/2026-03-23-sdd-improvement-plan-v0.1.md` for the master plan and `docs/plans/2026-03-23-final-audit-results.md` for the audit. Remaining work: promote v0.1 files to active, validate against a real implementation project.
+All 5 areas addressed by v0.1 skill improvements (2026-03-23 session). See `docs/plans/2026-03-23-sdd-improvement-plan-v0.1.md` for the master plan and `docs/plans/2026-03-23-final-audit-results.md` for the audit. v0.1 promotion complete — all improvements are live.
 
 ## `.superpowers/` Directory
-The visual brainstorming companion writes session data to `.superpowers/brainstorm/` in the project root. Each session gets a timestamped subdirectory containing HTML mockups, browser click events (`.events`), and server info. This directory is gitignored — it's ephemeral working state, not project artifacts.
+The visual brainstorming companion writes session data to `.superpowers/brainstorm/` in the project root. Each session gets a timestamped subdirectory with two peer directories: `content/` (HTML mockups served to the browser) and `state/` (events, server-info, pid, log). This directory is gitignored — it's ephemeral working state, not project artifacts. (Restructured in upstream v5.0.6.)
 
 ## Editing Skills
 - **Skill content**: Edit `./skills/<name>/SKILL.md` in the repo — live immediately via symlink
@@ -206,8 +194,9 @@ Three additions to `~/.claude/settings.json`:
 - Project plans/reviews → `docs/plans/` (existing convention, not changed)
 
 ## Three-Layer Test Strategy
-- **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 105 checks, <1s)
-- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 95 checks, <1s)
+- **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
+- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 101 checks, <1s)
+- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (20 tests, ~1s)
 - **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
 - Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
 

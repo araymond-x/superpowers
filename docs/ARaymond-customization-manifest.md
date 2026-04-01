@@ -1,10 +1,11 @@
 # Superpowers Customization Manifest
 
 **Author**: Aaron Raymond
-**Last Updated**: 2026-03-25
+**Last Updated**: 2026-03-31
 **Fork**: `~/projects/claude-custom/superpowers` (from `obra/superpowers`)
 **Upstream**: `https://github.com/obra/superpowers`
 **Baseline snapshot**: `snapshot-pre-sdd-improvements-v1` at commit `f352ea9`
+**Last upstream sync**: v5.0.7 (`dd23728`) merged 2026-03-31
 
 ---
 
@@ -380,7 +381,8 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 | `handoff-acceptance/references/acceptance-flow.dot` | handoff-acceptance | Graphviz flowchart of the acceptance decision process |
 | `handoff-acceptance/references/handoff-package-spec.md` | handoff-acceptance | Canonical spec for handoff package structure. Surfaced automatically in failure reports and producer mode. |
 | `brainstorming/references/process-flow.dot` | brainstorming | Graphviz flowchart of the brainstorming process |
-| `using-superpowers/references/codex-tools.md` | using-superpowers | Reference for Codex tool use patterns |
+| `using-superpowers/references/codex-tools.md` | using-superpowers | Reference for Codex tool use patterns (upstream; includes named agent dispatch, env detection) |
+| `using-superpowers/references/copilot-tools.md` | using-superpowers | Reference for Copilot CLI tool use patterns (upstream; added v5.0.7) |
 | `using-superpowers/references/gemini-tools.md` | using-superpowers | Reference for Gemini tool use patterns |
 
 ---
@@ -389,8 +391,9 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 | Suite | Location | Checks | Runtime | What It Tests |
 |-------|----------|--------|---------|---------------|
-| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 105 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence |
-| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 95 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
+| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 122 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence |
+| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 101 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
+| Unit tests (pytest) | `tests/unit/` | 20 | ~1s | validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection) |
 | Behavioral API | `tests/ARaymond-skill-behavior/run-all.sh` | 21+ | ~15 min | Actual Claude behavior: skill loading, content recall, invocation triggers. Requires `claude -p` with `--verbose --max-turns 5`. |
 
 **Run schedule**:
@@ -460,30 +463,42 @@ Use `**` (not `*`) — subdirectory paths must match.
 
 ## Upstream Conflict Files (complete list)
 
-Files that will conflict on `git merge upstream/main`:
+**All 15 skill SKILL.md files have diverged from upstream** due to the v0.1 promotion and prompt optimization passes. Any upstream change to a SKILL.md will conflict. The table below lists files that have historically conflicted or are likely to conflict on future merges.
+
+**Pre-merge review process (established 2026-03-31)**: Before merging, run a three-way comparison for each conflicted skill file (merge-base vs ours vs upstream). Extract each side's delta from the common ancestor independently, then evaluate upstream changes for cherry-pick value. Do NOT rely on CLAUDE.md documentation about which files are "v0.1" or "promoted" — verify against the filesystem.
 
 | File | Conflict Type | Resolution |
 |------|--------------|------------|
+| `CLAUDE.md` | Fork docs vs upstream contributor guidelines | Keep fork version (upstream's is for public PR contributors) |
 | `agents/code-reviewer.md` | `name:` field in frontmatter | Preserve `superpowers-code-reviewer` |
 | `skills/requesting-code-review/SKILL.md` | Agent ref string (3 places) | Preserve `superpowers-code-reviewer` |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref string (1 place) | Preserve `superpowers-code-reviewer` |
-| `skills/brainstorming/SKILL.md` | Entire skill body | Keep fork version; cherry-pick upstream changes manually |
-| `skills/writing-plans/SKILL.md` | Entire skill body | Keep fork version; cherry-pick upstream changes manually |
-| `skills/subagent-driven-development/SKILL.md` | Entire skill body | Keep fork version; cherry-pick upstream changes manually |
+| `skills/brainstorming/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
+| `skills/writing-plans/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
+| `skills/subagent-driven-development/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
 | `skills/subagent-driven-development/implementer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref + prompt body | Preserve `superpowers-code-reviewer` + keep fork improvements |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/using-git-worktrees/SKILL.md` | Worktree location convention (`.worktrees/` only) | Keep fork version; remove any sibling or global alternatives |
+| `skills/using-superpowers/SKILL.md` | Prompt optimization changes | Keep fork version; cherry-pick new platform additions |
+| `skills/writing-skills/SKILL.md` | Prompt optimization changes | Keep fork version; cherry-pick factual corrections |
+| All other `skills/*/SKILL.md` | Prompt optimization (de-escalation, positive framing) | Keep fork version; may auto-merge if upstream changes are on different lines |
 
 Files with no expected conflicts (fork-only additions):
 - All files under `skills/handoff-acceptance/` (new skill, no upstream equivalent)
 - All files under `skills/*/scripts/` (fork additions)
-- All files under `skills/*/references/` (fork additions, except `visual-companion.md` in brainstorming)
+- All files under `skills/*/references/` (fork additions, except `codex-tools.md` in using-superpowers and `visual-companion.md` in brainstorming — these are shared with upstream)
 - `skills/brainstorming/distillation-reviewer-prompt.md`
 - `skills/brainstorming/spec-document-reviewer-prompt.md`
 - `skills/subagent-driven-development/pre-execution-audit-prompt.md`
 - `skills/subagent-driven-development/trace-auditor-prompt.md`
+
+### Upstream Sync Log
+
+| Date | Upstream Version | Commits | Conflicts | Cherry-picks |
+|------|-----------------|---------|-----------|-------------|
+| 2026-03-31 | v5.0.7 (`dd23728`) | 27 | 4 files (CLAUDE.md, brainstorming, writing-plans, codex-tools.md) + writing-skills/using-superpowers auto-merged | "No Placeholders" section from writing-plans; Copilot CLI lines auto-merged into using-superpowers; "two required fields" fix auto-merged into writing-skills |
 
 ---
 

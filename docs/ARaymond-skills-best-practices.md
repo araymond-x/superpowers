@@ -1,7 +1,7 @@
 # Skills Best Practices — Operational Learnings
 
 **Author**: Aaron Raymond
-**Last Updated**: 2026-03-25
+**Last Updated**: 2026-03-31
 **Source**: Accumulated from 5 iterations of SDD improvement, 3 validation test rounds (iterations 1-5), prompt optimization pass (171 changes), hooks enforcement development (2026-03-24), the Statement Reconciliation re-implementation post-mortem (2026-03-16), and Gemini deep research on deterministic agent discipline (2026-03-24).
 
 ---
@@ -350,3 +350,5 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Context compaction drops discipline rules | Long sessions: agent resumes with only task description | File-based enforcement (reports must exist) survives compaction; hook state is filesystem state |
 | Wrong test fixtures | Statement Reconciliation: fixtures used numeric types, real output uses strings with commas | "Ground-truth fixtures" step: derive fixtures from real system output BEFORE writing any code |
 | Agent bypasses SDD skill entirely — reads plan, implements directly without subagents | Module 3 of Statement Reconciliation: agent admitted to zero reviews, 5 uncertainties post-execution | `Write\|Edit` transcript hook injects warning + CLAUDE.md Skill Invocation Rule + honesty check before Pre-Completion Gate |
+| Upstream merge overwrites fork customizations | Agent relied on stale CLAUDE.md info claiming v0.1 files "not yet promoted" — would have let upstream overwrite promoted customizations | Three-way comparison (merge-base vs ours vs upstream) is mandatory. Never trust documentation about file state — verify against the filesystem. All 15 SKILL.md files diverge from upstream. |
+| Agent uses unittest instead of pytest without asking | Controller chose unittest for new test files without consulting user on framework preference | Test framework choice is a consequential decision requiring approval. Saved as feedback memory for future sessions. |
