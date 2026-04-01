@@ -122,6 +122,11 @@ def extract_inline_value(content: str, pattern: re.Pattern) -> Optional[str]:
 # -----------------------------------------------------------------------
 
 
+def extract_task_numbers(content: str) -> List[int]:
+    """Extract all task numbers from ### Task N headers in the given content."""
+    return [int(m) for m in TASK_HEADER_RE.findall(content)]
+
+
 def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
     """
     Walk the line list, find every ### Task N header, and measure the line span
@@ -130,7 +135,7 @@ def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
     Returns:
         tasks     - list of dicts with keys: number, name, lines, status
         warnings  - human-readable warning strings
-        blockers  - human-readable blocker strings (currently unused; size is a warning)
+        blockers  - human-readable blocker strings
     """
     tasks: List[Dict] = []
     warnings: List[str] = []
@@ -144,6 +149,23 @@ def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
             task_num = int(m.group(1))
             task_name = m.group(2).lstrip(":- ").strip() or f"Task {task_num}"
             header_positions.append((idx, task_num, task_name))
+
+    # Check for duplicate task numbers within this file
+    seen: Dict[int, int] = {}
+    for _, task_num, _ in header_positions:
+        seen[task_num] = seen.get(task_num, 0) + 1
+    duplicates = {num: count for num, count in seen.items() if count > 1}
+    if duplicates:
+        dup_details = ", ".join(
+            "Task {} appears {} times".format(num, count)
+            for num, count in sorted(duplicates.items())
+        )
+        blockers.append(
+            "Duplicate task numbers: {} — task numbers must be sequential "
+            "and unique; duplicates cause report files to overwrite each other".format(
+                dup_details
+            )
+        )
 
     for i, (start_idx, task_num, task_name) in enumerate(header_positions):
         if i + 1 < len(header_positions):
@@ -294,9 +316,62 @@ def source_contracts_non_none(content: str) -> bool:
 # -----------------------------------------------------------------------
 
 
-def validate_plan(content: str) -> Dict:
+def check_cross_module_collisions(
+    primary_content: str, additional_contents: List[str]
+) -> Tuple[Optional[Dict], Optional[str]]:
+    """
+    Check for task number collisions across the primary plan file and
+    additional module files.
+
+    Returns:
+        (check_dict, blocker_name) — check_dict is the check entry for the
+        output JSON; blocker_name is non-None if this is a blocker.
+        Returns (None, None) if no additional files were provided.
+    """
+    if not additional_contents:
+        return None, None
+
+    primary_tasks = set(extract_task_numbers(primary_content))
+    all_tasks: Dict[int, List[str]] = {}
+    for num in primary_tasks:
+        all_tasks.setdefault(num, []).append("primary plan")
+
+    for i, content in enumerate(additional_contents, 1):
+        for num in extract_task_numbers(content):
+            all_tasks.setdefault(num, []).append("additional file {}".format(i))
+
+    collisions = {num: sources for num, sources in all_tasks.items() if len(sources) > 1}
+
+    if not collisions:
+        return {
+            "status": "PASS",
+            "detail": "No task number collisions across {} file(s)".format(
+                1 + len(additional_contents)
+            ),
+        }, None
+
+    collision_details = ", ".join(
+        "Task {} in {}".format(num, " and ".join(sources))
+        for num, sources in sorted(collisions.items())
+    )
+    return {
+        "status": "FAIL",
+        "detail": (
+            "Cross-module task number collision: {} — task numbers must be "
+            "sequential across all modules; duplicates cause report files to "
+            "overwrite each other".format(collision_details)
+        ),
+    }, "cross_module_task_collision"
+
+
+def validate_plan(content: str, additional_contents: Optional[List[str]] = None) -> Dict:
     """
     Run all structural checks on plan content.
+
+    Args:
+        content: The primary plan file content.
+        additional_contents: Optional list of additional module plan file contents
+            to check for cross-module task number collisions.
 
     Returns a dict matching the specified output schema with keys:
       status, plan_lines, task_count, tasks, checkboxes, sections,
@@ -315,7 +390,7 @@ def validate_plan(content: str) -> Dict:
             "indicating modular decomposition".format(PLAN_LINE_LIMIT, plan_lines)
         )
 
-    # --- Task analysis ---
+    # --- Task analysis (includes within-file duplicate detection) ---
     tasks, task_warnings, task_blockers = analyse_tasks(lines)
     warnings.extend(task_warnings)
     blockers.extend(task_blockers)
@@ -345,6 +420,44 @@ def validate_plan(content: str) -> Dict:
     # Task 0 must be first if it exists
     if sections["task_0"]["present"] and not sections["task_0"]["is_first"]:
         blockers.append("Task 0 exists but is not the first task in the plan")
+
+    # --- Cross-module collision check ---
+    if additional_contents:
+        cross_check, cross_blocker = check_cross_module_collisions(
+            content, additional_contents
+        )
+        if cross_check is not None:
+            sections["cross_module_task_collision"] = cross_check
+            if cross_blocker:
+                blockers.append(cross_blocker)
+
+    # --- Within-file duplicate check (surface in checks dict) ---
+    task_numbers = [t["number"] for t in tasks]
+    seen_counts: Dict[int, int] = {}
+    for num in task_numbers:
+        seen_counts[num] = seen_counts.get(num, 0) + 1
+    duplicates = {num: count for num, count in seen_counts.items() if count > 1}
+    if duplicates:
+        dup_details = ", ".join(
+            "Task {} appears {} times".format(num, count)
+            for num, count in sorted(duplicates.items())
+        )
+        sections["duplicate_task_numbers"] = {
+            "status": "FAIL",
+            "detail": (
+                "Duplicate task numbers: {} — task numbers must be sequential "
+                "and unique; duplicates cause report files to overwrite each other".format(
+                    dup_details
+                )
+            ),
+        }
+        if "duplicate_task_numbers" not in blockers:
+            blockers.append("duplicate_task_numbers")
+    else:
+        sections["duplicate_task_numbers"] = {
+            "status": "PASS",
+            "detail": "All task numbers are unique",
+        }
 
     # --- Overall status ---
     if blockers:
@@ -387,6 +500,16 @@ def main() -> int:
         metavar="PATH",
         help="Path to the implementation plan markdown file to validate.",
     )
+    parser.add_argument(
+        "--additional-plan-files",
+        nargs="+",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Additional module plan files to check for cross-module task number "
+            "collisions. Task numbers must be unique across all files."
+        ),
+    )
     args = parser.parse_args()
 
     if not os.path.isfile(args.plan_file):
@@ -412,8 +535,28 @@ def main() -> int:
         )
         return 3
 
+    # Read additional module files if provided
+    additional_contents: Optional[List[str]] = None
+    if args.additional_plan_files:
+        additional_contents = []
+        for path in args.additional_plan_files:
+            if not os.path.isfile(path):
+                print(
+                    json.dumps({"error": "Additional plan file not found: {}".format(path)}),
+                    file=sys.stderr,
+                )
+                return 3
+            try:
+                additional_contents.append(read_file(path))
+            except OSError as exc:
+                print(
+                    json.dumps({"error": "Could not read additional plan file: {}".format(exc)}),
+                    file=sys.stderr,
+                )
+                return 3
+
     try:
-        result = validate_plan(content)
+        result = validate_plan(content, additional_contents)
     except Exception as exc:  # pragma: no cover
         print(
             json.dumps({"error": "Unexpected error during validation: {}".format(exc)}),

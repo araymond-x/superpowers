@@ -70,8 +70,13 @@ PENDING_DEVIATION_PATTERN = re.compile(
 
 # Report filename patterns for task N
 def report_filename_pattern(task_number: int) -> str:
-    """Return a glob pattern matching implementer report files for the given task."""
-    return f"task-{task_number}-implementer-report*"
+    """Return a glob pattern matching implementer report files for the given task.
+
+    Uses zero-padded 3-digit format (task-007-*) exclusively. Non-padded names
+    (task-7-*) are not matched — they indicate stale reports from a prior session
+    that used an older naming convention.
+    """
+    return "task-{:03d}-implementer-report*".format(task_number)
 
 
 # --- Utility functions ---
@@ -113,6 +118,57 @@ def find_report_file(reports_dir: str, task_number: int) -> str:
     pattern = os.path.join(reports_dir, report_filename_pattern(task_number))
     matches = glob.glob(pattern)
     return sorted(matches)[-1] if matches else ""
+
+
+def detect_stale_artifacts(deviations_file: str, reports_dir: str) -> dict:
+    """
+    Check for SDD artifacts from a prior session that exist before execution starts.
+
+    At pre-execution time, DEVIATIONS.md should not have content and reports/
+    should not contain task reports or audit files — their presence indicates
+    a prior SDD session's artifacts that need archival.
+
+    Returns:
+        dict with keys: status ("OK" or "WARNING"), detail (str), found (list of str)
+    """
+    found = []
+
+    # Check DEVIATIONS.md for substantive content
+    if os.path.isfile(deviations_file):
+        try:
+            content = read_file(deviations_file)
+            # Only flag if it has real content (not empty or just whitespace)
+            if content.strip():
+                found.append("DEVIATIONS.md (has content from prior session)")
+        except OSError:
+            pass
+
+    # Check reports/ for task report files
+    if os.path.isdir(reports_dir):
+        task_reports = sorted(glob.glob(os.path.join(reports_dir, "task-*")))
+        if task_reports:
+            found.append(
+                "{} task report file(s) in {}".format(len(task_reports), reports_dir)
+            )
+
+        audit_files = sorted(glob.glob(os.path.join(reports_dir, "pre-execution-audit*")))
+        if audit_files:
+            found.append(
+                "{} pre-execution audit file(s) in {}".format(len(audit_files), reports_dir)
+            )
+
+    if not found:
+        return {"status": "OK", "detail": "No stale artifacts detected", "found": []}
+
+    return {
+        "status": "WARNING",
+        "detail": (
+            "Stale SDD artifacts from a prior session detected: {}. "
+            "Archive these before proceeding (see Plan Ingestion archival protocol). "
+            "Log as FYI in pre-execution audit report".format("; ".join(found))
+        ),
+        "found": found,
+    }
 
 
 def find_all_report_files(reports_dir: str) -> list:
@@ -394,6 +450,18 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
             "detail": "No Task 0 in plan",
         }
 
+    # Check 6: Stale artifacts from prior SDD session
+    dev_path = args.deviations_file if args.deviations_file else ""
+    rep_dir = args.reports_dir if args.reports_dir else ""
+    if dev_path or rep_dir:
+        stale = detect_stale_artifacts(dev_path, rep_dir)
+        checks["stale_artifacts"] = {
+            "status": stale["status"],
+            "detail": stale["detail"],
+        }
+        if stale["status"] == "WARNING":
+            warnings.append(stale["detail"])
+
     # Informational: task and checkbox counts
     task_count = count_tasks(plan_content)
     checkbox_counts = count_checkboxes(plan_content)
@@ -569,17 +637,18 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
 
     # Check 4: Previous task spec review report exists
     if task_number > 0:
-        spec_review_pattern = os.path.join(args.reports_dir, f"task-{previous_task}-spec-review*")
+        prev_padded = "{:03d}".format(previous_task)
+        spec_review_pattern = os.path.join(args.reports_dir, "task-{}-spec-review*".format(prev_padded))
         spec_review_files = sorted(glob.glob(spec_review_pattern))
         if spec_review_files:
             checks["previous_spec_review"] = {
                 "status": "PASS",
-                "detail": f"reports/task-{previous_task}-spec-review exists",
+                "detail": "reports/task-{}-spec-review exists".format(prev_padded),
             }
         else:
             checks["previous_spec_review"] = {
                 "status": "FAIL",
-                "detail": f"No spec review report for Task {previous_task}. Dispatch spec compliance review and save to reports/task-{previous_task}-spec-review.md",
+                "detail": "No spec review report for Task {}. Dispatch spec compliance review and save to reports/task-{}-spec-review.md".format(previous_task, prev_padded),
             }
             blockers.append("previous_spec_review")
     else:
@@ -590,17 +659,18 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
 
     # Check 5: Previous task quality review report exists
     if task_number > 0:
-        quality_review_pattern = os.path.join(args.reports_dir, f"task-{previous_task}-quality-review*")
+        prev_padded = "{:03d}".format(previous_task)
+        quality_review_pattern = os.path.join(args.reports_dir, "task-{}-quality-review*".format(prev_padded))
         quality_review_files = sorted(glob.glob(quality_review_pattern))
         if quality_review_files:
             checks["previous_quality_review"] = {
                 "status": "PASS",
-                "detail": f"reports/task-{previous_task}-quality-review exists",
+                "detail": "reports/task-{}-quality-review exists".format(prev_padded),
             }
         else:
             checks["previous_quality_review"] = {
                 "status": "FAIL",
-                "detail": f"No quality review report for Task {previous_task}. Dispatch code quality review and save to reports/task-{previous_task}-quality-review.md (or save reports/task-{previous_task}-quality-review-minimum-tier.md if minimum tier declared)",
+                "detail": "No quality review report for Task {}. Dispatch code quality review and save to reports/task-{}-quality-review.md (or save reports/task-{}-quality-review-minimum-tier.md if minimum tier declared)".format(previous_task, prev_padded, prev_padded),
             }
             blockers.append("previous_quality_review")
     else:
@@ -693,6 +763,16 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         print(json.dumps({"error": f"Cannot read plan file: {e}"}), file=sys.stderr)
         sys.exit(3)
 
+    # Read additional plan files for multi-module aggregation
+    all_plan_contents = [plan_content]
+    if getattr(args, "additional_plan_files", None):
+        for path in args.additional_plan_files:
+            if os.path.isfile(path):
+                try:
+                    all_plan_contents.append(read_file(path))
+                except OSError:
+                    pass
+
     # Read deviations file
     deviations_content = ""
     if os.path.isfile(args.deviations_file):
@@ -701,8 +781,18 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         except OSError:
             pass
 
-    checkbox_counts = count_checkboxes(plan_content)
-    task_count = count_tasks(plan_content)
+    # Aggregate checkbox and task counts across all plan files
+    checkbox_counts = {"checked": 0, "unchecked": 0, "total": 0}
+    task_count = 0
+    for content in all_plan_contents:
+        cb = count_checkboxes(content)
+        checkbox_counts["checked"] += cb["checked"]
+        checkbox_counts["unchecked"] += cb["unchecked"]
+        checkbox_counts["total"] += cb["total"]
+        task_count += count_tasks(content)
+
+    # Aggregate plan content for task-report matching (all_tasks_have_reports)
+    combined_plan_content = "\n".join(all_plan_contents)
 
     # Check 1: All checkboxes checked
     if checkbox_counts["total"] == 0:
@@ -742,8 +832,8 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         }
         blockers.append("no_pending_deviations")
 
-    # Check 3: All tasks have report files
-    report_check = all_tasks_have_reports(plan_content, args.reports_dir)
+    # Check 3: All tasks have report files (across all plan files)
+    report_check = all_tasks_have_reports(combined_plan_content, args.reports_dir)
     if report_check["pass"]:
         checks["all_tasks_have_reports"] = {
             "status": "PASS",
@@ -881,6 +971,17 @@ def main() -> int:
             "Task number about to be dispatched. "
             "Required for --phase pre-dispatch. "
             "The script checks that task N-1 is fully complete."
+        ),
+    )
+    parser.add_argument(
+        "--additional-plan-files",
+        nargs="+",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Additional module plan files. Checkbox counts and task counts are "
+            "aggregated across the primary plan file and all additional files. "
+            "Useful for multi-module plans where checkboxes span multiple files."
         ),
     )
     args = parser.parse_args()

@@ -170,7 +170,20 @@ If the plan references Source Contracts (external files that define the interfac
 **Step 4: Extract the Write-Scope Partitioning table.**
 Understand which tasks own which files. If two tasks write to the same file, note the dependency. Verify that the task order respects these dependencies.
 
-**Step 5: Create DEVIATIONS.md at the project root.**
+**Step 5: Archive stale SDD artifacts (if reusing a workspace).**
+If the workspace contains artifacts from a prior SDD session, archive them before creating fresh ones. The controller-checkpoint pre-execution phase will emit a WARNING if stale artifacts are detected.
+
+| Artifact | Archive action |
+|----------|---------------|
+| `DEVIATIONS.md` | Rename to `DEVIATIONS-<prior-feature>.md` (e.g., `DEVIATIONS-reconciliation-v3.md`) |
+| `reports/task-*.md` | Move to `reports/archive-<prior-feature>/` |
+| `reports/pre-execution-audit*.md` | Move with the other reports to archive |
+
+After archival, log the action as an FYI in your pre-execution audit self-assessment (Step 1 of Pre-Execution Audit) so the auditor knows the workspace was reused.
+
+If the workspace is clean (fresh worktree, no prior artifacts), skip this step.
+
+**Step 6: Create DEVIATIONS.md at the project root.**
 Use the Write tool to create the file with the header template below. This file will be appended to throughout execution — never overwritten.
 
 ```markdown
@@ -194,7 +207,7 @@ Use the Write tool to create the file with the header template below. This file 
 
 Plan ingestion is a one-pass activity. Read the plan, read the source contracts if present, extract what you need — then start the task loop. Do not read additional codebase files beyond what the plan's Contract Constraints reference.
 
-**Step 6: Create TodoWrite with all tasks.**
+**Step 7: Create TodoWrite with all tasks.**
 If the plan has a Task 0 (Contract Verification), it should be the first item. Mark it as the current task.
 
 ## Pre-Execution Audit (Mandatory)
@@ -211,6 +224,7 @@ Save to `reports/pre-execution-audit-self-assessment.md`. Answer every question 
 5. Are there any plan sections where you wrote code quickly and aren't confident in the logic? List each.
 6. Are there any implicit assumptions in the plan that an implementer might miss? List each.
 7. What is the single highest-risk item in this plan?
+8. Were stale SDD artifacts found in the workspace from a prior session? If so, what was found and how were they archived? (FYI — not a blocker, but the auditor needs to know the workspace was reused.)
 
 **Step 2: Dispatch the pre-execution auditor.**
 See `pre-execution-audit-prompt.md` for the dispatch template. Provide: your self-assessment, all plan file paths, the distilled spec path, and the Contract Constraints.

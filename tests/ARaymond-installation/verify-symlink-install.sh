@@ -31,7 +31,7 @@ warned=0
 
 pass() {
   passed=$((passed + 1))
-  [[ "$VERBOSE" == true ]] && echo "  [PASS] $1"
+  [[ "$VERBOSE" == true ]] && echo "  [PASS] $1" || true
 }
 
 fail() {

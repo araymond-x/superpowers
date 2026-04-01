@@ -879,11 +879,13 @@ def check_critical_fixes(skills_dir):
         else:
             check_fail(CATEGORY_6, "SDD hook: missing task-NNN zero-padded naming support")
 
-        # Report naming: backward compat with unpadded task-N
-        if "task-${task_num}" in hook_content or "task-${PREV}" in hook_content:
-            check_pass(CATEGORY_6, "SDD hook: backward compatible with unpadded task-N naming")
+        # Report naming: zero-padded only (no backward compat with unpadded task-N)
+        # Non-padded fallback was removed because it caused stale report files
+        # from prior sessions to mask incomplete new reports.
+        if "task-${task_num}" not in hook_content:
+            check_pass(CATEGORY_6, "SDD hook: no non-padded fallback (zero-padded only)")
         else:
-            check_fail(CATEGORY_6, "SDD hook: missing backward compatibility with unpadded task-N")
+            check_fail(CATEGORY_6, "SDD hook: still has non-padded task-N fallback — should use zero-padded only")
 
     # SDD SKILL has report naming convention
     sdd_skill_path = os.path.join(skills_dir, "subagent-driven-development/SKILL.md")
