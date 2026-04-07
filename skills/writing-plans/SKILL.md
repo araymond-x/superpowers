@@ -35,22 +35,24 @@ Create a task for each of these items and complete them in order:
 8. **Run validate-plan.py** on every plan/module file — fix all FAIL and WARNING issues
 9. **Dispatch plan-document-reviewer** — fix issues, re-dispatch until approved (max 3 iterations)
 10. **Save plan review report** — write reviewer output to `docs/imp-plans/plan-review-report.md`
-11. **Execution handoff** — offer SDD vs inline execution
+11. **Write plan manifest** — write `docs/imp-plans/plan-manifest.txt` listing all validated plan files (one path per line, relative to project root). The hook uses this to scope validation to the current plan set.
+12. **Execution handoff** — offer SDD vs inline execution
 
-Steps 8-10 are the **Plan Completion Gate** — see below. You are NOT done writing the plan until all three pass.
+Steps 8-11 are the **Plan Completion Gate** — see below. You are NOT done writing the plan until all four pass.
 
 ## Plan Completion Gate
 
 <important>
-The plan is NOT ready for execution until all three conditions are met:
+The plan is NOT ready for execution until all four conditions are met:
 
 1. **validate-plan.py PASS** on every plan/module file (no FAIL results)
 2. **Plan-document-reviewer APPROVED** (semantic review passed)
 3. **Review report saved** to `docs/imp-plans/plan-review-report.md` (>50 bytes)
+4. **Plan manifest written** to `docs/imp-plans/plan-manifest.txt` (one plan file path per line)
 
-A hook enforces conditions 1 and 3 — invoking `superpowers:subagent-driven-development` or `superpowers:executing-plans` will be BLOCKED if validation hasn't run or the review report is missing.
+A hook enforces conditions 1, 3, and 4 — invoking `superpowers:subagent-driven-development` or `superpowers:executing-plans` will be BLOCKED if validation fails, the review report is missing, or the manifest is absent. Without a manifest, the hook falls back to git diff scoping (files changed on the current branch), which may include unrelated plans.
 
-Do not proceed to the Execution Handoff section until all three conditions are satisfied.
+Do not proceed to the Execution Handoff section until all four conditions are satisfied.
 </important>
 
 ## Scope Check
@@ -109,6 +111,7 @@ For modular plans, the validation sequence is:
 3. After ALL modules are written, run `validate-plan.py` on EACH file (parent + every module)
 4. Dispatch the plan-document-reviewer for the COMPLETE set (provide paths to all files)
 5. Save the review report to `docs/imp-plans/plan-review-report.md`
+6. Write `docs/imp-plans/plan-manifest.txt` listing the parent plan and all module files
 
 Do not start writing the next module mid-validation. Do not skip modules to start implementing early. The complete plan set must be validated as a unit.
 

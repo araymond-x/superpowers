@@ -161,7 +161,8 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Hook injects `additionalContext` reminder on every allowed dispatch
 - Reviewers and non-SDD dispatches always pass through (exit 0)
 - Plan validation gate: `PreToolUse` → `Skill` → `.../skills/writing-plans/scripts/plan-validation-gate-hook.sh`
-- Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any plan file, or `plan-review-report.md` missing/empty (<50 bytes)
+- Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any scoped plan file, or `plan-review-report.md` missing/empty (<50 bytes)
+- Plan file scoping: primary = `docs/imp-plans/plan-manifest.txt` (explicit file list from writing-plans skill); fallback = git diff against base branch (files changed on current branch). Old plans from prior features are never validated.
 - Rollback: remove Agent matcher block and sdd-report-guard.sh entry from PreToolUse in `~/.claude/settings.json`
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
