@@ -368,6 +368,20 @@ if [ -f "DEVIATIONS.md" ]; then
   fi
 fi
 
+# ─── Check 5c: Controller checkpoint evidence ───────────────────────────────
+# The controller must run controller-checkpoint.py --phase pre-dispatch before each
+# dispatch and save the JSON output. This replaces the advisory instruction with
+# a mechanical gate.
+if [ -n "$TASK_NUMBER" ]; then
+  TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
+  CHECKPOINT_FILE="reports/checkpoint-pre-dispatch-${TASK_PADDED}.json"
+  if [ ! -f "$CHECKPOINT_FILE" ]; then
+    ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/ > $CHECKPOINT_FILE")
+  elif [ "$(wc -c < "$CHECKPOINT_FILE" 2>/dev/null | tr -d ' ')" -lt "$MIN_REPORT_BYTES" ]; then
+    ERRORS+=("BLOCKED: Checkpoint file $CHECKPOINT_FILE is too small (< $MIN_REPORT_BYTES bytes). Run the full controller-checkpoint.py command and redirect its JSON output to this file.")
+  fi
+fi
+
 # ─── Check 6: Token budget estimation ─────────────────────────────────────
 
 ESTIMATE_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/estimate-task-tokens.py"
@@ -405,9 +419,9 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
   else
     # Diagnostic: couldn't find the task in any plan file
     if [ -z "$SEARCHED_DIRS" ]; then
-      TOKEN_WARNING="TOKEN ESTIMATION SKIPPED: No plan files found in docs/imp-plans/ or docs/plans/. Token budget check could not run for Task $TASK_NUMBER."
+      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in docs/imp-plans/ or docs/plans/. Create the plan file or ensure it is in the expected location.")
     else
-      TOKEN_WARNING="TOKEN ESTIMATION SKIPPED: Task $TASK_NUMBER header not found in plan files (searched:${SEARCHED_DIRS}). Token budget check could not run. Verify task numbering matches plan headers."
+      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — task header not found in plan files (searched:${SEARCHED_DIRS}). Verify task numbering matches plan headers (expected: '### Task $TASK_NUMBER').")
     fi
   fi
 fi
@@ -417,7 +431,6 @@ fi
 # "regardless of context load." If we're past the midpoint and the summary
 # doesn't exist, inject a WARNING.
 
-CONTEXT_SUMMARY_WARNING=""
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
   # Count total tasks across all plan files
   TOTAL_TASKS=0
@@ -432,7 +445,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
     MIDPOINT=$(( (TOTAL_TASKS + 1) / 2 ))
     if [ "$TASK_NUMBER" -ge "$MIDPOINT" ]; then
       if [ ! -f "reports/context-summary.md" ]; then
-        CONTEXT_SUMMARY_WARNING="CONTEXT SUMMARY REQUIRED: You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py to compress completed task reports before proceeding: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md"
+        ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md")
       fi
     fi
   fi
@@ -494,10 +507,6 @@ CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the imp
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
-fi
-
-if [ -n "$CONTEXT_SUMMARY_WARNING" ]; then
-  CONTEXT="$CONTEXT | $CONTEXT_SUMMARY_WARNING"
 fi
 
 if [ -n "$CONTEXT_LOAD_WARNING" ]; then
