@@ -68,8 +68,29 @@ if echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.re
   IS_REVIEWER=true
 fi
 
-# If this is a reviewer dispatch, always allow
+# If this is a reviewer dispatch, log it and allow
 if [ "$IS_REVIEWER" = true ]; then
+  # ─── Dispatch provenance logging ──────────────────────────────────────
+  # Log reviewer dispatches to reports/.dispatch-log so the next implementer
+  # dispatch can verify reviews were actually dispatched (not self-written).
+  DISPATCH_LOG="reports/.dispatch-log"
+  if [ -d "reports" ]; then
+    # Extract task number from description (e.g., "Review task 3 spec compliance")
+    REVIEW_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
+    # Determine review type from description
+    REVIEW_TYPE="unknown"
+    if echo "$DESCRIPTION" | grep -qiE '(spec.compliance|spec.review)'; then
+      REVIEW_TYPE="spec-review"
+    elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review|superpowers-code-reviewer)'; then
+      REVIEW_TYPE="quality-review"
+    elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then
+      REVIEW_TYPE="trace-audit"
+    fi
+
+    if [ -n "$REVIEW_TASK" ]; then
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$REVIEW_TASK type=$REVIEW_TYPE" >> "$DISPATCH_LOG"
+    fi
+  fi
   exit 0
 fi
 
