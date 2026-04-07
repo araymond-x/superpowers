@@ -292,6 +292,42 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
       ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
       ;;
   esac
+
+  # Check 4c: Dispatch provenance — verify reviewers were actually dispatched
+  # Report files can be self-written by the controller. The dispatch log is written
+  # by THIS HOOK when it processes Agent calls with reviewer descriptions.
+  # The controller cannot forge dispatch log entries without going through the Agent tool.
+  DISPATCH_LOG="reports/.dispatch-log"
+  if [ -f "$DISPATCH_LOG" ]; then
+    # Check for spec-review dispatch entry for previous task
+    SPEC_DISPATCHED=false
+    if grep -q "task=$PREV .*type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
+      SPEC_DISPATCHED=true
+    fi
+
+    # Check for quality-review dispatch entry for previous task
+    # quality-review-minimum-tier is acceptable if the report file matches that pattern
+    QUAL_DISPATCHED=false
+    QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
+    HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
+    if grep -q "task=$PREV .*type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
+      QUAL_DISPATCHED=true
+    elif [ -n "$HAS_MINIMUM_TIER" ]; then
+      # Minimum tier allows controller-written quality review (no dispatch needed)
+      QUAL_DISPATCHED=true
+    fi
+
+    if [ "$SPEC_DISPATCHED" = false ]; then
+      ERRORS+=("BLOCKED: No spec-review dispatch recorded for Task $PREV. The dispatch log (reports/.dispatch-log) has no entry for a spec reviewer being dispatched via the Agent tool. Spec reviews must be dispatched subagents, not self-written by the controller. Dispatch the spec reviewer now.")
+    fi
+
+    if [ "$QUAL_DISPATCHED" = false ]; then
+      ERRORS+=("BLOCKED: No quality-review dispatch recorded for Task $PREV. Dispatch the code quality reviewer via the Agent tool. Controller-written quality reviews are only allowed for minimum-tier tasks (and the file must be named task-NNN-quality-review-minimum-tier.md).")
+    fi
+  else
+    # No dispatch log exists at all — log was deleted or no reviewers were ever dispatched
+    ERRORS+=("BLOCKED: No dispatch log found (reports/.dispatch-log). This file is created automatically by the SDD hook when reviewers are dispatched. Its absence means no reviewers were dispatched via the Agent tool for any task. Start by dispatching the spec reviewer for Task $PREV.")
+  fi
 fi
 
 # Check 5: If Task N > 0 and plan has Source Contracts, verify Task 0 completed
