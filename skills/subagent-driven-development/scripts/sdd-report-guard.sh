@@ -21,6 +21,21 @@ fi
 
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // ""' 2>/dev/null)
 
+# Detect direct manipulation of the dispatch provenance log
+# This check runs BEFORE the reports/task- early exit because .dispatch-log
+# doesn't contain "reports/task-" and would be missed by that filter.
+if echo "$COMMAND" | grep -qiE '\.dispatch-log'; then
+  echo "" >&2
+  echo "WARNING: Direct manipulation of dispatch provenance log detected." >&2
+  echo "Command: $COMMAND" >&2
+  echo "" >&2
+  echo "The .dispatch-log file is written automatically by the SDD pre-dispatch" >&2
+  echo "hook when reviewer subagents are dispatched. Manual writes to this file" >&2
+  echo "compromise review provenance tracking. If you need to reset the log," >&2
+  echo "delete reports/.dispatch-log and re-dispatch all pending reviewers." >&2
+  echo "" >&2
+fi
+
 # Only check commands that interact with the reports/ directory
 if ! echo "$COMMAND" | grep -qiE 'reports/task-'; then
   exit 0
