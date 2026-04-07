@@ -160,6 +160,8 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Hook blocks implementer dispatches without: DEVIATIONS.md, reports/ dir, previous task's 3 report files (>50 bytes each), Task 0 report (if Source Contracts)
 - Hook injects `additionalContext` reminder on every allowed dispatch
 - Reviewers and non-SDD dispatches always pass through (exit 0)
+- Plan validation gate: `PreToolUse` → `Skill` → `.../skills/writing-plans/scripts/plan-validation-gate-hook.sh`
+- Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any plan file, or `plan-review-report.md` missing/empty (<50 bytes)
 - Rollback: remove Agent matcher block and sdd-report-guard.sh entry from PreToolUse in `~/.claude/settings.json`
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
@@ -175,11 +177,12 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Permission globs: `Bash(cat ~/.claude/skills/superpowers/*)` doesn't match subdirs — use `**` for nested paths
 - Pre-execution audit gate: `reports/pre-execution-audit.md` must exist (>50 bytes) before any Task dispatch. Creates a mandatory honesty checkpoint between planning and execution.
 
-## Global Settings Changes (2026-03-24)
-Three additions to `~/.claude/settings.json`:
+## Global Settings Changes
+Four additions to `~/.claude/settings.json`:
 1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
 2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
-3. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/**)` for skill command stub loading (** for subdirectory matching)
+3. `PreToolUse` → `Skill` matcher: handoff-gate-hook + plan-validation-gate-hook (absolute paths)
+4. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/**)` for skill command stub loading (** for subdirectory matching)
 
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules

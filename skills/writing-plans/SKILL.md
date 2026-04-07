@@ -21,6 +21,38 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 **Save plans to:** `docs/imp-plans/YYYY-MM-DD-<feature-name>.md`
 - (User preferences for plan location override this default)
 
+## Checklist
+
+Create a task for each of these items and complete them in order:
+
+1. **Read spec / requirements** — understand what to build, identify source contracts
+2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure
+3. **Scope check** — if spec covers multiple independent subsystems, decompose into separate plans
+4. **Write plan header** — Goal, Source Contracts, Contract Constraints, Feature Archetype, Code Footprint
+5. **Write File Map and Write-Scope Partitioning**
+6. **Write tasks** — bite-sized, TDD, complete code in every step
+7. **If modular plan (>800 lines):** write parent plan first, then ALL module files
+8. **Run validate-plan.py** on every plan/module file — fix all FAIL and WARNING issues
+9. **Dispatch plan-document-reviewer** — fix issues, re-dispatch until approved (max 3 iterations)
+10. **Save plan review report** — write reviewer output to `docs/imp-plans/plan-review-report.md`
+11. **Execution handoff** — offer SDD vs inline execution
+
+Steps 8-10 are the **Plan Completion Gate** — see below. You are NOT done writing the plan until all three pass.
+
+## Plan Completion Gate
+
+<important>
+The plan is NOT ready for execution until all three conditions are met:
+
+1. **validate-plan.py PASS** on every plan/module file (no FAIL results)
+2. **Plan-document-reviewer APPROVED** (semantic review passed)
+3. **Review report saved** to `docs/imp-plans/plan-review-report.md` (>50 bytes)
+
+A hook enforces conditions 1 and 3 — invoking `superpowers:subagent-driven-development` or `superpowers:executing-plans` will be BLOCKED if validation hasn't run or the review report is missing.
+
+Do not proceed to the Execution Handoff section until all three conditions are satisfied.
+</important>
+
 ## Scope Check
 
 If the spec covers multiple independent subsystems, it should have been broken into sub-project specs during brainstorming. If it wasn't, suggest breaking this into separate plans — one per subsystem. Each plan should produce working, testable software on its own.
@@ -67,6 +99,18 @@ Module 1 (DB schema)
 Parallel candidates: Module 2 and Module 3 may not be parallel
 (Module 3 depends on Module 2's API contract).
 ```
+
+### Modular Plan Validation Sequence
+
+For modular plans, the validation sequence is:
+
+1. Write the parent plan first (coordination document)
+2. Write ALL module files — do not validate between modules
+3. After ALL modules are written, run `validate-plan.py` on EACH file (parent + every module)
+4. Dispatch the plan-document-reviewer for the COMPLETE set (provide paths to all files)
+5. Save the review report to `docs/imp-plans/plan-review-report.md`
+
+Do not start writing the next module mid-validation. Do not skip modules to start implementing early. The complete plan set must be validated as a unit.
 
 ### Each Module Must Contain
 
@@ -307,7 +351,9 @@ Agent tool (general-purpose):
 ```
 
 2. If Issues Found: fix the issues, re-dispatch reviewer for the whole plan
-3. If Approved: proceed to execution handoff
+3. If Approved: save the reviewer's output to `docs/imp-plans/plan-review-report.md` and proceed to execution handoff
+
+**The plan-review-report.md file is required.** The plan-validation-gate hook checks for this file before allowing execution skills to proceed. Save the complete reviewer output, not a summary.
 
 **Review loop guidance:**
 - Same agent that wrote the plan fixes it (preserves context)

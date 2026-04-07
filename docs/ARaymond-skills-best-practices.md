@@ -91,13 +91,14 @@ Frontmatter hooks (`hooks:` block in SKILL.md YAML) do NOT fire for symlink-inst
 
 Note: absolute path to the physical file, not a symlink path.
 
-### Active Hooks (as of 2026-03-24)
+### Active Hooks (as of 2026-04-06)
 
 | Event | Matcher | Script | What It Enforces |
 |-------|---------|--------|-----------------|
 | `PreToolUse` | `Agent` | `sdd-pre-dispatch-hook.sh` | Review reports + DEVIATIONS.md + branch safety before implementer dispatch |
 | `PreToolUse` | `Bash` | `sdd-report-guard.sh` | Anti-forgery: detects `touch` / empty file writes to reports/ directory |
 | `PreToolUse` | `Skill` | `handoff-gate-hook.sh` | Acceptance report must exist before planning skill invocation |
+| `PreToolUse` | `Skill` | `plan-validation-gate-hook.sh` | Plan validation + review report before execution skill invocation |
 | `PreToolUse` | `Write\|Edit` | `sdd-skill-enforcement-hook.sh` | Detects SDD bypass: parses transcript to warn when user requested SDD but agent writes code without loading the skill |
 | `Stop` | (any) | `sdd-stop-hook.sh` | Pre-completion gate: injects 8-check results at session end |
 | `SessionStart` | `startup\|clear\|compact` | `hooks/session-start` | Loads plugin context into session |
@@ -352,3 +353,4 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Agent bypasses SDD skill entirely — reads plan, implements directly without subagents | Module 3 of Statement Reconciliation: agent admitted to zero reviews, 5 uncertainties post-execution | `Write\|Edit` transcript hook injects warning + CLAUDE.md Skill Invocation Rule + honesty check before Pre-Completion Gate |
 | Upstream merge overwrites fork customizations | Agent relied on stale CLAUDE.md info claiming v0.1 files "not yet promoted" — would have let upstream overwrite promoted customizations | Three-way comparison (merge-base vs ours vs upstream) is mandatory. Never trust documentation about file state — verify against the filesystem. All 15 SKILL.md files diverge from upstream. |
 | Agent uses unittest instead of pytest without asking | Controller chose unittest for new test files without consulting user on framework preference | Test framework choice is a consequential decision requiring approval. Saved as feedback memory for future sessions. |
+| Agent skips plan validation during modular plan writing | Agent wrote 5 plan modules without running validate-plan.py or dispatching the plan reviewer; only self-corrected after user intervention | Checklist added to writing-plans skill; Plan Completion Gate section makes steps 8-10 non-negotiable; `plan-validation-gate-hook.sh` blocks execution skill invocation without validation pass + review report |

@@ -170,7 +170,7 @@ Add `sdd-report-guard.sh` as a second hook under the existing `"Bash"` matcher e
 
 Intercepts `touch` or other trivial Bash writes to `reports/` directory (the bypass path for the 50-byte minimum check).
 
-### PreToolUse: Skill matcher (handoff acceptance gate)
+### PreToolUse: Skill matcher (handoff acceptance + plan validation gates)
 
 ```json
 {
@@ -180,12 +180,19 @@ Intercepts `touch` or other trivial Bash writes to `reports/` directory (the byp
       "type": "command",
       "command": "/Users/araymond/projects/claude-custom/superpowers/skills/handoff-acceptance/scripts/handoff-gate-hook.sh",
       "statusMessage": "Checking handoff acceptance..."
+    },
+    {
+      "type": "command",
+      "command": "/Users/araymond/projects/claude-custom/superpowers/skills/writing-plans/scripts/plan-validation-gate-hook.sh",
+      "statusMessage": "Checking plan validation..."
     }
   ]
 }
 ```
 
-Blocks planning/SDD skill invocation if an acceptance report does not exist in the project.
+Two gates on the Skill matcher:
+- **handoff-gate-hook**: Blocks planning/SDD skill invocation if an acceptance report does not exist in the project.
+- **plan-validation-gate-hook**: Blocks `subagent-driven-development` and `executing-plans` invocation if validate-plan.py fails on any plan file or `plan-review-report.md` is missing/empty (<50 bytes).
 
 ### Stop: Pre-completion gate injection
 
