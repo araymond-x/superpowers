@@ -301,7 +301,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   if [ -f "$DISPATCH_LOG" ]; then
     # Check for spec-review dispatch entry for previous task
     SPEC_DISPATCHED=false
-    if grep -q "task=$PREV .*type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
+    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
       SPEC_DISPATCHED=true
     fi
 
@@ -310,7 +310,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     QUAL_DISPATCHED=false
     QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
     HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
-    if grep -q "task=$PREV .*type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
+    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
       QUAL_DISPATCHED=true
     elif [ -n "$HAS_MINIMUM_TIER" ]; then
       # Minimum tier allows controller-written quality review (no dispatch needed)
