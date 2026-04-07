@@ -111,7 +111,7 @@ done
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 101 checks for symlink+command-stub architecture (no API calls). Run after upstream merges or installation changes.
-- `tests/unit/` — 20 pytest tests for validate-plan.py (task numbering collisions) and controller-checkpoint.py (stale artifact detection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 36 pytest tests: validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -157,9 +157,13 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Skill frontmatter hooks do NOT fire for symlink-installed skills (confirmed 2026-03-24). Use `~/.claude/settings.json` with absolute paths instead.
 - SDD enforcement hook: `PreToolUse` → `Agent` → `/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 - Bash report guard: `PreToolUse` → `Bash` → same directory `/scripts/sdd-report-guard.sh`
-- Hook blocks implementer dispatches without: DEVIATIONS.md, reports/ dir, previous task's 3 report files (>50 bytes each), Task 0 report (if Source Contracts)
+- Hook blocks implementer dispatches without: DEVIATIONS.md, reports/ dir, previous task's 3 report files (>50 bytes each), Task 0 report (if Source Contracts), dispatch provenance log entries, checkpoint file, context summary (at midpoint), token estimation (task header in plan)
 - Hook injects `additionalContext` reminder on every allowed dispatch
-- Reviewers and non-SDD dispatches always pass through (exit 0)
+- Reviewers log to `reports/.dispatch-log` then pass through (exit 0)
+- **Dispatch provenance**: The hook logs reviewer dispatches to `reports/.dispatch-log` with `task=N type={spec-review|quality-review}`. On implementer dispatch, Check 4c verifies matching entries exist. Controllers cannot satisfy the review gate by self-writing review files — only actual Agent tool dispatches through the hook create log entries. Minimum-tier quality reviews are exempt (file must be named `task-NNN-quality-review-minimum-tier.md`).
+- **Checkpoint file gate** (Check 5c): Requires `reports/checkpoint-pre-dispatch-NNN.json` (>50 bytes) before dispatching task NNN. Forces the controller to run `controller-checkpoint.py` and save its output.
+- **Token estimation** (Check 6): Now BLOCKS (not warns) when the task header isn't found in any plan file. Script errors still warn.
+- **Context summary** (Check 6b): Now BLOCKS (not warns) past the midpoint without `reports/context-summary.md`.
 - Plan validation gate: `PreToolUse` → `Skill` → `.../skills/writing-plans/scripts/plan-validation-gate-hook.sh`
 - Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any scoped plan file, or `plan-review-report.md` missing/empty (<50 bytes)
 - Plan file scoping: primary = `docs/imp-plans/plan-manifest.txt` (explicit file list from writing-plans skill); fallback = git diff against base branch (files changed on current branch). Old plans from prior features are never validated.
@@ -183,7 +187,7 @@ Four additions to `~/.claude/settings.json`:
 1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
 2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
 3. `PreToolUse` → `Skill` matcher: handoff-gate-hook + plan-validation-gate-hook (absolute paths)
-4. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/**)` for skill command stub loading (** for subdirectory matching)
+4. `permissions.allow`: `Bash(cat ~/.claude/skills/superpowers/** | awk *)` for skill command stub loading (covers piped cat|awk in command stubs; updated from `cat **` only — prior version blocked Skill tool invocation)
 
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
@@ -200,7 +204,7 @@ Four additions to `~/.claude/settings.json`:
 ## Three-Layer Test Strategy
 - **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
 - **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 101 checks, <1s)
-- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (20 tests, ~1s)
+- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (36 tests, ~8s)
 - **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
 - Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
 
