@@ -9,7 +9,7 @@ Use this template when a plan is decomposed into modules (plan exceeds 800 lines
 
 > **Parent plan:** `docs/imp-plans/YYYY-MM-DD-<feature>-plan.md`
 > **Module:** N of M
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development
+> **For agentic workers:** Before implementing, invoke `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` via the Skill tool. Do not begin implementation without loading the skill first — direct implementation bypasses review enforcement, quality gates, and hooks.
 
 **Module Goal:** [One sentence describing what this module delivers independently]
 
