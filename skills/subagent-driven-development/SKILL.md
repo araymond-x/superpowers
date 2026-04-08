@@ -164,6 +164,9 @@ Do not skim. Read every section. The plan header, Contract Constraints, task lis
 **Step 2: Extract Contract Constraints.**
 If the plan includes a Contract Constraints section, copy it verbatim into working memory. This section will be injected into every implementer subagent dispatch. Do not paraphrase it. Paraphrasing contract constraints introduces interpretation. A constraint like 'all amounts are strings' paraphrased as 'handle amounts carefully' loses the specific type information the subagent needs to implement correctly.
 
+**Step 2b: Extract Shared Constants.**
+If the plan includes a Shared Constants section, copy it verbatim into working memory. This section will be injected into every implementer subagent dispatch alongside Contract Constraints. Shared constants are import paths — the subagent must import them, not redefine them. If the plan says "None", verify by scanning the File Map for files that define reusable constants (files named `constants.py`, `types.ts`, `config.py`, etc.).
+
 **Step 3: Read source files (if Source Contracts are present).**
 If the plan references Source Contracts (external files that define the interface the implementation must honor), read those files now. Do not defer this. Subagents will implement against these contracts — the controller needs to understand them to evaluate whether reports are accurate.
 
@@ -184,26 +187,7 @@ After archival, log the action as an FYI in your pre-execution audit self-assess
 If the workspace is clean (fresh worktree, no prior artifacts), skip this step.
 
 **Step 6: Create DEVIATIONS.md at the project root.**
-Use the Write tool to create the file with the header template below. This file will be appended to throughout execution — never overwritten.
-
-```markdown
-# Deviations Register
-
-> Auto-maintained by controller during subagent-driven-development execution.
-> Review all entries before merge.
-
-| Task | Type | Description | Disposition |
-|------|------|-------------|-------------|
-
-## Deferred Work
-[Items deferred from plan scope]
-
-## Independent Decisions
-[Decisions made by subagents without plan guidance]
-
-## Scope Changes
-[Requirements that changed during execution]
-```
+Use the Write tool to create the file using the template in `references/deviations-template.md`. This file will be appended to throughout execution — never overwritten.
 
 Plan ingestion is a one-pass activity. Read the plan, read the source contracts if present, extract what you need — then start the task loop. Do not read additional codebase files beyond what the plan's Contract Constraints reference.
 
@@ -258,6 +242,14 @@ When dispatching each implementer subagent, include the plan's Contract Constrai
 > "These constraints are derived from source files and verified by Task 0. If your implementation contradicts these constraints, STOP and report BLOCKED. Do not work around a constraint — surface the conflict."
 
 Subagents have no session context. They cannot know what the contract is unless you tell them. If you omit this, they will implement against their own assumptions, and you will not discover the contradiction until review — or after merge.
+
+## Shared Constants Passthrough
+
+When dispatching each implementer subagent, include the plan's Shared Constants section in the subagent prompt, along with this note:
+
+> "These constants are defined in the codebase. Import them — do not redefine, hardcode, or approximate them. If you need a constant not listed here, check the source files for existing definitions before creating a new one. If no existing constant fits, report DONE_WITH_CONCERNS so the controller can evaluate whether a new constant should be added to a shared location."
+
+Subagents working on isolated tasks will encounter values they need (account types, status codes, category lists). Without this passthrough, they hardcode them. With it, they import from the canonical source. The difference is invisible during implementation but catastrophic when the constant changes.
 
 ## Context Budget Management
 
@@ -425,26 +417,7 @@ Subagent reports are ephemeral — they exist only in the controller's context. 
 
 ### Report Naming Convention (enforced by hooks)
 
-All reports use **three-digit zero-padded sequential numbering** across all modules:
-
-```
-reports/task-000-implementer-report.md   (first task in the plan)
-reports/task-000-spec-review.md
-reports/task-000-quality-review.md
-reports/task-001-implementer-report.md   (second task)
-reports/task-001-spec-review.md
-...
-```
-
-| Rule | Convention |
-|------|-----------|
-| Format | `task-NNN-{type}.md` where NNN is zero-padded sequential |
-| Numbering | Sequential across ALL modules (not per-module). Module 1 tasks 0-3, Module 2 tasks 4-11, Module 3 tasks 12-19, etc. |
-| Types | `implementer-report`, `spec-review`, `quality-review`, `quality-review-minimum-tier` |
-| Why sequential | The pre-dispatch hook checks task N-1 reports before allowing task N. Module-prefixed names (m2-task-1) break this check. |
-| Why zero-padded | Clean sorting up to 999 tasks. `task-009` sorts before `task-010`. |
-
-**During Plan Ingestion**, when extracting tasks from multiple modules, assign sequential numbers starting from 000. Map each module's internal task numbers to the global sequence and include the mapping in the TodoWrite.
+See `references/report-naming-convention.md` for the complete naming convention with examples and rationale. Key rule: `task-NNN-{type}.md` with three-digit zero-padded sequential numbering across all modules.
 
 ### Saving Reports
 
