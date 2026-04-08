@@ -195,7 +195,7 @@ Four additions to `~/.claude/settings.json`:
 1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
 2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
 3. `PreToolUse` → `Skill` matcher: handoff-gate-hook + plan-validation-gate-hook (absolute paths)
-4. `permissions.allow`: Two entries for skill command stub loading: `Bash(cat ~/.claude/skills/superpowers/*)` + `Bash(awk *)`. Claude Code splits piped commands into subcommands and checks each separately — a single combined pattern doesn't work. `**` is literal in permission patterns (not recursive glob), and `*` matches any suffix including path separators.
+4. `permissions.allow`: Two entries for skill command stub loading: `Bash(cat ~/.claude/skills/superpowers/*/*)` + `Bash(awk *)`. Claude Code splits piped commands into subcommands and checks each separately. `*` does NOT cross path separators (like shell glob, not gitignore `**`). Need `/*/*` for `<skill-name>/SKILL.md` two-level depth.
 
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
