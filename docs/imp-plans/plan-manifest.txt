@@ -1,1 +1,1 @@
-docs/imp-plans/2026-04-08-subagent-context-improvements.md
+docs/imp-plans/2026-04-08-sdd-controller-partner.md

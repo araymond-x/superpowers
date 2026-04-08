@@ -1,34 +1,27 @@
-# Plan Review — Subagent Context Improvements
+# Plan Review -- SDD Controller Partner Agent
 
-**Plan:** docs/imp-plans/2026-04-08-subagent-context-improvements.md
+**Plan:** docs/imp-plans/2026-04-08-sdd-controller-partner.md
 **Date:** 2026-04-08
-**Reviewer:** general-purpose subagent (plan-document-reviewer)
+**Reviewer:** general-purpose subagent
 
-## Plan Review
-
-**Status:** Approved (after fixes)
+## Status: Approved (after fixes)
 
 **Blocking Issues Found and Resolved:**
 
-1. **[Word Count Risk]: Task 2**: SDD SKILL.md is at 5018 words (plan said ~4091, stale). Task 2 adds ~195 words. **Resolution:** Added Step 0 to Task 2 with extraction instructions -- move DEVIATIONS.md template and Report Naming Convention table to references/ to free ~185 words.
+1. **Word count math:** Extraction of Session Recovery alone (~85 words saved) insufficient for ~160 word addition. **Resolution:** Added Model Selection extraction (Step 1b) for additional ~95 words. Combined savings ~180 words, sufficient for ~160 word addition.
 
-**Line Number Corrections Applied:**
-- Task 1 Step 2: Changed "~line 184" to "after paragraph ending with 'do not plan against an unverified handoff' (~line 188)"
-- Task 5 Step 1: Clarified Phase 4 heading is at ~line 171, bold subheading at ~line 173
-- Task 5 Step 2: Changed "~line 216" to "end of Red Flags bullet list (~line 230)"
-- Acceptance criteria 7: Updated word count from stale ~4091 to actual 5018
+2. **Check 3b allowlist:** partner-review files would be flagged as non-standard naming by the existing regex `'^(task-[0-9]+-|pre-execution-audit|context-summary)'`. **Resolution:** Added Step 0 to Task 4 to update regex to include `partner-review`.
+
+3. **Task 0 exemption:** Proposed Check 5d used `if [ -n "$TASK_NUMBER" ]` which applies to Task 0. Test expected exemption. **Resolution:** Added `&& [ "$TASK_NUMBER" -gt 0 ]` guard. Task 0 has no prior implementer context to cross-reference.
 
 **Snippet Verification:**
-- Task 1, Step 1 (writing-plans header ~line 168): VERIFIED
-- Task 2, Step 1 (SDD ingestion ~line 165): VERIFIED
-- Task 2, Step 2 (SDD passthrough ~line 260): VERIFIED
-- Task 3, Step 1 (implementer-prompt ~line 44): VERIFIED
-- Task 3, Step 2 (implementer-prompt ~line 140): VERIFIED
-- Task 4, Step 1 (task-0-template ~line 53): VERIFIED
-- Task 4, Step 2 (task-0-template step 5 text): VERIFIED
-- Task 5, Step 1 (systematic-debugging ~line 173): VERIFIED after correction
-- Task 5, Step 2 (systematic-debugging ~line 230): VERIFIED after correction
+- SKILL.md insertion point (after Review Enforcement, before Model Selection): VERIFIED
+- SKILL.md Session Recovery section: VERIFIED (lines 486-496 match)
+- Hook Check 5c pattern (checkpoint gate): VERIFIED -- Check 5d follows same structure
+- Prompt template format (spec-reviewer, pre-execution-audit): VERIFIED
+- Test pattern (sdd_test_helpers, run_hook): VERIFIED
 
-**Write-scope:** Cleanly disjoint -- each task modifies a different file.
-**Completeness:** No TODOs, placeholders, or incomplete tasks.
-**Plan validation:** WARNING status, 0 blockers, 377 lines.
+**Advisory Issues Noted:**
+- Task 4 Write-Scope should include sdd_test_helpers.py (mentioned in commit but not table)
+- No test for Check 3b allowlist interaction (recommended addition)
+- Task 3 TDD red phase expectations need refinement re: Check 3b timing

@@ -119,7 +119,7 @@ done
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 101 checks for symlink+command-stub architecture (no API calls). Run after upstream merges or installation changes.
-- `tests/unit/` — 36 pytest tests: validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 41 pytest tests: validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -172,6 +172,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - **Checkpoint file gate** (Check 5c): Requires `reports/checkpoint-pre-dispatch-NNN.json` (>50 bytes) before dispatching task NNN. Forces the controller to run `controller-checkpoint.py` and save its output.
 - **Token estimation** (Check 6): Now BLOCKS (not warns) when the task header isn't found in any plan file. Script errors still warn.
 - **Context summary** (Check 6b): Now BLOCKS (not warns) past the midpoint without `reports/context-summary.md`.
+- **Partner review gate** (Check 5d): Requires `reports/partner-review-NNN.md` (>50 bytes) before dispatching task NNN (Task 0 exempt). The controller must dispatch the partner agent (see `controller-partner-prompt.md`) or write a minimum-tier review. The partner independently verifies dispatch quality -- context completeness, accuracy against plan, prior task awareness, and escalation check.
 - Plan validation gate: `PreToolUse` → `Skill` → `.../skills/writing-plans/scripts/plan-validation-gate-hook.sh`
 - Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any scoped plan file, or `plan-review-report.md` missing/empty (<50 bytes)
 - Plan file scoping: primary = `docs/imp-plans/plan-manifest.txt` (explicit file list from writing-plans skill); fallback = git diff against base branch (files changed on current branch). Old plans from prior features are never validated.
@@ -214,7 +215,7 @@ Four additions to `~/.claude/settings.json`:
 ## Three-Layer Test Strategy
 - **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
 - **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 101 checks, <1s)
-- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (36 tests, ~8s)
+- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (41 tests, ~10s)
 - **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
 - Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
 
