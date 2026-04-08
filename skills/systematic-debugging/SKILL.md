@@ -170,7 +170,27 @@ After gathering evidence, pause before moving to Phase 2. Ask: Do I know which c
 
 ### Phase 4: Implementation
 
-**Fix the root cause, not the symptom:**
+**Fix the root cause, not the symptom.**
+
+**Before implementing any fix, classify its complexity:**
+
+| Classification | Criteria | Action |
+|---|---|---|
+| **Point fix** | Bug is in the logic, not the structure. Wrong value, off-by-one, missing condition. Fix changes 1-2 lines in one location. | Proceed to Step 1 below. |
+| **Structural fix** | Bug reveals duplication, missing abstraction, or wrong separation of concerns. The same class of bug could recur elsewhere. Fix requires changes across multiple locations or introduces a new pattern. | STOP. Invoke `superpowers:brainstorming` before implementing. The fix needs design, not just code. |
+
+**Write the classification before proceeding:**
+```
+Fix type: [point | structural]
+Rationale: [one sentence explaining why]
+```
+
+**Examples:**
+- "Fix type: point. Rationale: Missing `null` check on optional field before accessing `.length`." -> Proceed.
+- "Fix type: structural. Rationale: `get_summary()` reimplements `compute_balance_to_date()` instead of calling it — two copies of balance logic will diverge." -> Brainstorm first.
+- "Fix type: structural. Rationale: `LIABILITY_TYPES` is hardcoded in 3 frontend files instead of imported from a shared constant." -> Brainstorm first.
+
+**If uncertain:** Default to structural. A point fix wrongly classified as structural costs 15 minutes of brainstorming. A structural fix wrongly classified as point ships technical debt that compounds across future changes.
 
 1. **Create Failing Test Case**
    - Simplest possible reproduction
@@ -227,6 +247,8 @@ When any of these thoughts appear, stop and return to Phase 1 (Root Cause Invest
 - Proposing solutions before tracing data flow
 - **"One more fix attempt" (when already tried 2+)**
 - **Each fix reveals new problem in different place**
+- "It's just a quick fix" (without classifying point vs structural)
+- Fixing a symptom when the same pattern exists in multiple locations
 
 **Any of these means: stop and return to Phase 1.**
 
