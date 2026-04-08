@@ -109,7 +109,7 @@ name: superpowers:$name
 description: $desc
 ---
 
-!\`cat ~/.claude/skills/superpowers/$name/SKILL.md | awk 'BEGIN{c=0} /^---\$/{c++; next} c>=2{print}'\`
+!\`bash ~/.claude/skills/superpowers/scripts/strip-frontmatter.sh ~/.claude/skills/superpowers/$name/SKILL.md\`
 CMDEOF
 done
 ```
@@ -195,7 +195,7 @@ Four additions to `~/.claude/settings.json`:
 1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
 2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
 3. `PreToolUse` → `Skill` matcher: handoff-gate-hook + plan-validation-gate-hook (absolute paths)
-4. `permissions.allow`: Two entries for skill command stub loading: `Bash(cat ~/.claude/skills/superpowers/*/*)` + `Bash(awk *)`. Claude Code splits piped commands into subcommands and checks each separately. `*` does NOT cross path separators (like shell glob, not gitignore `**`). Need `/*/*` for `<skill-name>/SKILL.md` two-level depth.
+4. `permissions.allow`: `Bash(bash ~/.claude/skills/superpowers/scripts/strip-frontmatter.sh *)` for skill command stub loading. Command stubs use `strip-frontmatter.sh` (single command, no pipe) instead of `cat | awk` (piped compound command). The `!`...`` preprocessor has a stricter permission checker than the Bash tool — it rejects piped commands even when individual subcommands are allowed. The helper script at `skills/scripts/strip-frontmatter.sh` eliminates the pipe.
 
 ## Execution Trace Audit
 - `extract-execution-trace.py` parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules
@@ -227,4 +227,4 @@ Four additions to `~/.claude/settings.json`:
 - Personal skills (`~/.claude/skills/`) only support one level of nesting for the `/skills` picker. The `superpowers:` namespace in the picker comes from command stubs at `~/.claude/commands/superpowers/`, NOT from the skills directory structure
 - Agents do NOT support nested directory namespacing — must use flat files with unique names
 - Brainstorm visual companion server: `skills/brainstorming/scripts/start-server.sh` (NOT repo root `scripts/`)
-- macOS gotcha: BSD `sed` fails on curly brace range expressions. Use `awk 'BEGIN{c=0} /^---$/{c++; next} c>=2{print}'` to strip YAML frontmatter
+- macOS gotcha: BSD `sed` fails on curly brace range expressions. Use `skills/scripts/strip-frontmatter.sh` to strip YAML frontmatter (wraps the awk command). Command stubs use this script to avoid piped commands that the `!`...`` preprocessor rejects.
