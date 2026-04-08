@@ -75,6 +75,33 @@ Agent tool (haiku model):
        - Are there any DONE_WITH_CONCERNS items from ANY prior task that remain
          unlogged in DEVIATIONS.md?
 
+    5. **ARCHITECTURAL ALIGNMENT**:
+       Read `~/.claude/rules/architectural-principles.md` before evaluating.
+       These principles are non-negotiable -- any dispatch that would lead an
+       implementer to violate them should be BLOCKED.
+       - **Single source of truth**: Is the implementer being asked to create logic
+         that already exists elsewhere? Does the dispatch duplicate a function,
+         constant, or computation instead of importing/calling the existing one?
+       - **Consumer updates**: Does this task create or modify constants, types, or
+         enums? If so, does the dispatch instruct the implementer to update ALL
+         consumers (switches, maps, configs)?
+       - **Point fix vs structural**: Is the implementer being asked to "fix" something
+         that is actually a structural problem (duplication, missing abstraction)?
+         If so, should this task have gone through brainstorming first?
+       - **Co-deployment**: Does the task modify shared infrastructure (config, types,
+         migrations)? If so, does the dispatch mention co-deploying dependent changes?
+
+    6. **PATTERN COMPLETENESS**:
+       - Is this task creating a UI component, API endpoint, or service that has
+         an existing equivalent in the codebase the plan author may have missed?
+       - If the task creates a new component, are there Pattern References listed?
+         If not, is this truly greenfield or did the plan author skip Pattern Discovery?
+       - If Pattern References exist, do they cover the right aspects? A reference
+         for "layout" doesn't help if the task's challenge is "data formatting"
+         or "error handling."
+       - Are there global style guidelines, design system files, or CLAUDE.md
+         conventions in the target directories that the dispatch should reference?
+
     ## Output Format
 
     **Status:** APPROVED | BLOCKED
@@ -87,10 +114,14 @@ Agent tool (haiku model):
 
     **Escalation Check:** [PASS | FAIL -- list unresolved issues]
 
+    **Architectural Alignment:** [PASS | FAIL -- list violations]
+
+    **Pattern Completeness:** [PASS | FAIL -- list gaps]
+
     **Findings (if BLOCKED):**
     - [Finding 1]: [what's wrong] -- [how to fix]
 
-    If ALL four checks pass, return APPROVED. If ANY check fails, return BLOCKED.
+    If ALL six checks pass, return APPROVED. If ANY check fails, return BLOCKED.
     Do not approve with caveats -- either the dispatch is ready or it isn't.
 ```
 
