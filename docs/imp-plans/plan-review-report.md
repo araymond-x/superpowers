@@ -1,7 +1,7 @@
-# Plan Review — SDD Enforcement Hardening
+# Plan Review — Subagent Context Improvements
 
-**Plan:** docs/imp-plans/2026-04-07-sdd-enforcement-hardening.md
-**Date:** 2026-04-07
+**Plan:** docs/imp-plans/2026-04-08-subagent-context-improvements.md
+**Date:** 2026-04-08
 **Reviewer:** general-purpose subagent (plan-document-reviewer)
 
 ## Plan Review
@@ -10,31 +10,25 @@
 
 **Blocking Issues Found and Resolved:**
 
-1. **[CONTRACT ACCURACY]: Task 7, Step 2**: The report guard's early exit at line 25-27 (`if ! echo "$COMMAND" | grep -qiE 'reports/task-'; then exit 0; fi`) exits before any new code can execute for commands that don't contain `reports/task-`. The `.dispatch-log` pattern does NOT contain `reports/task-`, so a command like `echo "fake" >> reports/.dispatch-log` would exit at line 27 and never reach the new detection block. **Resolution:** Updated Task 7 to insert the new block BEFORE the early exit, not after.
+1. **[Word Count Risk]: Task 2**: SDD SKILL.md is at 5018 words (plan said ~4091, stale). Task 2 adds ~195 words. **Resolution:** Added Step 0 to Task 2 with extraction instructions -- move DEVIATIONS.md template and Report Naming Convention table to references/ to free ~185 words.
 
-2. **[SNIPPET SAFETY]: Task 3, Step 2**: The dispatch provenance check snippet uses `$PREV` (set at line 212 inside the `if [ "$TASK_NUMBER" -gt 0 ]` block) but was specified as being inserted AFTER that block's closing `fi`. With `set -u` active (line 14), dispatching Task 0 would cause an unbound variable error. **Resolution:** Updated Task 3 to place the new check INSIDE the existing `if` block, before its `fi`.
+**Line Number Corrections Applied:**
+- Task 1 Step 2: Changed "~line 184" to "after paragraph ending with 'do not plan against an unverified handoff' (~line 188)"
+- Task 5 Step 1: Clarified Phase 4 heading is at ~line 171, bold subheading at ~line 173
+- Task 5 Step 2: Changed "~line 216" to "end of Red Flags bullet list (~line 230)"
+- Acceptance criteria 7: Updated word count from stale ~4091 to actual 5018
 
 **Snippet Verification:**
+- Task 1, Step 1 (writing-plans header ~line 168): VERIFIED
+- Task 2, Step 1 (SDD ingestion ~line 165): VERIFIED
+- Task 2, Step 2 (SDD passthrough ~line 260): VERIFIED
+- Task 3, Step 1 (implementer-prompt ~line 44): VERIFIED
+- Task 3, Step 2 (implementer-prompt ~line 140): VERIFIED
+- Task 4, Step 1 (task-0-template ~line 53): VERIFIED
+- Task 4, Step 2 (task-0-template step 5 text): VERIFIED
+- Task 5, Step 1 (systematic-debugging ~line 173): VERIFIED after correction
+- Task 5, Step 2 (systematic-debugging ~line 230): VERIFIED after correction
 
-- Task 2 (reviewer exit replacement, line 71-74): VERIFIED -- matches actual source exactly
-- Task 4 (TOKEN_WARNING SKIPPED, lines 351 and 353): VERIFIED -- both replacement targets match source verbatim
-- Task 5 (CONTEXT_SUMMARY_WARNING, line 377-378): VERIFIED -- replacement target and cleanup reference (line 442-444) both match source
-- Task 7 (report guard insertion): VERIFIED after fix -- insertion point corrected to before early exit
-- Task 3 (dispatch provenance check): VERIFIED after fix -- `$PREV` scoping corrected
-- Task 6 (checkpoint file gate): ILLUSTRATIVE -- new code, insertion point correct
-- Task 1 (settings.json permission): VERIFIED -- current value matches plan's claim
-
-**Size and Complexity Assessment:**
-- Plan: 694 lines (under 800 limit) -- PASS
-- All tasks under 200 lines -- PASS
-- Write-Scope Partitioning table present and accurate -- PASS
-
-**Recommendations (advisory):**
-
-1. TDD ordering: Tasks 8-9 create test files, Tasks 2-7 implement. Strict TDD order documented in the Write-Scope section. **Addressed:** Plan now includes explicit TDD execution order guidance.
-
-2. Task 1 Step 4 contradiction (git add for non-repo file): **Addressed:** Removed misleading code block.
-
-3. Task 3 minimum-tier logic: Comment says minimum tier requires spec dispatch, but code checks independently. Net effect is correct since spec dispatch is checked separately. Comment is slightly misleading about conditional relationship but not incorrect in practice.
-
-**validate-plan.py results:** WARNING status (0 blockers, 1 warning about File Map alias). All 10 tasks under 200 lines. No duplicate task numbers. Source Contracts correctly set to "None".
+**Write-scope:** Cleanly disjoint -- each task modifies a different file.
+**Completeness:** No TODOs, placeholders, or incomplete tasks.
+**Plan validation:** WARNING status, 0 blockers, 377 lines.

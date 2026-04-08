@@ -28,6 +28,13 @@ After each production-deployable update to the fork, review:
 - `skills/requesting-code-review/SKILL.md` — agent refs changed to `superpowers-code-reviewer`
 - `skills/subagent-driven-development/code-quality-reviewer-prompt.md` — agent ref changed to `superpowers-code-reviewer`
 
+## Subagent Context Improvements (2026-04-08)
+Three additions to prevent architectural violations that persist despite the SDD review process:
+- **Shared Constants Passthrough**: Plan header field + SDD ingestion Step 2b + implementer prompt section. Forces subagents to import canonical constants instead of hardcoding values. Files: `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `implementer-prompt.md`.
+- **Import Assertions in Task 0**: Step 5b in `task-0-template.md`. Writes assertions that import values from source code and compare against fixtures, preventing fixture drift.
+- **Fix Complexity Gate**: Point-vs-structural classification at start of Phase 4 in `systematic-debugging/SKILL.md`. Routes structural fixes to brainstorming instead of direct coding.
+- Extracted DEVIATIONS template and report naming convention to `references/` to stay under SDD SKILL.md 5000-word limit (4987 after changes).
+
 ## v0.1 Skill Improvements (2026-03-23) — PROMOTED
 All v0.1 files have been promoted to active and the originals removed. The improvements are now live in the main SKILL.md and prompt template files. See `docs/ARaymond-customization-manifest.md` for the complete inventory of customizations per skill.
 
