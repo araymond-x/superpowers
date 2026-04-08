@@ -164,6 +164,9 @@ class TestDispatchProvenanceVerification:
         # Create task 0 reports WITH dispatch log
         create_task_reports(tmpdir, task_number=0, include_dispatch_log=True)
         create_checkpoint_file(tmpdir, task_number=1)
+        # Partner review for task 1 (required by Check 5d)
+        with open(os.path.join(tmpdir, "reports", "partner-review-001.md"), "w") as f:
+            f.write("# Partner Review Task 001\n**Status:** APPROVED\n" + "x" * 60)
 
         hook_input = make_hook_input(
             description="Implement task 1",
@@ -197,6 +200,9 @@ class TestDispatchProvenanceVerification:
             os.rename(qual_standard, qual_minimum)
 
         create_checkpoint_file(tmpdir, task_number=1)
+        # Partner review for task 1 (required by Check 5d)
+        with open(os.path.join(tmpdir, "reports", "partner-review-001.md"), "w") as f:
+            f.write("# Partner Review Task 001\n**Status:** APPROVED\n" + "x" * 60)
 
         hook_input = make_hook_input(
             description="Implement task 1",

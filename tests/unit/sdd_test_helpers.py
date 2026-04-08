@@ -240,12 +240,24 @@ def setup_full_sdd_workspace(tmpdir: str, total_tasks: int, completed_tasks: int
     """
     setup_sdd_workspace(tmpdir, total_tasks)
 
+    reports_dir = os.path.join(tmpdir, "reports")
     for i in range(completed_tasks):
         create_task_reports(tmpdir, i, include_dispatch_log=True)
         # Create checkpoint for the NEXT task (which was checked before dispatching task i)
         # The checkpoint for task N is created before dispatching task N
         create_checkpoint_file(tmpdir, i)
+        # Create partner review for task i (Task 0 is exempt — no prior context to verify)
+        if i > 0:
+            padded = f"{i:03d}"
+            partner_path = os.path.join(reports_dir, f"partner-review-{padded}.md")
+            with open(partner_path, "w") as f:
+                f.write(f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60)
 
-    # Create checkpoint for the next task to be dispatched
+    # Create checkpoint and partner review for the next task to be dispatched
     if completed_tasks < total_tasks:
         create_checkpoint_file(tmpdir, completed_tasks)
+        if completed_tasks > 0:
+            padded = f"{completed_tasks:03d}"
+            partner_path = os.path.join(reports_dir, f"partner-review-{padded}.md")
+            with open(partner_path, "w") as f:
+                f.write(f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60)

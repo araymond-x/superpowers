@@ -213,7 +213,7 @@ if [ -d "reports" ]; then
     if [ -f "$rf" ]; then
       BASENAME=$(basename "$rf")
       # Allow: task-NNN-*, pre-execution-audit*, context-summary*
-      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary)'; then
+      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch)'; then
         NON_STANDARD_FILES+=("$BASENAME")
       fi
     fi
@@ -379,6 +379,23 @@ if [ -n "$TASK_NUMBER" ]; then
     ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/ > $CHECKPOINT_FILE")
   elif [ "$(wc -c < "$CHECKPOINT_FILE" 2>/dev/null | tr -d ' ')" -lt "$MIN_REPORT_BYTES" ]; then
     ERRORS+=("BLOCKED: Checkpoint file $CHECKPOINT_FILE is too small (< $MIN_REPORT_BYTES bytes). Run the full controller-checkpoint.py command and redirect its JSON output to this file.")
+  fi
+fi
+
+# ─── Check 5d: Partner review evidence ──────────────────────────────────────
+# The controller must dispatch the partner agent (or declare minimum tier)
+# before dispatching the implementer. Task 0 is exempt — it's contract
+# verification with no prior implementer context to cross-reference.
+if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
+  TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
+  PARTNER_FILE="reports/partner-review-${TASK_PADDED}.md"
+  PARTNER_FILE_MIN="reports/partner-review-${TASK_PADDED}-minimum-tier.md"
+  if [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+    : # Full partner review exists
+  elif [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+    : # Minimum tier partner review exists
+  else
+    ERRORS+=("BLOCKED: No partner review found for Task $TASK_NUMBER (expected: $PARTNER_FILE or $PARTNER_FILE_MIN). Dispatch the controller partner (see controller-partner-prompt.md) and save the output, or write a minimum-tier review with rationale (>$MIN_REPORT_BYTES bytes).")
   fi
 fi
 

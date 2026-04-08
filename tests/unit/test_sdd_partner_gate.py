@@ -73,7 +73,10 @@ class TestPartnerReviewGate:
         """Dispatch should be blocked when no partner-review file exists."""
         tmpdir = str(tmp_path)
         setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=1)
-        # All other gates satisfied (reports, dispatch log, checkpoint) but NO partner review
+        # Remove the partner review created by the helper — we're testing its absence
+        partner_file = os.path.join(tmpdir, "reports", "partner-review-001.md")
+        if os.path.exists(partner_file):
+            os.remove(partner_file)
 
         hook_input = make_hook_input(
             description="Implement task 1",
