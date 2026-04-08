@@ -50,7 +50,37 @@ def test_contract_sample_has_required_fields():
 - [ ] **Step 5: Run and verify**
   Run: `pytest tests/unit/test_<feature>_contracts.py -v`
   Expected: PASS — all contract assertions hold for the fixture data.
-  **Do not proceed to Task 1 until this test passes.**
+  **Do not proceed to Step 5b until this test passes.**
+
+- [ ] **Step 5b: Write import assertions**
+  For every constant, type enumeration, or canonical value list in the contract,
+  write an assertion that imports the value from the source code and compares it
+  against the fixture. This ensures the fixture stays anchored to what the code
+  actually uses — not what the plan described.
+
+  ```python
+  from app.constants import VALID_ACCOUNT_TYPES  # adjust import path
+
+  def test_fixture_matches_code_constants():
+      """Fixture account types must match the canonical code constant."""
+      with open("tests/fixtures/<feature>/contract_samples.json") as f:
+          sample = json.load(f)
+      # Fixture values must be a subset of (or equal to) the code constant
+      assert set(sample["account_types"]) == set(VALID_ACCOUNT_TYPES), (
+          f"Fixture has {sample['account_types']} but code defines {VALID_ACCOUNT_TYPES}"
+      )
+  ```
+
+  **Why both fixture tests and import assertions:**
+  - Fixture tests (Step 3) verify the shape is correct: required fields exist, types match.
+  - Import assertions (this step) verify the values are current: the fixture agrees with
+    what the code actually defines.
+  - A fixture that passes shape tests but fails import assertions means the fixture was
+    written from the spec (or plan) but the code has since diverged.
+
+  Write one import assertion per constant or enumeration in the contract. If the contract
+  has no constants (only field shapes), note "N/A — no enumerable constants in contract"
+  and proceed.
 
 - [ ] **Step 6: Commit**
   ```bash
