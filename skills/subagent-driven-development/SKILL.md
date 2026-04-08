@@ -364,20 +364,27 @@ The controller MUST declare the review tier before dispatching each task and sta
 
 If you find yourself wanting to use minimum review for a task that touches an interface, contract, or shared file — upgrade to standard. The tier exists for config-file edits and similar low-stakes work, not as a general escape hatch.
 
+## Controller Partner Verification
+
+Before dispatching each implementer subagent, dispatch the controller partner to verify your dispatch quality. The partner reads your proposed prompt and cross-references it against the plan to catch context omissions, inaccurate summaries, and missed escalations.
+
+**When to dispatch (risk-tiered):**
+- **Full review**: Tasks with Pattern References, Shared Constants, external contract dependencies, or multi-file changes
+- **Minimum tier**: Simple config changes, single-file internal modifications, test-only tasks. Write `reports/partner-review-NNN-minimum-tier.md` with tier rationale instead of dispatching.
+
+**Dispatch sequence:**
+1. Prepare the implementer dispatch prompt (all context sections filled in)
+2. Dispatch partner (see `./controller-partner-prompt.md`) with: the proposed prompt, plan task description, plan header sections
+3. Partner returns APPROVED or BLOCKED with findings
+4. Save partner output to `reports/partner-review-NNN.md`
+5. If BLOCKED: address findings, re-dispatch partner
+6. If APPROVED: proceed to implementer dispatch
+
+The pre-dispatch hook requires `reports/partner-review-NNN.md` (>50 bytes) before allowing implementer dispatch.
+
 ## Model Selection
 
-Use the least powerful model that can handle each role to conserve cost and increase speed.
-
-**Mechanical implementation tasks** (isolated functions, clear specs, 1-2 files): use a fast, cheap model. Most implementation tasks are mechanical when the plan is well-specified.
-
-**Integration and judgment tasks** (multi-file coordination, pattern matching, debugging): use a standard model.
-
-**Architecture, design, and review tasks**: use the most capable available model.
-
-**Task complexity signals:**
-- Touches 1-2 files with a complete spec → cheap model
-- Touches multiple files with integration concerns → standard model
-- Requires design judgment or broad codebase understanding → most capable model
+See `references/model-selection.md` for guidance on choosing models per role (haiku for mechanical tasks, standard for integration, most capable for architecture/review).
 
 ## Handling Implementer Status
 
@@ -485,15 +492,7 @@ These checks are not bureaucratic overhead. They exist because the failure mode 
 
 ## Session Recovery
 
-If a controller session is interrupted (context overflow, crash, or manual stop), a new session can resume execution by:
-
-1. **Read the plan file** — checked-off checkboxes show what was completed
-2. **Read DEVIATIONS.md** — shows accumulated drift and pending dispositions
-3. **Read `reports/` directory** — shows detailed implementer and reviewer output for each completed task
-4. **Read TodoWrite** (if still in session) or reconstruct from plan checkboxes
-5. **Resume from the first unchecked task** — all prior context is in files
-
-This is why file-based persistence matters: the plan file, DEVIATIONS.md, and `reports/` directory together form a complete execution log that survives session loss.
+See `references/session-recovery.md` for how to resume after a session interruption. All execution state is in files (plan checkboxes, DEVIATIONS.md, reports/).
 
 ## Prompt Templates
 
@@ -502,6 +501,7 @@ This is why file-based persistence matters: the plan file, DEVIATIONS.md, and `r
 - `./code-quality-reviewer-prompt.md` - Dispatch code quality reviewer subagent
 - `./pre-execution-audit-prompt.md` - Dispatch pre-execution auditor (mandatory gate before Task 0)
 - `./trace-auditor-prompt.md` - Dispatch execution trace auditor (Pre-Completion Gate step 8)
+- `./controller-partner-prompt.md` - Dispatch controller partner for dispatch quality verification (before each implementer)
 - `./honesty-check-prompt.md` - User prompt for compliance verification (use at module boundaries and before Pre-Completion Gate)
 
 ## Example Workflow
