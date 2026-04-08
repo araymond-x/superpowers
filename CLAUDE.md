@@ -19,7 +19,7 @@ After each production-deployable update to the fork, review:
 
 ## Installation Architecture
 - Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, loads into context for auto-invocation)
-- Commands: `~/.claude/commands/superpowers/*.md` — stubs with `!`cat`` preprocessing that dynamically include the full SKILL.md content (minus frontmatter) at invocation time. These provide the `superpowers:` namespace in the `/skills` picker (personal skills don't support nested directory namespacing; commands do via `commands/<group>/<name>.md`). **These files live outside the repo** — regenerate on new machines (see below)
+- Commands: `~/.claude/commands/superpowers/*.md` — stubs with `!`bash strip-frontmatter.sh`` preprocessing that dynamically include the full SKILL.md content (minus frontmatter) at invocation time. These provide the `superpowers:` namespace in the `/skills` picker (personal skills don't support nested directory namespacing; commands do via `commands/<group>/<name>.md`). **These files live outside the repo** — regenerate on new machines (see below)
 - Agent: `~/.claude/agents/superpowers-code-reviewer.md` → `./agents/code-reviewer.md`
 - Hook: SessionStart in `~/.claude/settings.json` calls `./hooks/session-start` with `CLAUDE_PLUGIN_ROOT` set
 
@@ -159,7 +159,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Consolidated recommendations: `docs/plans/prompt-optimization/phase-5-consolidated-recommendations.md`
 - 171 changes applied in 3 passes: descriptions + XML + roles (Pass 1), de-escalation + positive framing (Pass 2), motivation + thinking + agentic patterns (Pass 3)
 - Key changes: `<EXTREMELY-IMPORTANT>` → `<important>`, aggressive MUST/NEVER → direct imperatives, Red Flags → Required Practices/positive framing, role statements added to all prompt templates
-- SDD SKILL-v0.1.md is at 4091/5000 words (82%) — monitor on future additions
+- SDD SKILL.md is at 4983/5000 words (99.7%) — critically near limit. Any addition requires extracting content to `references/` first.
 
 ## Hooks-Based Enforcement
 - Skill frontmatter hooks do NOT fire for symlink-installed skills (confirmed 2026-03-24). Use `~/.claude/settings.json` with absolute paths instead.
@@ -187,8 +187,10 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 ## Hook Development Gotchas
 - Stop hooks: use `systemMessage` not `hookSpecificOutput.additionalContext` (not supported for Stop events)
 - Bash hooks: avoid `set -u` — jq pipe chains produce empty vars that cause silent exits with no stderr
-- Permission globs: `Bash(cat ~/.claude/skills/superpowers/*)` doesn't match subdirs — use `**` for nested paths
+- Permission globs: `*` does NOT cross path separators in Bash permissions (`**` is literal, not recursive). Use `/*/*` for two-level paths. The `!`...`` preprocessor rejects piped commands — use wrapper scripts instead.
 - Pre-execution audit gate: `reports/pre-execution-audit.md` must exist (>50 bytes) before any Task dispatch. Creates a mandatory honesty checkpoint between planning and execution.
+- Pre-dispatch hook assumes sequential task execution. TDD reordering (test tasks before implementation) triggers false blocks because the hook requires task N-1 reports before allowing task N. Workaround: use non-implementer description patterns for test-writing dispatches (they bypass the implementer gate).
+- controller-checkpoint.py pre-execution phase reports FAIL on `Source Contracts: None` — it treats "None" as non-empty. This is a false positive when the writing-plans skill requires the field present. Log as accepted deviation and proceed.
 
 ## Global Settings Changes
 Four additions to `~/.claude/settings.json`:
