@@ -167,6 +167,8 @@ This structure informs the task decomposition. Each task should produce self-con
 
 **Contract Constraints:** [Non-negotiable facts from source contracts — types, formats, invariants. Write "None" if no external contracts.]
 
+**Shared Constants:** [Constants, type definitions, enum values, and canonical value lists that subagents must import -- not redefine. Format: `CONSTANT_NAME` from `path/to/file.py`. Write "None" if no shared constants apply.]
+
 **Feature Archetype:** [Greenfield | Replacement | Extension | Refactor | Migration]
 
 **Code Footprint:**
@@ -186,6 +188,8 @@ The **Source Contracts** field forces you to declare upfront what external data 
 If either field is "None", verify that the plan truly has no external dependencies before proceeding.
 
 If Source Contracts reference a handoff package from another agent or team, verify it has passed `superpowers:handoff-acceptance` before writing the plan. If no acceptance report exists, run the acceptance checklist first — do not plan against an unverified handoff.
+
+The **Shared Constants** field prevents a specific failure mode: subagents that need a value (e.g., `LIABILITY_TYPES`, `VALID_ACCOUNT_TYPES`) but don't know it exists as a constant, so they hardcode an array. When the constant changes, the hardcoded copy diverges silently. By enumerating shared constants in the plan, the controller can inject them into every subagent dispatch (see the SDD skill's Shared Constants Passthrough). If the plan has no shared constants, verify that no tasks import from files that define reusable constants.
 
 ## Write-Scope Partitioning
 
