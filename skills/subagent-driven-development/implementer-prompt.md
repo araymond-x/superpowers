@@ -43,6 +43,22 @@ Task tool (general-purpose):
 
     After reading source files, take a moment to verify your understanding is correct before writing any code. If what you read contradicts the task description or your assumptions, surface the conflict — do not silently work around it.
 
+    ## Shared Constants
+
+    [CONTROLLER: Insert the Shared Constants from the plan header here.
+     If plan has no Shared Constants, write "None — no shared constants for this task."]
+
+    These constants are defined in the codebase. Import them — do not redefine,
+    hardcode, or approximate them. If you need a constant not listed here, check
+    the source files for existing definitions before creating a new one. If no
+    existing constant fits, report DONE_WITH_CONCERNS and explain what you need —
+    the controller will evaluate whether to add it to a shared location.
+
+    Hardcoding values that exist as constants is a plan violation. Prior incident:
+    an agent hardcoded ["credit_card", "line_of_credit"] instead of importing
+    LIABILITY_TYPES, missing "loan". When the constant was updated, the frontend
+    copy was silently wrong.
+
     ## Subdirectory CLAUDE.md Files
 
     Before writing any code, check if the directories you will modify
@@ -141,6 +157,9 @@ Task tool (general-purpose):
     - Does my implementation honor all Contract Constraints listed above?
     - Do my types, formats, and field names match the source files (not my assumptions)?
     - If I parsed or transformed data, did I verify the input format from source?
+    - Did I import all Shared Constants listed above, or did I redefine any of them?
+      If I defined a local array, object, or enum that overlaps with a Shared Constant,
+      replace it with an import.
     - Are there fields or properties in the source files that my implementation should
       handle but are NOT mentioned in the Contract Constraints or task description?
       If yes, report DONE_WITH_CONCERNS and list the undocumented fields — the plan
