@@ -26,7 +26,7 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 Create a task for each of these items and complete them in order:
 
 1. **Read spec / requirements** — understand what to build, identify source contracts
-2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure
+2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure. **Pattern Discovery**: search for existing implementations of similar functionality (see below).
 3. **Scope check** — if spec covers multiple independent subsystems, decompose into separate plans
 4. **Write plan header** — Goal, Source Contracts, Contract Constraints, Feature Archetype, Code Footprint
 5. **Write File Map and Write-Scope Partitioning**
@@ -137,6 +137,24 @@ Before defining tasks, map out which files will be created or modified and what 
 
 This structure informs the task decomposition. Each task should produce self-contained changes that make sense independently.
 
+## Pattern Discovery
+
+Before writing tasks, search for existing implementations of similar functionality. Subagents that build without studying existing patterns reinvent conventions the codebase already established — wrong spacing, wrong component structure, wrong formatting patterns. Every correction becomes "look at how X does this and match it."
+
+**During Step 2 (Read core files), for each major component the plan will create:**
+
+1. **Search for similar existing implementations.** If the plan adds a dashboard, search for existing dashboards. If it adds a card component, find existing card components. If it adds an API endpoint, find the nearest existing endpoint with similar patterns.
+
+2. **For each pattern found**, note it as a Pattern Reference for the task that builds the similar component. Record: file path, what pattern it demonstrates (layout, data fetching, error handling, formatting), and which planned task should study it.
+
+3. **If no existing patterns found** (greenfield or first-of-its-kind), ask the user:
+
+   *"This feature introduces [component type / UI pattern / architectural pattern] that doesn't have an existing equivalent in the codebase. Are there established patterns, reference implementations, or design conventions I should follow? If this will set the pattern for future work, should we define the convention explicitly in the plan?"*
+
+4. **Record the results** in the plan header's `**Pattern References:**` field. List each reference with its file path and what it demonstrates. For greenfield, record "Greenfield — conventions defined in this plan" or the user's guidance.
+
+Pattern References flow into tasks as a per-task field (see Task Structure below) and into implementer dispatches via the SDD skill's Pattern References Passthrough.
+
 ## Bite-Sized Task Granularity
 
 **Each step is one action (2-5 minutes):**
@@ -168,6 +186,8 @@ This structure informs the task decomposition. Each task should produce self-con
 **Contract Constraints:** [Non-negotiable facts from source contracts — types, formats, invariants. Write "None" if no external contracts.]
 
 **Shared Constants:** [Constants, type definitions, enum values, and canonical value lists that subagents must import -- not redefine. Format: `CONSTANT_NAME` from `path/to/file.py`. Write "None" if no shared constants apply.]
+
+**Pattern References:** [Existing files that demonstrate established patterns subagents should follow. Format: `path/to/file` — what pattern it demonstrates. Write "Greenfield — conventions defined in this plan" if no existing patterns apply. See Pattern Discovery section.]
 
 **Feature Archetype:** [Greenfield | Replacement | Extension | Refactor | Migration]
 
@@ -270,6 +290,9 @@ Before writing tasks, read the core files your plan will modify. After each read
 - Create: `exact/path/to/file.py`
 - Modify: `exact/path/to/existing.py:123-145`
 - Test: `tests/exact/path/to/test.py`
+
+**Pattern References:** *(optional — include when existing code demonstrates the pattern this task should follow)*
+- `path/to/similar/component.tsx` — layout, spacing, data display conventions
 
 - [ ] **Step 1: Write the failing test**
 

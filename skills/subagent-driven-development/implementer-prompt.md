@@ -59,6 +59,22 @@ Task tool (general-purpose):
     LIABILITY_TYPES, missing "loan". When the constant was updated, the frontend
     copy was silently wrong.
 
+    ## Pattern References
+
+    [CONTROLLER: Insert the Pattern References for this specific task here.
+     If the task has no Pattern References, write "None — no existing patterns for this task."]
+
+    If pattern references are listed above, read each file BEFORE writing any code.
+    Your implementation should be visually and structurally consistent with these
+    existing patterns — same layout approach, same formatting conventions, same
+    interaction patterns, same component structure. If you find yourself inventing
+    a convention (spacing, typography, data display format, error handling pattern),
+    check these references first. The codebase already has the answer.
+
+    Prior incident: 10 consecutive UI corrections were all "look at how Tags/Statements
+    does this and match it." The agent built every component from scratch without studying
+    the existing patterns that already solved the same problems.
+
     ## Subdirectory CLAUDE.md Files
 
     Before writing any code, check if the directories you will modify

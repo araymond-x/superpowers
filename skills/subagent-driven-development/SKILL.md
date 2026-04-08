@@ -167,6 +167,9 @@ If the plan includes a Contract Constraints section, copy it verbatim into worki
 **Step 2b: Extract Shared Constants.**
 If the plan includes a Shared Constants section, copy it verbatim into working memory. This section will be injected into every implementer subagent dispatch alongside Contract Constraints. Shared constants are import paths — the subagent must import them, not redefine them. If the plan says "None", verify by scanning the File Map for files that define reusable constants (files named `constants.py`, `types.ts`, `config.py`, etc.).
 
+**Step 2c: Extract Pattern References.**
+If the plan includes a Pattern References section (or per-task Pattern References), copy them into working memory. These are existing files the subagent must read before building similar components. Include them in each implementer dispatch where the task has matching references. If the plan says "Greenfield," no injection is needed — but note any conventions the plan defines for future consistency.
+
 **Step 3: Read source files (if Source Contracts are present).**
 If the plan references Source Contracts (external files that define the interface the implementation must honor), read those files now. Do not defer this. Subagents will implement against these contracts — the controller needs to understand them to evaluate whether reports are accurate.
 
@@ -250,6 +253,14 @@ When dispatching each implementer subagent, include the plan's Shared Constants 
 > "These constants are defined in the codebase. Import them — do not redefine, hardcode, or approximate them. If you need a constant not listed here, check the source files for existing definitions before creating a new one. If no existing constant fits, report DONE_WITH_CONCERNS so the controller can evaluate whether a new constant should be added to a shared location."
 
 Subagents working on isolated tasks will encounter values they need (account types, status codes, category lists). Without this passthrough, they hardcode them. With it, they import from the canonical source. The difference is invisible during implementation but catastrophic when the constant changes.
+
+## Pattern References Passthrough
+
+When dispatching an implementer subagent whose task has Pattern References, include them in the prompt:
+
+> "Before building, read these existing implementations. Your component should be visually and structurally consistent with these patterns — same layout approach, same formatting, same interaction patterns. If you find yourself inventing a convention, check these references first."
+
+This prevents the "built from scratch, corrected 10 times" failure mode where every review comment is "look at how the existing component does this."
 
 ## Context Budget Management
 
@@ -448,33 +459,7 @@ This ensures that anyone reading the plan file — including you, after context 
 
 ## Honesty Check (Mandatory before Pre-Completion Gate)
 
-Before running the Pre-Completion Gate, present this prompt to the user and STOP. Wait for the user to copy it back to you. Do not self-answer these questions — the user must deliver them.
-
-Output this block exactly:
-
-```
-════════════════════════════════════════════════════════════════
- HONESTY CHECK — Please paste this back to me:
-
- Be completely honest about the work in this session:
-
- 1. Did you invoke superpowers:subagent-driven-development via
-    the Skill tool, or did you implement directly without
-    loading the skill?
- 2. Did you skip any steps that the SDD skill requires? List
-    each skipped step.
- 3. Were you blocked by any hooks at any point? If so, what
-    happened and how did you resolve it?
- 4. Did you dispatch spec compliance AND code quality reviews
-    for every task? If not, which tasks were unreviewed?
- 5. Is there anything you're uncertain about in the code that
-    you didn't flag in DEVIATIONS.md?
- 6. Did you take any shortcuts to save time or tokens?
- 7. If you were the code reviewer, what would concern you most?
-════════════════════════════════════════════════════════════════
-```
-
-After answering honestly, add any uncertainties from answers 5-7 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.
+See `references/honesty-check-block.md` for the full honesty check prompt. Present it to the user and STOP — do not self-answer. After the user responds, add any uncertainties from answers 5-7 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.
 
 ## Pre-Completion Gate
 

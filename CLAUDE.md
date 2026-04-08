@@ -33,7 +33,8 @@ Three additions to prevent architectural violations that persist despite the SDD
 - **Shared Constants Passthrough**: Plan header field + SDD ingestion Step 2b + implementer prompt section. Forces subagents to import canonical constants instead of hardcoding values. Files: `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `implementer-prompt.md`.
 - **Import Assertions in Task 0**: Step 5b in `task-0-template.md`. Writes assertions that import values from source code and compare against fixtures, preventing fixture drift.
 - **Fix Complexity Gate**: Point-vs-structural classification at start of Phase 4 in `systematic-debugging/SKILL.md`. Routes structural fixes to brainstorming instead of direct coding.
-- Extracted DEVIATIONS template and report naming convention to `references/` to stay under SDD SKILL.md 5000-word limit (4987 after changes).
+- **Pattern References**: Plan header field + Pattern Discovery section in writing-plans Step 2 + SDD ingestion Step 2c + implementer prompt section. Forces plan authors to search for existing implementations and inject them as reading requirements for subagents. Prevents "built from scratch, corrected 10 times" when the codebase already has established patterns. Greenfield projects get a user question instead.
+- Extracted DEVIATIONS template, report naming convention, and honesty check block to `references/` to stay under SDD SKILL.md 5000-word limit (4983 after all changes).
 
 ## v0.1 Skill Improvements (2026-03-23) — PROMOTED
 All v0.1 files have been promoted to active and the originals removed. The improvements are now live in the main SKILL.md and prompt template files. See `docs/ARaymond-customization-manifest.md` for the complete inventory of customizations per skill.
