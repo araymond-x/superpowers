@@ -26,7 +26,16 @@ Output this block exactly:
     you didn't flag in DEVIATIONS.md?
  6. Did you take any shortcuts to save time or tokens?
  7. If you were the code reviewer, what would concern you most?
+ 8. Did you dispatch the controller partner before every
+    implementer dispatch? If you used minimum-tier exemptions,
+    list which tasks and your rationale.
+ 9. Did the partner return BLOCKED at any point? If so, for each:
+    - What findings did it raise?
+    - Did you make substantive changes to the dispatch, or only
+      cosmetic edits to pass re-review?
+    - Did you re-dispatch the partner to verify the fixes, or
+      proceed directly to the implementer?
 ════════════════════════════════════════════════════════════════
 ```
 
-After answering honestly, add any uncertainties from answers 5-7 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.
+After answering honestly, add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.

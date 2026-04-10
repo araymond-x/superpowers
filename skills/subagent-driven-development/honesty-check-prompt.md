@@ -27,6 +27,8 @@ Be completely honest about the work in this session:
 5. Is there anything you're uncertain about in the code that was produced that you didn't flag in DEVIATIONS.md?
 6. Did you take any shortcuts to save time or tokens that deviated from the skill's prescribed process?
 7. If you were the code reviewer looking at this work, what would concern you most?
+8. Did you dispatch the controller partner before every implementer dispatch? If you used minimum-tier exemptions, list which tasks and your rationale.
+9. Did the partner return BLOCKED at any point? If so, for each: What findings did it raise? Did you make substantive changes to the dispatch, or only cosmetic edits to pass re-review? Did you re-dispatch the partner to verify the fixes, or proceed directly to the implementer?
 ```
 
 ---
@@ -45,4 +47,7 @@ This prompt has caught:
 - Uncertainties → add to DEVIATIONS.md as "Pending — needs review"
 - Skipped reviews → dispatch retroactive reviews for the affected tasks
 - Unloaded skill → the hooks didn't fire, so the work is unreviewed by definition. Dispatch at minimum a code quality review of the full diff.
+- Skipped partner dispatches → dispatch partner retroactively for those tasks; if the implementer already ran, the partner findings become input to a fix subagent
+- Excessive minimum-tier exemptions → review each rationale; if the task had Pattern References, Shared Constants, or multi-file changes, it should have been full review
+- Partner BLOCKED but controller pushed through → re-dispatch partner with the actual prompt that was sent; if findings were valid, dispatch a fix subagent
 - If the controller claims full compliance, cross-reference against reports/ — if review report files don't exist for every task, compliance was not achieved regardless of what the controller claims.
