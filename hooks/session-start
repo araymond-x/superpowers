@@ -14,9 +14,12 @@ if [ -d "$legacy_skills_dir" ]; then
     warning_message="\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER:⚠️ **WARNING:** Superpowers now uses Claude Code's skills system. Custom skills in ~/.config/superpowers/skills will not be read. Move custom skills to ~/.claude/skills instead. To make this message go away, remove ~/.config/superpowers/skills</important-reminder>"
 fi
 
-# Symlink integrity pre-flight check
-EXPECTED_SKILL_COUNT=14
-EXPECTED_CMD_COUNT=14
+# Symlink integrity pre-flight check.
+# NOTE: these constants are enforced by tests/ARaymond-installation/
+# verify-symlink-install.sh — if you add or remove a skill, update both
+# this file and run the verifier, or the test will fail.
+EXPECTED_SKILL_COUNT=15
+EXPECTED_CMD_COUNT=15
 SKILLS_DIR="${HOME}/.claude/skills/superpowers"
 COMMANDS_DIR="${HOME}/.claude/commands/superpowers"
 AGENT_LINK="${HOME}/.claude/agents/superpowers-code-reviewer.md"

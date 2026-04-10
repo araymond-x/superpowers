@@ -77,10 +77,14 @@ else
   fail "Found $skill_count skills (expected >= 15)"
 fi
 
-# Verify each SKILL.md is readable
+# Verify each SKILL.md is readable.
+# Skip directories without a SKILL.md (e.g. skills/scripts/ holds shared
+# helpers like strip-frontmatter.sh, not a skill). The skill count check
+# above already catches any missing skills.
 for skill_dir in "$SKILLS_DIR"/*/; do
   name=$(basename "$skill_dir")
   skill_file="$skill_dir/SKILL.md"
+  [[ -f "$skill_file" ]] || continue
   if [[ -r "$skill_file" ]]; then
     # Check frontmatter exists
     if head -1 "$skill_file" | grep -q '^---$'; then
@@ -142,18 +146,22 @@ for cmd_file in "$COMMANDS_DIR"/*.md; do
     fail "Command '$name' missing description in frontmatter"
   fi
 
-  # Check !`cat` preprocessing target resolves
-  cat_target=$(grep -o "cat [^ |]*" "$cmd_file" 2>/dev/null | head -1 | sed 's/^cat //')
-  if [[ -n "$cat_target" ]]; then
+  # Check the preprocessing line invokes strip-frontmatter.sh and that the
+  # SKILL.md it points at is readable. The stub format is:
+  #   !`bash ~/.claude/skills/superpowers/scripts/strip-frontmatter.sh <skill-path>`
+  # (The old !`cat | awk` form was retired because the !` preprocessor
+  # rejects piped commands; see CLAUDE.md.)
+  stub_target=$(grep -oE 'strip-frontmatter\.sh [^`]+SKILL\.md' "$cmd_file" 2>/dev/null | head -1 | awk '{print $2}' || true)
+  if [[ -n "$stub_target" ]]; then
     # Expand ~ to $HOME
-    expanded_target="${cat_target/#\~/$HOME}"
+    expanded_target="${stub_target/#\~/$HOME}"
     if [[ -r "$expanded_target" ]]; then
-      pass "Command '$name' cat target exists: $cat_target"
+      pass "Command '$name' strip-frontmatter target exists: $stub_target"
     else
-      fail "Command '$name' cat target missing: $cat_target (expanded: $expanded_target)"
+      fail "Command '$name' strip-frontmatter target missing: $stub_target (expanded: $expanded_target)"
     fi
   else
-    fail "Command '$name' has no !cat preprocessing line"
+    fail "Command '$name' has no strip-frontmatter.sh preprocessing line"
   fi
 done
 
@@ -165,9 +173,11 @@ for cmd_file in "$COMMANDS_DIR"/*.md; do
   fi
 done
 
-# Check for orphaned skills (skill exists but no matching command)
+# Check for orphaned skills (skill exists but no matching command).
+# Skip directories without a SKILL.md (shared helpers like scripts/).
 for skill_dir in "$SKILLS_DIR"/*/; do
   name=$(basename "$skill_dir")
+  [[ -f "$skill_dir/SKILL.md" ]] || continue
   if [[ ! -f "$COMMANDS_DIR/$name.md" ]]; then
     fail "Orphaned skill '$name' — no matching command stub (won't appear in /skills picker)"
   fi
@@ -217,6 +227,30 @@ if [[ -r "$SETTINGS_FILE" ]]; then
   fi
 else
   fail "Settings file not readable: $SETTINGS_FILE"
+fi
+
+# Guard against stale constants in hooks/session-start.
+# The hook hardcodes EXPECTED_SKILL_COUNT / EXPECTED_CMD_COUNT for its
+# integrity pre-flight check. If the fork adds or removes a skill without
+# updating these, every session will start with a false-positive warning.
+HOOK_FILE="$REPO_ROOT/hooks/session-start"
+if [[ -r "$HOOK_FILE" ]]; then
+  hook_expected_skills=$(grep -E '^EXPECTED_SKILL_COUNT=' "$HOOK_FILE" | head -1 | cut -d'=' -f2)
+  hook_expected_cmds=$(grep -E '^EXPECTED_CMD_COUNT=' "$HOOK_FILE" | head -1 | cut -d'=' -f2)
+
+  if [[ -n "$hook_expected_skills" && "$hook_expected_skills" -eq "$skill_count" ]]; then
+    pass "Hook EXPECTED_SKILL_COUNT ($hook_expected_skills) matches actual skill count ($skill_count)"
+  else
+    fail "Hook EXPECTED_SKILL_COUNT='$hook_expected_skills' != actual skill count ($skill_count) — stale constant in hooks/session-start"
+  fi
+
+  if [[ -n "$hook_expected_cmds" && "$hook_expected_cmds" -eq "$command_count" ]]; then
+    pass "Hook EXPECTED_CMD_COUNT ($hook_expected_cmds) matches actual command count ($command_count)"
+  else
+    fail "Hook EXPECTED_CMD_COUNT='$hook_expected_cmds' != actual command count ($command_count) — stale constant in hooks/session-start"
+  fi
+else
+  fail "Hook file not readable: $HOOK_FILE"
 fi
 
 # ─── 4b. Enforcement Hooks in Settings ───────────────────────────────────────

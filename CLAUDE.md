@@ -118,7 +118,7 @@ done
 - `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
-- `tests/ARaymond-installation/verify-symlink-install.sh` — 101 checks for symlink+command-stub architecture (no API calls). Run after upstream merges or installation changes.
+- `tests/ARaymond-installation/verify-symlink-install.sh` — 103 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
 - `tests/unit/` — 41 pytest tests: validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
@@ -214,7 +214,7 @@ Four additions to `~/.claude/settings.json`:
 
 ## Three-Layer Test Strategy
 - **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
-- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 101 checks, <1s)
+- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 103 checks, <1s)
 - **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (41 tests, ~10s)
 - **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
 - Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
