@@ -315,7 +315,7 @@ As the controller processes tasks, its own context accumulates. After 5+ tasks, 
 
 1. Run the context summary script:
    ```bash
-   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output context-summary.md
+   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md
    ```
 2. Read `context-summary.md` — this is now your compressed execution state
 3. You no longer need to hold individual report details in context
