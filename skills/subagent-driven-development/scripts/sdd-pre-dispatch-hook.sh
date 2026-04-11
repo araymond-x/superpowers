@@ -449,19 +449,27 @@ fi
 # doesn't exist, inject a WARNING.
 
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
-  # Count total tasks across all plan files.
+  # Count tasks in THE plan file containing the current task, not across
+  # every .md file in docs/imp-plans/ + docs/plans/. Stale plans from
+  # prior features (or modular plans from unrelated sibling features) sit
+  # in these directories and would otherwise inflate TOTAL_TASKS and push
+  # the midpoint past the real halfway point.
   #
-  # NOTE: `grep -c` already prints "0" on zero-match files. The earlier
-  # defensive `|| echo "0"` APPENDED a second "0" on a new line, producing
-  # a multi-line value that crashed the subsequent arithmetic with
-  # "bad math expression". Use `|| true` instead: it suppresses grep's
-  # exit-1-on-no-match without adding extra output.
+  # Scoping strategy: locate the plan file that contains a `### Task N`
+  # header matching the current task number. For modular plans, this
+  # correctly scopes to the module being executed (each module is its own
+  # SDD run, so "midpoint" is per-module).
+  #
+  # NOTE: `grep -c` already prints "0" on zero-match files. Use `|| true`
+  # (not `|| echo "0"`) to suppress grep's exit-1-on-no-match without
+  # appending a second "0" on a new line — see the 2026-04-10 commit for
+  # the multi-line arithmetic crash that idiom caused.
   TOTAL_TASKS=0
   for pf in docs/imp-plans/*.md docs/plans/*.md; do
-    if [ -f "$pf" ]; then
-      TASK_COUNT=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
-      TASK_COUNT=${TASK_COUNT:-0}
-      TOTAL_TASKS=$((TOTAL_TASKS + TASK_COUNT))
+    if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
+      TOTAL_TASKS=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
+      TOTAL_TASKS=${TOTAL_TASKS:-0}
+      break
     fi
   done
 
