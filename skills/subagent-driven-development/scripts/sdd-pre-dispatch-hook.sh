@@ -449,11 +449,18 @@ fi
 # doesn't exist, inject a WARNING.
 
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
-  # Count total tasks across all plan files
+  # Count total tasks across all plan files.
+  #
+  # NOTE: `grep -c` already prints "0" on zero-match files. The earlier
+  # defensive `|| echo "0"` APPENDED a second "0" on a new line, producing
+  # a multi-line value that crashed the subsequent arithmetic with
+  # "bad math expression". Use `|| true` instead: it suppresses grep's
+  # exit-1-on-no-match without adding extra output.
   TOTAL_TASKS=0
   for pf in docs/imp-plans/*.md docs/plans/*.md; do
     if [ -f "$pf" ]; then
-      TASK_COUNT=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || echo "0")
+      TASK_COUNT=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
+      TASK_COUNT=${TASK_COUNT:-0}
       TOTAL_TASKS=$((TOTAL_TASKS + TASK_COUNT))
     fi
   done
