@@ -1,0 +1,21 @@
+# Superpowers hook baseline
+# Regenerate: bash tests/ARaymond-hook-baseline/check-hooks.sh --capture
+
+## Hook script hashes (sha256)
+6bdbf383214e0e29db4644096b2f7c80a7d0ff98d4a3d645e793503d84f75776  hooks/session-start
+f829642ef6af38bf922f631628e40753a94491e7aef3a88dec1570586537196f  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
+5f1981091ff9d9e8d94b999f9c4662995af26a0019574c1ab395c4533970c714  skills/subagent-driven-development/scripts/sdd-report-guard.sh
+0ece19cad8a22543b4a97af3ba00bb745f1bdca5ae68891d4e5318e3135774c5  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
+5455231e268b8a1b8cc3abf8ea9251640f3b11e1281bba1e142c9569117eb42f  skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
+782a70cc0be1dc506220e7d2364e41df0583944f7b399f2743c4a8a36abb523a  skills/handoff-acceptance/scripts/handoff-gate-hook.sh
+2f736c6f36a5ca591f68602c560eb1e158d7041d6d58f1d0a6b128d1e2b087b3  skills/writing-plans/scripts/plan-validation-gate-hook.sh
+
+## Superpowers hook entries in ~/.claude/settings.json
+# Format: <Event>\t<matcher>\t<command>
+PreToolUse	Agent	/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
+PreToolUse	Bash	/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-report-guard.sh
+PreToolUse	Skill	/Users/araymond/projects/claude-custom/superpowers/skills/handoff-acceptance/scripts/handoff-gate-hook.sh
+PreToolUse	Skill	/Users/araymond/projects/claude-custom/superpowers/skills/writing-plans/scripts/plan-validation-gate-hook.sh
+PreToolUse	Write|Edit	/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
+SessionStart	startup|clear|compact	CLAUDE_PLUGIN_ROOT=/Users/araymond/projects/claude-custom/superpowers /Users/araymond/projects/claude-custom/superpowers/hooks/session-start
+Stop		/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-stop-hook.sh
