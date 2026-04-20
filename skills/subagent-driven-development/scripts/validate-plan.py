@@ -45,8 +45,8 @@ HEADER_AREA_LINES = 50
 # Matches "### Task N" task headers (any optional title after the number)
 TASK_HEADER_RE = re.compile(r"^###\s+Task\s+(\d+)", re.MULTILINE | re.IGNORECASE)
 
-# Matches a "Module" header anywhere in the document (signals modular decomposition)
-MODULE_HEADER_RE = re.compile(r"^#{1,4}\s+Module\b", re.MULTILINE | re.IGNORECASE)
+# Matches a heading containing "Module" anywhere (signals modular decomposition)
+MODULE_HEADER_RE = re.compile(r"^#{1,4}\s+.*\bModule\b", re.MULTILINE | re.IGNORECASE)
 
 # Source Contracts header/inline (flexible: with or without colon, any heading level)
 SOURCE_CONTRACTS_RE = re.compile(

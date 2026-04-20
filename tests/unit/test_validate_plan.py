@@ -181,6 +181,33 @@ SINGLE_TASK = """\
 - [ ] Do the thing
 """
 
+# 802 lines with "Module" mid-heading (real writing-plans output format)
+LONG_PLAN_MODULE_MID_HEADING = (
+    "# Slack Agent Bridge v1 Inbound — Module 5: Hooks\n\n"
+    "**Source Contracts**: None\n\n"
+    "### Task 0 — Setup\n- [ ] Scaffolding\n\n"
+    + "\n".join(f"Line {i}" for i in range(796))
+    + "\n"
+)
+
+# 802 lines with "Module" as first word in heading (simple format)
+LONG_PLAN_MODULE_FIRST_WORD = (
+    "# Module 5: Hooks\n\n"
+    "**Source Contracts**: None\n\n"
+    "### Task 0 — Setup\n- [ ] Scaffolding\n\n"
+    + "\n".join(f"Line {i}" for i in range(796))
+    + "\n"
+)
+
+# 802 lines with NO module header at all
+LONG_PLAN_NO_MODULE = (
+    "# Implementation Plan\n\n"
+    "**Source Contracts**: None\n\n"
+    "### Task 0 — Setup\n- [ ] Scaffolding\n\n"
+    + "\n".join(f"Line {i}" for i in range(796))
+    + "\n"
+)
+
 
 # ---------------------------------------------------------------------------
 # Tests: Within-file duplicate detection
@@ -279,6 +306,29 @@ class TestCrossModuleCollisions:
 # ---------------------------------------------------------------------------
 # Tests: Blocker message quality
 # ---------------------------------------------------------------------------
+
+
+class TestModuleHeaderDetection:
+    """Plans over 800 lines must have a Module header to pass."""
+
+    def _has_size_blocker(self, result: dict) -> bool:
+        return any("800-line limit" in b for b in result["output"].get("blockers", []))
+
+    def test_long_plan_with_module_mid_heading_passes(self):
+        """'# Feature Name — Module 5: Hooks' should be recognized as modular."""
+        result = run_validate(LONG_PLAN_MODULE_MID_HEADING)
+        assert not self._has_size_blocker(result), \
+            "Module in mid-heading should satisfy the modular decomposition check"
+
+    def test_long_plan_with_module_first_word_passes(self):
+        """'# Module 5: Hooks' should be recognized as modular."""
+        result = run_validate(LONG_PLAN_MODULE_FIRST_WORD)
+        assert not self._has_size_blocker(result)
+
+    def test_long_plan_without_module_header_blocked(self):
+        """802-line plan with no Module header anywhere should be blocked."""
+        result = run_validate(LONG_PLAN_NO_MODULE)
+        assert self._has_size_blocker(result)
 
 
 class TestBlockerMessages:
