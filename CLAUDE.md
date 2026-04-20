@@ -69,7 +69,7 @@ git fetch upstream && git merge upstream/main
 Known conflict files (always): `CLAUDE.md`, `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.md`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md`
 Likely conflict files (when upstream touches these): `brainstorming/SKILL.md`, `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `using-superpowers/SKILL.md`, `writing-skills/SKILL.md`
 
-Last sync: v5.0.7 (`dd23728`) on 2026-03-31
+Last sync: `b557648` on 2026-04-17
 
 **After merge:** If upstream added new skills, create a matching command stub for each:
 ```bash
@@ -119,7 +119,7 @@ done
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 103 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 41 pytest tests: validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 63 pytest tests: validate-plan.py (task numbering collisions, module header detection), controller-checkpoint.py (stale artifact detection, honesty check gate, trace audit gate, minimum-tier ratio cap), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -215,7 +215,7 @@ Four additions to `~/.claude/settings.json`:
 ## Three-Layer Test Strategy
 - **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
 - **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 103 checks, <1s)
-- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (41 tests, ~10s)
+- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (63 tests, ~12s)
 - **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
 - Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
 

@@ -177,6 +177,33 @@ def find_all_report_files(reports_dir: str) -> list:
     return sorted(glob.glob(pattern))
 
 
+def _count_review_tiers(reports_dir, review_type):
+    # type: (str, str) -> tuple
+    """Count total and minimum-tier reviews of a given type in reports/.
+
+    Args:
+        reports_dir: Path to the reports directory.
+        review_type: Either "quality-review" or "partner-review".
+
+    Returns:
+        (total_count, minimum_tier_count)
+    """
+    if review_type == "quality-review":
+        full_pattern = os.path.join(reports_dir, "task-*-quality-review.md")
+        min_pattern = os.path.join(reports_dir, "task-*-quality-review-minimum-tier.md")
+    elif review_type == "partner-review":
+        full_pattern = os.path.join(reports_dir, "partner-review-*.md")
+        min_pattern = os.path.join(reports_dir, "partner-review-*-minimum-tier.md")
+    else:
+        return (0, 0)
+
+    full_files = set(glob.glob(full_pattern))
+    min_files = set(glob.glob(min_pattern))
+    # Minimum-tier files also match the broader glob, so subtract them
+    full_only = full_files - min_files
+    return (len(full_only) + len(min_files), len(min_files))
+
+
 def validate_report_sections(report_content: str) -> dict:
     """
     Inline implementation of validate-report.py logic.
@@ -873,6 +900,89 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             "detail": f"Incomplete reports: {'; '.join(incomplete_reports)}",
         }
         blockers.append("all_reports_complete")
+
+    # Check 5: Honesty check artifact exists
+    honesty_path = os.path.join(args.reports_dir, "honesty-check-response.md")
+    if os.path.isfile(honesty_path) and file_size_bytes(honesty_path) >= 50:
+        checks["honesty_check_missing"] = {
+            "status": "PASS",
+            "detail": "Honesty check response present",
+        }
+    else:
+        checks["honesty_check_missing"] = {
+            "status": "FAIL",
+            "detail": (
+                "Missing or empty reports/honesty-check-response.md — "
+                "the honesty check must be completed before the Pre-Completion Gate. "
+                "Present the honesty check prompt to the user, save their response, "
+                "then re-run this checkpoint."
+            ),
+        }
+        blockers.append("honesty_check_missing")
+
+    # Check 6: Execution trace audit artifact exists
+    trace_path = os.path.join(args.reports_dir, "execution-trace-audit.md")
+    if os.path.isfile(trace_path) and file_size_bytes(trace_path) >= 50:
+        checks["trace_audit_missing"] = {
+            "status": "PASS",
+            "detail": "Execution trace audit present",
+        }
+    else:
+        checks["trace_audit_missing"] = {
+            "status": "FAIL",
+            "detail": (
+                "Missing or empty reports/execution-trace-audit.md — "
+                "run extract-execution-trace.py and dispatch the trace auditor "
+                "subagent before declaring completion."
+            ),
+        }
+        blockers.append("trace_audit_missing")
+
+    # Check 7: Minimum-tier review ratio cap (>50% triggers blocker)
+    quality_total, quality_min = _count_review_tiers(args.reports_dir, "quality-review")
+    partner_total, partner_min = _count_review_tiers(args.reports_dir, "partner-review")
+
+    if quality_total > 0 and quality_min / quality_total > 0.5:
+        checks["excessive_minimum_tier_quality"] = {
+            "status": "FAIL",
+            "detail": (
+                f"{quality_min}/{quality_total} quality reviews are minimum-tier "
+                f"({round(100 * quality_min / quality_total)}%). "
+                "Tasks touching shared files, multi-file changes, or Pattern References "
+                "should use full dispatched reviews."
+            ),
+        }
+        blockers.append("excessive_minimum_tier_quality")
+    else:
+        checks["excessive_minimum_tier_quality"] = {
+            "status": "PASS",
+            "detail": (
+                f"{quality_min}/{quality_total} quality reviews are minimum-tier"
+                if quality_total > 0
+                else "No quality reviews found"
+            ),
+        }
+
+    if partner_total > 0 and partner_min / partner_total > 0.5:
+        checks["excessive_minimum_tier_partner"] = {
+            "status": "FAIL",
+            "detail": (
+                f"{partner_min}/{partner_total} partner reviews are minimum-tier "
+                f"({round(100 * partner_min / partner_total)}%). "
+                "Tasks with Pattern References, Shared Constants, or multi-file changes "
+                "should have full partner dispatches."
+            ),
+        }
+        blockers.append("excessive_minimum_tier_partner")
+    else:
+        checks["excessive_minimum_tier_partner"] = {
+            "status": "PASS",
+            "detail": (
+                f"{partner_min}/{partner_total} partner reviews are minimum-tier"
+                if partner_total > 0
+                else "No partner reviews found"
+            ),
+        }
 
     pct = (
         round(100 * checkbox_counts["checked"] / checkbox_counts["total"])
