@@ -1,0 +1,184 @@
+"""Tests for Plan Pydantic model and its cross-field validators."""
+import pytest
+from pydantic import ValidationError
+
+from plan import (
+    Plan, Task, Module, SharedConstant, PatternReference, FeatureArchetype,
+)
+from _base import CURRENT_SCHEMA_VERSION
+
+
+MINIMAL_PLAN = {
+    "schema_version": CURRENT_SCHEMA_VERSION,
+    "feature_archetype": "greenfield",
+    "tasks": [{"id": 0, "title": "Setup"}, {"id": 1, "title": "Build"}],
+}
+
+
+class TestPlanGoldenInput:
+    def test_minimal_plan_parses(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        assert plan.feature_archetype == "greenfield"
+        assert len(plan.tasks) == 2
+
+    def test_roundtrip_through_json(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        dumped = plan.model_dump()
+        reparsed = Plan.model_validate(dumped)
+        assert reparsed == plan
+
+
+class TestPlanFieldValidation:
+    def test_missing_tasks_fails(self):
+        data = {"schema_version": CURRENT_SCHEMA_VERSION, "feature_archetype": "greenfield"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["loc"] == ("tasks",)
+
+    def test_missing_feature_archetype_fails(self):
+        data = {"schema_version": CURRENT_SCHEMA_VERSION, "tasks": [{"id": 0, "title": "x"}]}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["loc"] == ("feature_archetype",)
+
+    def test_invalid_archetype_fails(self):
+        data = {**MINIMAL_PLAN, "feature_archetype": "expansion"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+    def test_extra_field_rejected(self):
+        data = {**MINIMAL_PLAN, "bogus_field": "nope"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["type"] == "extra_forbidden"
+
+    @pytest.mark.parametrize("archetype", ["greenfield", "replacement", "extension", "refactor", "migration"])
+    def test_all_valid_archetypes_accepted(self, archetype):
+        data = {**MINIMAL_PLAN, "feature_archetype": archetype}
+        plan = Plan.model_validate(data)
+        assert plan.feature_archetype == archetype
+
+    def test_literal_error_ctx_expected_shape(self):
+        """Pin the shape of Pydantic v2 ctx.expected for literal_error."""
+        data = {**MINIMAL_PLAN, "feature_archetype": "bogus"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        err = exc.value.errors()[0]
+        assert err["type"] == "literal_error"
+        assert "expected" in err.get("ctx", {}), \
+            f"Pydantic literal_error ctx must contain 'expected' key; got {err.get('ctx')}"
+
+
+class TestTaskUniqueSequentialIds:
+    def test_non_sequential_fails(self):
+        data = {**MINIMAL_PLAN, "tasks": [{"id": 0, "title": "a"}, {"id": 5, "title": "b"}]}
+        with pytest.raises(ValidationError, match="sequential ascending"):
+            Plan.model_validate(data)
+
+    def test_duplicate_ids_fail(self):
+        data = {**MINIMAL_PLAN, "tasks": [{"id": 0, "title": "a"}, {"id": 0, "title": "b"}]}
+        with pytest.raises(ValidationError, match="Duplicate"):
+            Plan.model_validate(data)
+
+    def test_sequential_ids_pass(self):
+        data = {**MINIMAL_PLAN, "tasks": [{"id": 0, "title": "a"}, {"id": 1, "title": "b"}, {"id": 2, "title": "c"}]}
+        plan = Plan.model_validate(data)
+        assert len(plan.tasks) == 3
+
+
+class TestDependsOnValidation:
+    def test_invalid_dependency_fails(self):
+        data = {**MINIMAL_PLAN, "tasks": [
+            {"id": 0, "title": "a"},
+            {"id": 1, "title": "b", "depends_on": [99]},
+        ]}
+        with pytest.raises(ValidationError, match="don't exist"):
+            Plan.model_validate(data)
+
+    def test_forward_dependency_fails(self):
+        data = {**MINIMAL_PLAN, "tasks": [
+            {"id": 0, "title": "a", "depends_on": [1]},
+            {"id": 1, "title": "b"},
+        ]}
+        with pytest.raises(ValidationError, match="cannot depend on"):
+            Plan.model_validate(data)
+
+    def test_valid_backward_dependency_passes(self):
+        data = {**MINIMAL_PLAN, "tasks": [
+            {"id": 0, "title": "a"},
+            {"id": 1, "title": "b", "depends_on": [0]},
+        ]}
+        plan = Plan.model_validate(data)
+        assert plan.tasks[1].depends_on == [0]
+
+
+class TestSharedConstantsValidation:
+    def test_undeclared_constant_fails(self):
+        data = {
+            **MINIMAL_PLAN,
+            "tasks": [{"id": 0, "title": "a", "shared_constants_used": ["app.config.X"]}],
+        }
+        with pytest.raises(ValidationError, match="not in plan.shared_constants"):
+            Plan.model_validate(data)
+
+    def test_declared_constant_passes(self):
+        data = {
+            **MINIMAL_PLAN,
+            "shared_constants": [{"path": "app.config.X", "value": "1", "reason": "test"}],
+            "tasks": [{"id": 0, "title": "a", "shared_constants_used": ["app.config.X"]}],
+        }
+        plan = Plan.model_validate(data)
+        assert len(plan.shared_constants) == 1
+
+
+class TestPatternReferencesValidation:
+    def test_undeclared_pattern_fails(self):
+        data = {
+            **MINIMAL_PLAN,
+            "tasks": [{"id": 0, "title": "a", "pattern_references": ["nonexistent"]}],
+        }
+        with pytest.raises(ValidationError, match="not in plan.pattern_references"):
+            Plan.model_validate(data)
+
+    def test_declared_pattern_passes(self):
+        data = {
+            **MINIMAL_PLAN,
+            "pattern_references": [{"name": "p1", "source_files": ["f.py"], "reason": "test"}],
+            "tasks": [{"id": 0, "title": "a", "pattern_references": ["p1"]}],
+        }
+        plan = Plan.model_validate(data)
+        assert plan.tasks[0].pattern_references == ["p1"]
+
+
+class TestModuleValidation:
+    def test_task_claimed_by_two_modules_fails(self):
+        data = {
+            **MINIMAL_PLAN,
+            "modules": [
+                {"id": 1, "title": "A", "task_ids": [0]},
+                {"id": 2, "title": "B", "task_ids": [0]},
+            ],
+        }
+        with pytest.raises(ValidationError, match="claimed by Module"):
+            Plan.model_validate(data)
+
+    def test_orphan_task_fails(self):
+        data = {
+            **MINIMAL_PLAN,
+            "modules": [{"id": 1, "title": "A", "task_ids": [0]}],
+        }
+        with pytest.raises(ValidationError, match="not claimed"):
+            Plan.model_validate(data)
+
+    def test_valid_modules_pass(self):
+        data = {
+            **MINIMAL_PLAN,
+            "modules": [{"id": 1, "title": "All", "task_ids": [0, 1]}],
+        }
+        plan = Plan.model_validate(data)
+        assert len(plan.modules) == 1
+
+    def test_no_modules_is_valid(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        assert plan.modules is None
