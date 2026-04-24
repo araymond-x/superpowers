@@ -33,6 +33,20 @@ if [ ! -d "$DOCS_DIR" ]; then
   exit 0
 fi
 
+# --- Pydantic validation (Phase 1) ---
+PYDANTIC_VALIDATOR="$(dirname "$0")/../../scripts/models/validators.py"
+for PYDANTIC_HANDOFF_DIR in $(find "$DOCS_DIR" -name "README.md" -path "*handoff*" -exec dirname {} \; 2>/dev/null); do
+  if [ -f "$PYDANTIC_VALIDATOR" ] && head -1 "$PYDANTIC_HANDOFF_DIR/README.md" | grep -q '^---$'; then
+    if ! .venv/bin/python3 "$PYDANTIC_VALIDATOR" handoff "$PYDANTIC_HANDOFF_DIR" 2>/tmp/pydantic-handoff-err; then
+      PYDANTIC_EXIT=$?
+      if [ "$PYDANTIC_EXIT" -eq 1 ]; then
+        echo "{\"decision\":\"block\",\"reason\":$(jq -Rs . < /tmp/pydantic-handoff-err 2>/dev/null || cat /tmp/pydantic-handoff-err)}" >&2
+        exit 2
+      fi
+    fi
+  fi
+done
+
 # Check for handoff package directories
 HANDOFF_DIR=$(find "$DOCS_DIR" -type d -name "*handoff*" 2>/dev/null | head -1)
 
