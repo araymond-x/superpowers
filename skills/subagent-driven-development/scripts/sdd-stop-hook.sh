@@ -59,6 +59,50 @@ if [ -z "$PLAN_FILE" ]; then
   exit 0
 fi
 
+# ─── Capture honesty check response to vault ─────────────────────────────────
+# Copies reports/honesty-check-*.md to individual files in the vault so
+# responses accumulate across all projects and are QMD-searchable.
+
+VAULT_DIR="${VAULT_DIR:-}"
+
+if [ -n "$VAULT_DIR" ]; then
+  # Find the most recent honesty check file (glob for honesty-check-*.md)
+  HONESTY_FILE=""
+  for candidate in "${CWD}"/reports/honesty-check-*.md; do
+    if [ -f "$candidate" ] && [ "$(wc -c < "$candidate" | tr -d ' ')" -ge 50 ]; then
+      HONESTY_FILE="$candidate"
+    fi
+  done
+
+  if [ -n "$HONESTY_FILE" ]; then
+    VAULT_HC_DIR="${VAULT_DIR}/References/SDD/honesty-checks"
+    mkdir -p "$VAULT_HC_DIR"
+
+    TODAY=$(date +%Y-%m-%d)
+    BRANCH=$(cd "$CWD" && git branch --show-current 2>/dev/null || echo "unknown")
+    PROJECT=$(cd "$CWD" && basename "$(git rev-parse --show-toplevel 2>/dev/null)" || basename "$CWD")
+
+    # Sanitize branch name for filesystem (replace / with -)
+    SAFE_BRANCH=$(echo "$BRANCH" | tr '/' '-')
+    VAULT_FILE="${VAULT_HC_DIR}/${TODAY}-${PROJECT}-${SAFE_BRANCH}.md"
+
+    # Idempotency: skip if file already exists
+    if [ ! -f "$VAULT_FILE" ]; then
+      {
+        echo "---"
+        echo "type: honesty-check"
+        echo "date: ${TODAY}"
+        echo "project: ${PROJECT}"
+        echo "branch: ${BRANCH}"
+        echo "source: $(basename "$HONESTY_FILE")"
+        echo "---"
+        echo ""
+        cat "$HONESTY_FILE"
+      } > "$VAULT_FILE"
+    fi
+  fi
+fi
+
 # ─── Run pre-completion checkpoint ────────────────────────────────────────────
 
 CHECKPOINT_OUTPUT=$(

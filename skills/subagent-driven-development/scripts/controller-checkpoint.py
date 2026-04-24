@@ -901,9 +901,15 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         }
         blockers.append("all_reports_complete")
 
-    # Check 5: Honesty check artifact exists
-    honesty_path = os.path.join(args.reports_dir, "honesty-check-response.md")
-    if os.path.isfile(honesty_path) and file_size_bytes(honesty_path) >= 50:
+    # Check 5: Honesty check artifact exists (reports/honesty-check-YYYY-MM-DD.md)
+    honesty_matches = sorted(glob.glob(
+        os.path.join(args.reports_dir, "honesty-check-*.md")
+    ))
+    honesty_found = any(
+        os.path.isfile(p) and file_size_bytes(p) >= 50
+        for p in honesty_matches
+    )
+    if honesty_found:
         checks["honesty_check_missing"] = {
             "status": "PASS",
             "detail": "Honesty check response present",
@@ -912,7 +918,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         checks["honesty_check_missing"] = {
             "status": "FAIL",
             "detail": (
-                "Missing or empty reports/honesty-check-response.md — "
+                "Missing or empty reports/honesty-check-YYYY-MM-DD.md — "
                 "the honesty check must be completed before the Pre-Completion Gate. "
                 "Present the honesty check prompt to the user, save their response, "
                 "then re-run this checkpoint."

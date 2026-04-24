@@ -38,4 +38,7 @@ Output this block exactly:
 ════════════════════════════════════════════════════════════════
 ```
 
-After answering honestly, add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.
+After answering honestly:
+1. Save the complete response to `reports/honesty-check-YYYY-MM-DD.md` (required by the pre-completion gate).
+2. Add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review."
+3. Proceed to the Pre-Completion Gate.

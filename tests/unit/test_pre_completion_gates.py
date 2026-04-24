@@ -100,6 +100,7 @@ def run_pre_completion(
     report_files: dict | None = None,
     deviations_content: str = "",
     honesty_check_content: str | None = None,
+    honesty_check_filename: str = "honesty-check-2026-04-17.md",
     trace_audit_content: str | None = None,
 ) -> dict:
     """
@@ -124,7 +125,7 @@ def run_pre_completion(
                 f.write(content)
 
     if honesty_check_content is not None:
-        with open(os.path.join(reports_dir, "honesty-check-response.md"), "w") as f:
+        with open(os.path.join(reports_dir, honesty_check_filename), "w") as f:
             f.write(honesty_check_content)
 
     if trace_audit_content is not None:
@@ -196,10 +197,10 @@ def _make_reports_with_minimum_tier(
 
 
 class TestHonestyCheckGate:
-    """Pre-completion must require reports/honesty-check-response.md."""
+    """Pre-completion must require reports/honesty-check-*.md."""
 
     def test_missing_honesty_check_is_blocker(self):
-        """No honesty-check-response.md → FAIL."""
+        """No honesty-check-*.md → FAIL."""
         reports = _make_full_reports(4)
         result = run_pre_completion(
             FOUR_TASK_PLAN, report_files=reports,
@@ -209,7 +210,7 @@ class TestHonestyCheckGate:
         assert "honesty_check_missing" in result["output"].get("blockers", [])
 
     def test_present_honesty_check_passes(self):
-        """honesty-check-response.md exists with content → no blocker."""
+        """honesty-check-YYYY-MM-DD.md exists with content → no blocker."""
         reports = _make_full_reports(4)
         result = run_pre_completion(
             FOUR_TASK_PLAN, report_files=reports,
@@ -219,7 +220,7 @@ class TestHonestyCheckGate:
         assert "honesty_check_missing" not in result["output"].get("blockers", [])
 
     def test_tiny_honesty_check_is_blocker(self):
-        """honesty-check-response.md under 50 bytes → FAIL (stub file)."""
+        """honesty-check-*.md under 50 bytes → FAIL (stub file)."""
         reports = _make_full_reports(4)
         result = run_pre_completion(
             FOUR_TASK_PLAN, report_files=reports,

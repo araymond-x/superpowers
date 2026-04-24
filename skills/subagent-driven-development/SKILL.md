@@ -466,7 +466,7 @@ This ensures that anyone reading the plan file — including you, after context 
 
 ## Honesty Check (Mandatory before Pre-Completion Gate)
 
-See `references/honesty-check-block.md` for the full honesty check prompt. Present it to the user and STOP — do not self-answer. After the user responds, add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review" and proceed to the Pre-Completion Gate.
+See `references/honesty-check-block.md` for the full prompt. Present it to the user and STOP — do not self-answer. After the user responds, save to `reports/honesty-check-YYYY-MM-DD.md` (gate-required) and add uncertainties from answers 5-9 to DEVIATIONS.md as "Pending." The stop hook copies to the vault automatically.
 
 ## Pre-Completion Gate
 
