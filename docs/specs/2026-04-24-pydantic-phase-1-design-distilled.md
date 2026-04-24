@@ -161,10 +161,12 @@ Same as plan steps 1–9, plus:
 - Step 7: `HandoffPackage.model_validate(frontmatter_dict)` (from `<package-dir>/README.md`)
 - Step 7b (filesystem post-check): iterate `pkg.samples`, verify each `sample.path` resolves to existing file under `package_dir`. On failure: `SAMPLE FILE MISSING` block to stderr, exit 1
 
-### Hook Integration (Modified Shell Scripts)
-Three existing shell scripts modified to call the Python validator:
+### Hook Integration (4 Modified Files)
+Four existing files modified to call the Python validator:
 
-**`plan-validation-gate-hook.sh`** — wraps validator stderr in JSON:
+**`validate-plan.py`** (Python) — routes to Pydantic when YAML frontmatter detected; hard FAIL without it
+
+**`plan-validation-gate-hook.sh`** (shell) — wraps Python validator stderr in JSON:
 ```bash
 if ! python3 -m skills.scripts.models.validators plan "$PLAN_FILE" 2>/tmp/validator-err; then
   cat <<EOF
@@ -174,9 +176,9 @@ EOF
 fi
 ```
 
-**`check-handoff.sh`** — calls `validators.py handoff <package-dir>`
+**`check-handoff.sh`** (shell) — calls `validators.py handoff <package-dir>`
 
-**`validate-plan.py`** — routes to Pydantic when YAML frontmatter detected; hard FAIL without it
+**`handoff-gate-hook.sh`** (shell) — wraps handoff validator stderr in JSON (same pattern as plan hook)
 
 ### Prompt Template Updates (Ship Atomically With Validators)
 
@@ -283,29 +285,33 @@ Two new checks in `verify-symlink-install.sh`:
 
 ## Acceptance Criteria
 
-- [ ] `skills/scripts/models/` exists with `__init__.py`, `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
-- [ ] `Plan` validates 5 cross-field relationships
-- [ ] `HandoffPackage` validates 2 in-model cross-field relationships
-- [ ] `validators.py` handoff subcommand performs filesystem post-check with `SAMPLE FILE MISSING` header
-- [ ] Two base classes: `StrictModel` (nested, `extra="forbid"`) and `SchemaVersionedModel` (top-level, `schema_version` + pin)
-- [ ] Only `Plan` and `HandoffPackage` inherit `SchemaVersionedModel`; all nested types inherit `StrictModel`
-- [ ] Error formatter produces split YAML-parse vs Pydantic-validation blocks with field paths, expected/got, hints
-- [ ] CLI supports `plan`, `handoff`, `--schema-version N` forensic flag
-- [ ] CLI honors `SUPERPOWERS_VALIDATOR_BYPASS=1` (exit 0 + stderr warning with `BYPASS`)
-- [ ] Exit codes: 0/1/2
-- [ ] Unit test pins `err["ctx"]["expected"]` shape for `literal_error`
-- [ ] `jq` availability verified in hook execution (distinct infrastructure-failure message if missing)
-- [ ] `plan-validation-gate-hook.sh` invokes Python validator, wraps stderr in JSON
-- [ ] `check-handoff.sh` invokes Python validator with `package_dir`
-- [ ] `validate-plan.py` hard-FAILs without YAML frontmatter
-- [ ] `writing-plans/SKILL.md` instructs YAML frontmatter format
-- [ ] `handoff-acceptance/references/handoff-package-spec.md` updated with YAML template
-- [ ] `CLAUDE.md` has Pydantic section (schema location, version bumps, bypass)
-- [ ] Pydantic v2.7+ in `requirements.txt`
-- [ ] `verify-symlink-install.sh` has 2 new Pydantic checks (total 105)
-- [ ] ~45 new unit tests pass
-- [ ] Pre-ship smoke test present with auto-discovery fixture parametrization
-- [ ] `_smoke-test-plans/` populated with 5+ frontmatter-ified plans, all PASS
-- [ ] `_smoke-test-plans/` deleted in merge commit
-- [ ] Meta-design doc exists with all 12 sections
-- [ ] All existing tests continue to pass
+Verbatim from the full design spec — this is the implementation contract.
+
+- [ ] `skills/scripts/models/` directory exists with `__init__.py`, `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
+- [ ] `Plan` Pydantic model validates the 5 cross-field relationships (unique-sequential IDs, depends_on resolution, shared_constants_used declared, pattern_references declared, module_task_ids consistent)
+- [ ] `HandoffPackage` Pydantic model validates the 2 in-model cross-field relationships (format_rules reference declared fields, at_least_one_sample)
+- [ ] `validators.py` `handoff` subcommand performs a post-parse filesystem existence check on every `sample.path`. On failure, emits an error block with the header `SAMPLE FILE MISSING` (distinct from the Pydantic formatter's `VALIDATION FAILED` header and the YAML formatter's `YAML PARSE FAILED` header). This check lives in the CLI wrapper, NOT in a Pydantic `@model_validator`
+- [ ] Two base classes defined: `StrictModel` (nested types — `extra="forbid"`, no schema_version) and `SchemaVersionedModel(StrictModel)` (top-level artifacts — adds schema_version + version check)
+- [ ] Only top-level models (`Plan`, `HandoffPackage`) inherit `SchemaVersionedModel`; all nested types (`Task`, `Module`, `SharedConstant`, `PatternReference`, `FieldType`, `FormatRule`, `Sample`) inherit `StrictModel`
+- [ ] `SchemaVersionedModel` enforces `CURRENT_SCHEMA_VERSION` match via `@field_validator`; `StrictModel` enforces `extra="forbid"`
+- [ ] Error formatter produces split YAML-parse vs Pydantic-validation blocks with field paths, expected/got, and schema_version hint
+- [ ] CLI entry point supports `plan`, `handoff`, and `--schema-version N` forensic flag
+- [ ] CLI honors `SUPERPOWERS_VALIDATOR_BYPASS=1` env var: exits 0 with a stderr warning containing the string `BYPASS` — unit test asserts both exit code and warning presence
+- [ ] CLI exit codes: 0 pass / 1 validation fail / 2 infrastructure
+- [ ] Unit test pins the shape of Pydantic v2 `err["ctx"]["expected"]` for `literal_error` entries, guarding against future Pydantic version drift in the error-formatter's `ctx.expected` access
+- [ ] `jq` availability verified in every hook execution environment (add an install-verify check); if unavailable, hooks emit a distinct infrastructure-failure message rather than a confusing `jq: not found` error
+- [ ] `plan-validation-gate-hook.sh` invokes the Python validator and wraps stderr in JSON block
+- [ ] `check-handoff.sh` invokes the Python validator and passes `package_dir` context
+- [ ] `validate-plan.py` hard-FAILs on plans without YAML frontmatter
+- [ ] `skills/writing-plans/SKILL.md` instructs authors to use the new YAML frontmatter format
+- [ ] `skills/handoff-acceptance/references/handoff-package-spec.md` updated with YAML frontmatter template
+- [ ] `CLAUDE.md` (fork root) has a new Pydantic section documenting schema location, version bumps, bypass env var
+- [ ] Pydantic v2.7+ added to `requirements.txt`
+- [ ] `verify-symlink-install.sh` includes 2 new Pydantic checks (total 105)
+- [ ] ~45 new unit tests pass across `tests/unit/test_models/`, `tests/unit/test_validators/`, `tests/unit/test_hooks_pydantic.py`
+- [ ] Pre-ship smoke test file (`tests/unit/test_smoke_real_plans.py`) present with auto-discovery fixture parametrization
+- [ ] `tests/fixtures/_smoke-test-plans/` populated with 5+ YAML-frontmatter-ified copies of post-2026-04-08 plans — all PASS the validator before merge
+- [ ] `tests/fixtures/_smoke-test-plans/` deleted in the merge commit
+- [ ] Meta-design doc (`docs/plans/2026-04-24-pydantic-meta-design.md`) exists and covers all 12 sections per its table of contents
+- [ ] Distilled spec (`2026-04-24-pydantic-phase-1-design-distilled.md`) exists, <500 lines, has Contract Facts section, no exploration artifacts
+- [ ] All existing tests continue to pass after changes (`pytest tests/unit/`, `validate-all-skills.py`, `verify-symlink-install.sh`)

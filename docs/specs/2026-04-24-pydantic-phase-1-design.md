@@ -58,7 +58,7 @@ skills/
 │       ├── __init__.py
 │       ├── _base.py                  # SchemaVersionedModel, versioning helpers
 │       ├── plan.py                   # Plan, Task, Module, SharedConstant, PatternReference
-│       ├── handoff.py                # HandoffPackage, ContractConstraints, FieldType
+│       ├── handoff.py                # HandoffPackage, FieldType, FormatRule, Sample
 │       ├── errors.py                 # ValidationError → human-readable formatter
 │       └── validators.py             # CLI entry points for hook consumption
 ├── subagent-driven-development/
@@ -185,7 +185,7 @@ class PatternReference(StrictModel):     # nested — no schema_version
     reason: str
 
 class Task(StrictModel):                 # nested — no schema_version
-    id: int                # zero-padded sequential across all modules
+    id: int                # sequential across all modules
     title: str
     module_id: int | None = None
     depends_on: list[int] = Field(default_factory=list)
@@ -650,7 +650,7 @@ Every top-level model gets:
 One test class per `@model_validator`. Each class has ≥1 failing test (bad input → expected error) and ≥1 passing test (edge case at the boundary of valid).
 
 Plan model: 5 validators × 5–8 tests each = 25–40 tests.
-HandoffPackage model: 3 validators × 3–5 tests each = 9–15 tests.
+HandoffPackage model: 2 validators × 3–5 tests each = 6–10 tests.
 
 ### 6.4 CLI Entry-Point Tests
 
