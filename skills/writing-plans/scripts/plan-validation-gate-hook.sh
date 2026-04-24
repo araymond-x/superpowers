@@ -171,14 +171,14 @@ if [ -f "$PYDANTIC_VALIDATOR" ]; then
   for pf in "${PLAN_FILES[@]}"; do
     # Only validate files with YAML frontmatter
     if head -1 "$pf" | grep -q '^---$'; then
-      if ! .venv/bin/python3 "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err; then
-        PYDANTIC_EXIT=$?
+      .venv/bin/python3 "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err
+      PYDANTIC_EXIT=$?
+      if [ "$PYDANTIC_EXIT" -ne 0 ]; then
         if [ "$PYDANTIC_EXIT" -eq 1 ]; then
           ERRORS+=("Pydantic validation failed for $pf")
           PYDANTIC_ERR=$(jq -Rs . < /tmp/pydantic-validator-err 2>/dev/null || cat /tmp/pydantic-validator-err)
           echo -e "  [FAIL] Pydantic: $pf" >&2
-        fi
-        if [ "$PYDANTIC_EXIT" -eq 2 ]; then
+        elif [ "$PYDANTIC_EXIT" -eq 2 ]; then
           echo -e "  [WARN] Pydantic validator infrastructure error for $pf" >&2
         fi
       fi

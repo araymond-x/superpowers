@@ -16,14 +16,14 @@ FILE="$1"
 PYDANTIC_VALIDATOR="$(dirname "$0")/../../scripts/models/validators.py"
 HANDOFF_DIR="$(dirname "$FILE")"
 if [ -f "$PYDANTIC_VALIDATOR" ] && head -1 "$FILE" | grep -q '^---$'; then
-  if ! .venv/bin/python3 "$PYDANTIC_VALIDATOR" handoff "$HANDOFF_DIR" 2>/tmp/pydantic-handoff-err; then
-    PYDANTIC_EXIT=$?
+  PYDANTIC_EXIT=0
+  .venv/bin/python3 "$PYDANTIC_VALIDATOR" handoff "$HANDOFF_DIR" 2>/tmp/pydantic-handoff-err || PYDANTIC_EXIT=$?
+  if [ "$PYDANTIC_EXIT" -ne 0 ]; then
     if [ "$PYDANTIC_EXIT" -eq 1 ]; then
       ERR_TEXT=$(cat /tmp/pydantic-handoff-err)
       echo "{\"status\": \"FAIL\", \"message\": \"Pydantic validation failed\", \"detail\": $(echo "$ERR_TEXT" | jq -Rs . 2>/dev/null || echo "\"$ERR_TEXT\"")}"
       exit 1
-    fi
-    if [ "$PYDANTIC_EXIT" -eq 2 ]; then
+    elif [ "$PYDANTIC_EXIT" -eq 2 ]; then
       echo "  [WARN] Pydantic validator infrastructure error for $FILE" >&2
     fi
   fi

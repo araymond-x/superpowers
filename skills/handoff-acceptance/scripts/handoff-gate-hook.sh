@@ -37,8 +37,9 @@ fi
 PYDANTIC_VALIDATOR="$(dirname "$0")/../../scripts/models/validators.py"
 for PYDANTIC_HANDOFF_DIR in $(find "$DOCS_DIR" -name "README.md" -path "*handoff*" -exec dirname {} \; 2>/dev/null); do
   if [ -f "$PYDANTIC_VALIDATOR" ] && head -1 "$PYDANTIC_HANDOFF_DIR/README.md" | grep -q '^---$'; then
-    if ! .venv/bin/python3 "$PYDANTIC_VALIDATOR" handoff "$PYDANTIC_HANDOFF_DIR" 2>/tmp/pydantic-handoff-err; then
-      PYDANTIC_EXIT=$?
+    .venv/bin/python3 "$PYDANTIC_VALIDATOR" handoff "$PYDANTIC_HANDOFF_DIR" 2>/tmp/pydantic-handoff-err
+    PYDANTIC_EXIT=$?
+    if [ "$PYDANTIC_EXIT" -ne 0 ]; then
       if [ "$PYDANTIC_EXIT" -eq 1 ]; then
         echo "{\"decision\":\"block\",\"reason\":$(jq -Rs . < /tmp/pydantic-handoff-err 2>/dev/null || cat /tmp/pydantic-handoff-err)}" >&2
         exit 2
