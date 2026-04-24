@@ -102,6 +102,79 @@ def validate_plan(path: str, schema_version: int | None = None) -> int:
     return 0
 
 
+def validate_handoff(path: str, schema_version: int | None = None) -> int:
+    """Validate a handoff package directory. Returns exit code."""
+    pkg_dir = Path(path)
+    readme_path = pkg_dir / "README.md"
+
+    if not readme_path.is_file():
+        print(f"README.md not found in {path}", file=sys.stderr)
+        return 2
+
+    if _check_bypass():
+        return 0
+
+    text = readme_path.read_text(encoding="utf-8")
+    frontmatter_yaml = _extract_frontmatter(text)
+
+    if frontmatter_yaml is None:
+        print(
+            f"No YAML frontmatter found in {readme_path}. "
+            "This handoff predates the Phase 1 Pydantic cutover — "
+            "add YAML frontmatter to validate it.",
+            file=sys.stderr,
+        )
+        return 1
+
+    try:
+        data = yaml.safe_load(frontmatter_yaml)
+    except yaml.YAMLError as e:
+        print(format_yaml_error(e, str(readme_path)), file=sys.stderr)
+        return 1
+
+    if data is None:
+        data = {}
+
+    try:
+        pkg = HandoffPackage.model_validate(data)
+    except ValidationError as e:
+        print(format_validation_error(e, str(readme_path)), file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(
+            f"VALIDATOR CRASHED (this is a bug in the validator, not your artifact): "
+            f"{type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        return 2
+
+    # Filesystem post-check: verify sample files exist
+    missing = []
+    for sample in pkg.samples:
+        full = pkg_dir / sample.path
+        if not full.is_file():
+            missing.append((sample.path, str(full)))
+
+    if missing:
+        lines = [
+            "═══════════════════════════════════════════════════════════════════",
+            f" SAMPLE FILE MISSING: {readme_path}",
+            f" {len(missing)} sample file(s) not found on disk.",
+            "═══════════════════════════════════════════════════════════════════",
+            "",
+        ]
+        for i, (rel, abs_path) in enumerate(missing, 1):
+            lines.append(f"[{i}] Declared: {rel}")
+            lines.append(f"    Resolved: {abs_path}")
+            lines.append(f"    Status:   file does not exist")
+            lines.append("")
+        lines.append("═══════════════════════════════════════════════════════════════════")
+        print("\n".join(lines), file=sys.stderr)
+        return 1
+
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pydantic artifact validator")
     parser.add_argument("command", choices=["plan", "handoff"])
@@ -117,8 +190,7 @@ def main() -> None:
     if args.command == "plan":
         sys.exit(validate_plan(args.path, args.schema_version))
     elif args.command == "handoff":
-        print("Handoff validation not yet implemented", file=sys.stderr)
-        sys.exit(2)
+        sys.exit(validate_handoff(args.path, args.schema_version))
 
 
 if __name__ == "__main__":
