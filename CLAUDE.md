@@ -9,6 +9,7 @@ When a prompt says "invoke skill X" or "use skill X" → load it via the **Skill
 - **Customization Manifest**: `docs/ARaymond-customization-manifest.md` — complete inventory of every modification, installation steps, upstream sync, rollback procedures. Start here for "what was changed and why."
 - **Skills Best Practices**: `docs/ARaymond-skills-best-practices.md` — operational learnings: enforcement layers, hook patterns, testing strategy, common failure modes. Consult when building or modifying skills.
 - **Prompting Best Practices**: `docs/prompting-best-practices.md` — Claude 4.6 prompt engineering reference for skill/prompt template authoring.
+- **External References**: `docs/external-references/` — captured external content (LinkedIn posts, articles) used as input for fork improvement planning. Files named `YYYY-MM-DD-<topic>.md`. Mirror into Obsidian vault `References/` for QMD searchability.
 
 ## Documentation Maintenance
 After each production-deployable update to the fork, review:
@@ -115,11 +116,13 @@ done
 ```
 
 ## Testing
+Quick reference: 4 test layers — regression (static, 122 checks), install (static, 103 checks), unit (pytest, 70 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+
 - `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 103 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 63 pytest tests: validate-plan.py (task numbering collisions, module header detection), controller-checkpoint.py (stale artifact detection, honesty check gate, trace audit gate, minimum-tier ratio cap), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 70 pytest tests: validate-plan.py (task numbering collisions, module header detection), controller-checkpoint.py (stale artifact detection, honesty check gate, trace audit gate, minimum-tier ratio cap), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log global capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -159,7 +162,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Consolidated recommendations: `docs/plans/prompt-optimization/phase-5-consolidated-recommendations.md`
 - 171 changes applied in 3 passes: descriptions + XML + roles (Pass 1), de-escalation + positive framing (Pass 2), motivation + thinking + agentic patterns (Pass 3)
 - Key changes: `<EXTREMELY-IMPORTANT>` → `<important>`, aggressive MUST/NEVER → direct imperatives, Red Flags → Required Practices/positive framing, role statements added to all prompt templates
-- SDD SKILL.md is at 4983/5000 words (99.7%) — critically near limit. Any addition requires extracting content to `references/` first.
+- SDD SKILL.md is at 5029 words — **over the 5000-word soft limit**. Any addition MUST be offset by extracting existing content to `references/` first. Re-check with `wc -w skills/subagent-driven-development/SKILL.md` before editing.
 
 ## Hooks-Based Enforcement
 - Skill frontmatter hooks do NOT fire for symlink-installed skills (confirmed 2026-03-24). Use `~/.claude/settings.json` with absolute paths instead.
@@ -179,6 +182,11 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Rollback: remove Agent matcher block and sdd-report-guard.sh entry from PreToolUse in `~/.claude/settings.json`
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
+- **Pre-Completion Gates** (added 2026-04-21, commit `1de0a5f`): `controller-checkpoint.py` pre-completion phase blocks on three additional checks before allowing SDD completion:
+  - Honesty check log present (`reports/honesty-check.md`, 9 required questions answered)
+  - Trace audit complete (`reports/trace-audit.md` from `extract-execution-trace.py` + `trace-auditor-prompt.md`)
+  - Minimum-tier quality review ratio ≤ 20% (too many minimum-tier reviews triggers FAIL)
+- Stop hook (`sdd-stop-hook.sh`) captures honesty logs globally so trace audit can cross-reference across sessions.
 
 ## Worktree Sessions
 - Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`
@@ -211,13 +219,6 @@ Four additions to `~/.claude/settings.json`:
 - Distilled specs → `docs/specs/YYYY-MM-DD-<topic>-design-distilled.md` (from brainstorming)
 - Implementation plans → `docs/imp-plans/YYYY-MM-DD-<feature-name>.md` (from writing-plans)
 - Project plans/reviews → `docs/plans/` (existing convention, not changed)
-
-## Three-Layer Test Strategy
-- **After any skill edit**: `python3 tests/ARaymond-skill-regression/validate-all-skills.py` (static, 122 checks, <1s)
-- **After installation changes**: `bash tests/ARaymond-installation/verify-symlink-install.sh` (static, 103 checks, <1s)
-- **After script changes**: `.venv/bin/python3 -m pytest tests/unit/ -v` (63 tests, ~12s)
-- **After skill content changes**: `bash tests/ARaymond-skill-behavior/run-all.sh` (API calls, ~15 min, tests actual Claude behavior)
-- Structural PASS does not mean semantic PASS — always run both static and behavioral tests for significant changes
 
 ## Behavioral Test Gotchas
 - Test scripts use `grep -E` (ERE): alternation is `|` not `\|` (BRE). Wrong syntax silently fails to match.
