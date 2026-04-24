@@ -129,15 +129,23 @@ These are deletion candidates only after Phase 7 audit confirms no active consum
 
 ### 2.1 Shared Base — `skills/scripts/models/_base.py`
 
+Two base classes — `StrictModel` for nested types, `SchemaVersionedModel` for top-level artifacts.
+
 ```python
 from pydantic import BaseModel, field_validator, ConfigDict
-from typing import ClassVar
 
 CURRENT_SCHEMA_VERSION = 1
 
-class SchemaVersionedModel(BaseModel):
-    """Base class for all versioned schema models."""
-    model_config = ConfigDict(extra="forbid")  # reject unknown fields — catches typos
+class StrictModel(BaseModel):
+    """Base for NESTED models (Task, Module, SharedConstant, FieldType, Sample, etc.).
+    Forbids unknown fields (typo safety) but does NOT require schema_version —
+    only top-level artifacts declare that."""
+    model_config = ConfigDict(extra="forbid")
+
+
+class SchemaVersionedModel(StrictModel):
+    """Base for TOP-LEVEL artifact models (Plan, HandoffPackage, and future artifacts).
+    Adds the required `schema_version` field and pins it to CURRENT_SCHEMA_VERSION."""
     schema_version: int
 
     @field_validator("schema_version")
@@ -153,29 +161,30 @@ class SchemaVersionedModel(BaseModel):
 ```
 
 **Key design choices:**
-- `extra="forbid"` — unknown fields are rejected (catches `task_deps:` vs `depends_on:` typos at validation time)
-- `SchemaVersionedModel` is the only place `CURRENT_SCHEMA_VERSION` is checked — every downstream model inherits the check automatically
+- **Two base classes, not one.** `schema_version` is a property of *artifacts* (top-level things that exist as files on disk), not of every nested data type. Making every `Task` or `Sample` carry a `schema_version` field would force verbose YAML (`schema_version: 1` repeated on every list entry) and conflate artifact identity with data shape.
+- `extra="forbid"` on both bases — unknown fields are rejected (catches `task_deps:` vs `depends_on:` typos at validation time)
+- `SchemaVersionedModel` is the only place `CURRENT_SCHEMA_VERSION` is checked — only top-level artifacts inherit the check, exactly where it belongs.
 
 ### 2.2 `Plan` Schema — `skills/scripts/models/plan.py`
 
 ```python
 from typing import Literal
 from pydantic import Field, model_validator
-from ._base import SchemaVersionedModel
+from ._base import StrictModel, SchemaVersionedModel
 
 FeatureArchetype = Literal["greenfield", "replacement", "extension", "refactor", "migration"]
 
-class SharedConstant(SchemaVersionedModel):
+class SharedConstant(StrictModel):       # nested — no schema_version
     path: str              # e.g., "app.config.RETENTION_DAYS"
     value: str             # stringified — actual import verification is in Task 0
     reason: str            # why this constant matters for the plan
 
-class PatternReference(SchemaVersionedModel):
+class PatternReference(StrictModel):     # nested — no schema_version
     name: str              # e.g., "db-migration-pattern"
     source_files: list[str]
     reason: str
 
-class Task(SchemaVersionedModel):
+class Task(StrictModel):                 # nested — no schema_version
     id: int                # zero-padded sequential across all modules
     title: str
     module_id: int | None = None
@@ -183,12 +192,12 @@ class Task(SchemaVersionedModel):
     pattern_references: list[str] = Field(default_factory=list)
     shared_constants_used: list[str] = Field(default_factory=list)
 
-class Module(SchemaVersionedModel):
+class Module(StrictModel):               # nested — no schema_version
     id: int
     title: str
     task_ids: list[int]
 
-class Plan(SchemaVersionedModel):
+class Plan(SchemaVersionedModel):        # TOP-LEVEL — schema_version required
     feature_archetype: FeatureArchetype
     source_contracts: str | None = None
     shared_constants: list[SharedConstant] = Field(default_factory=list)
@@ -278,25 +287,25 @@ class Plan(SchemaVersionedModel):
 ```python
 from typing import Literal
 from pydantic import Field, model_validator
-from ._base import SchemaVersionedModel
+from ._base import StrictModel, SchemaVersionedModel
 
 FieldTypeKind = Literal["string", "integer", "float", "boolean", "date", "enum"]
 
-class FieldType(SchemaVersionedModel):
+class FieldType(StrictModel):            # nested — no schema_version
     name: str
     kind: FieldTypeKind
     format_hint: str | None = None
     nullable: bool = False
 
-class FormatRule(SchemaVersionedModel):
+class FormatRule(StrictModel):           # nested — no schema_version
     applies_to: list[str]
     rule: str
 
-class Sample(SchemaVersionedModel):
+class Sample(StrictModel):               # nested — no schema_version
     path: str
     description: str
 
-class HandoffPackage(SchemaVersionedModel):
+class HandoffPackage(SchemaVersionedModel):  # TOP-LEVEL — schema_version required
     package_name: str
     feeds_into: str
     one_sentence_purpose: str
@@ -320,26 +329,14 @@ class HandoffPackage(SchemaVersionedModel):
         if not self.samples:
             raise ValueError("HandoffPackage must include at least one sample")
         return self
-
-    @model_validator(mode="after")
-    def samples_point_to_real_files(self, info) -> "HandoffPackage":
-        pkg_dir = info.context.get("package_dir") if info.context else None
-        if pkg_dir is None:
-            return self
-        from pathlib import Path
-        for sample in self.samples:
-            full = Path(pkg_dir) / sample.path
-            if not full.is_file():
-                raise ValueError(
-                    f"Sample references {sample.path} but file does not exist at {full}"
-                )
-        return self
 ```
+
+**Note on filesystem validation (see Section 2.5):** the check that `sample.path` files actually exist on disk is performed by the CLI wrapper AFTER `HandoffPackage.model_validate()` succeeds — NOT inside a `@model_validator`. Pydantic models validate data shape; I/O against external state (filesystem, network, database) belongs in the caller. This keeps the model pure and testable without filesystem mocking, and avoids the Pydantic-v2 context-injection complexity.
 
 **What this unlocks that `check-handoff.sh` doesn't do today:**
 - Typed contract constraints (vs. prose bullets in the first 50 lines)
 - Format rules cross-referenced to declared field types
-- Sample files verified to exist on disk
+- Sample files verified to exist on disk (via CLI wrapper, post-parse)
 - Machine-readable contract for downstream pipeline agents
 
 ### 2.4 Error Formatter — `skills/scripts/models/errors.py`
@@ -425,6 +422,21 @@ python3 -m skills.scripts.models.validators plan path/to/plan.md --schema-versio
 
 **Exit code convention:** 0 = pass, 1 = validation failure (producer fix needed), 2 = infrastructure/setup/usage problem.
 
+**Handoff filesystem post-check:** the `handoff` command performs a two-step validation:
+
+1. **Step 1 — Shape validation.** Extract YAML frontmatter from `<package-dir>/README.md`, parse into a dict, call `HandoffPackage.model_validate(frontmatter_dict)`. If this fails, emit formatted Pydantic error, exit 1.
+2. **Step 2 — Filesystem cross-check.** After Step 1 passes, iterate `pkg.samples` and verify each `sample.path` resolves to an existing file under the package directory:
+
+   ```python
+   for sample in pkg.samples:
+       full = package_dir / sample.path
+       if not full.is_file():
+           print(f"Sample references {sample.path} but file does not exist at {full}", file=sys.stderr)
+           exit(1)
+   ```
+
+Step 2 produces its own hook-friendly error block (same box-drawing style as the Pydantic formatter, distinct header: `SAMPLE FILE MISSING`). This separation keeps the Pydantic model pure (no I/O) while preserving the filesystem check as a first-class gate.
+
 ---
 
 ## Section 3 — Data Flow
@@ -459,19 +471,21 @@ Producer agent writes handoff package directory (README.md has YAML frontmatter)
 Consumer agent invokes superpowers:handoff-acceptance
     ↓
 handoff-gate-hook.sh:
-    1. check-handoff.sh (MODIFIED)
+    1. check-handoff.sh (MODIFIED) — invokes validators.py `handoff` subcommand
          ├─ YAML frontmatter in README.md? ── NO → HARD FAIL
-         └─ YES → extract, parse with HandoffPackage.model_validate(
-              frontmatter_dict, context={"package_dir": <path>}
-            )
-              ├─ PASS → continue
-              └─ FAIL → format_validation_error → stderr → exit 1 → gate blocks
+         └─ YES → two-step validation:
+              Step 1: extract, parse with HandoffPackage.model_validate(frontmatter_dict)
+                  ├─ PASS → continue to Step 2
+                  └─ FAIL → format_validation_error → stderr → exit 1 → gate blocks
+              Step 2: CLI wrapper verifies each sample.path exists under package_dir
+                  ├─ PASS → continue
+                  └─ FAIL → "SAMPLE FILE MISSING" block → stderr → exit 1 → gate blocks
     2. (existing) Contract summary surface check (unchanged in Phase 1)
     ↓
 Gate PASS → consumer proceeds with brainstorming/planning
 ```
 
-The `context={"package_dir": <path>}` injection enables the `samples_point_to_real_files` validator to cross-check filesystem state.
+Filesystem existence checks live in the CLI wrapper (Section 2.5), not inside the Pydantic model. This keeps the model pure and testable without filesystem mocking.
 
 ### 3.3 Producer Iteration Loop (Headline Feature)
 
@@ -704,12 +718,17 @@ A companion doc at `docs/plans/2026-04-24-pydantic-meta-design.md` locks in arch
 
 - [ ] `skills/scripts/models/` directory exists with `__init__.py`, `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
 - [ ] `Plan` Pydantic model validates the 5 cross-field relationships (unique-sequential IDs, depends_on resolution, shared_constants_used declared, pattern_references declared, module_task_ids consistent)
-- [ ] `HandoffPackage` Pydantic model validates the 3 cross-field relationships (format_rules reference declared fields, at_least_one_sample, samples_point_to_real_files)
-- [ ] `SchemaVersionedModel` base enforces `CURRENT_SCHEMA_VERSION` match and `extra="forbid"`
+- [ ] `HandoffPackage` Pydantic model validates the 2 in-model cross-field relationships (format_rules reference declared fields, at_least_one_sample)
+- [ ] `validators.py` `handoff` subcommand performs a post-parse filesystem existence check on every `sample.path`. On failure, emits an error block with the header `SAMPLE FILE MISSING` (distinct from the Pydantic formatter's `VALIDATION FAILED` header and the YAML formatter's `YAML PARSE FAILED` header). This check lives in the CLI wrapper, NOT in a Pydantic `@model_validator`
+- [ ] Two base classes defined: `StrictModel` (nested types — `extra="forbid"`, no schema_version) and `SchemaVersionedModel(StrictModel)` (top-level artifacts — adds schema_version + version check)
+- [ ] Only top-level models (`Plan`, `HandoffPackage`) inherit `SchemaVersionedModel`; all nested types (`Task`, `Module`, `SharedConstant`, `PatternReference`, `FieldType`, `FormatRule`, `Sample`) inherit `StrictModel`
+- [ ] `SchemaVersionedModel` enforces `CURRENT_SCHEMA_VERSION` match via `@field_validator`; `StrictModel` enforces `extra="forbid"`
 - [ ] Error formatter produces split YAML-parse vs Pydantic-validation blocks with field paths, expected/got, and schema_version hint
 - [ ] CLI entry point supports `plan`, `handoff`, and `--schema-version N` forensic flag
-- [ ] CLI honors `SUPERPOWERS_VALIDATOR_BYPASS=1` env var with stderr warning
+- [ ] CLI honors `SUPERPOWERS_VALIDATOR_BYPASS=1` env var: exits 0 with a stderr warning containing the string `BYPASS` — unit test asserts both exit code and warning presence
 - [ ] CLI exit codes: 0 pass / 1 validation fail / 2 infrastructure
+- [ ] Unit test pins the shape of Pydantic v2 `err["ctx"]["expected"]` for `literal_error` entries, guarding against future Pydantic version drift in the error-formatter's `ctx.expected` access
+- [ ] `jq` availability verified in every hook execution environment (add an install-verify check); if unavailable, hooks emit a distinct infrastructure-failure message rather than a confusing `jq: not found` error
 - [ ] `plan-validation-gate-hook.sh` invokes the Python validator and wraps stderr in JSON block
 - [ ] `check-handoff.sh` invokes the Python validator and passes `package_dir` context
 - [ ] `validate-plan.py` hard-FAILs on plans without YAML frontmatter

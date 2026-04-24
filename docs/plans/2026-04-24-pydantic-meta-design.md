@@ -107,7 +107,7 @@ All shared Pydantic models live in `skills/scripts/models/`:
 ```
 skills/scripts/models/
 ├── __init__.py
-├── _base.py              # SchemaVersionedModel + CURRENT_SCHEMA_VERSION constants
+├── _base.py              # StrictModel, SchemaVersionedModel, CURRENT_SCHEMA_VERSION
 ├── plan.py               # Phase 1
 ├── handoff.py            # Phase 1
 ├── errors.py             # Formatter
@@ -118,13 +118,35 @@ skills/scripts/models/
 └── ...
 ```
 
-### 5.2 Principles
+### 5.2 Two-Base-Class Pattern (Locked — Phase 1)
+
+`_base.py` defines two base classes with clear division of responsibility:
+
+| Base class | For | Enforces |
+|-----------|-----|----------|
+| `StrictModel(BaseModel)` | **Nested types** (Task, Module, SharedConstant, FieldType, Sample, etc.) | `extra="forbid"` (unknown fields rejected) |
+| `SchemaVersionedModel(StrictModel)` | **Top-level artifacts** (Plan, HandoffPackage, ImplementerReport, etc.) | Adds required `schema_version: int` + pinning check |
+
+**Rule:** nested types inherit `StrictModel`. Top-level artifacts (things that exist as files on disk) inherit `SchemaVersionedModel`. Never make a nested type inherit `SchemaVersionedModel` — it forces verbose YAML (every list entry needs its own `schema_version` line) and conflates artifact identity with data shape.
+
+### 5.3 Pure Model / External I/O Split (Locked — Phase 1)
+
+Pydantic models validate **data shape only**. I/O against external state (filesystem, network, database, subprocess) lives in the caller — typically the CLI wrapper (`validators.py`) or a hook helper.
+
+**Rationale:**
+- Pure models are unit-testable without mocking filesystem / network
+- Avoids Pydantic-v2 validator signature complexities around context injection
+- Separates "shape is valid" from "external state agrees with shape" as distinct failure categories
+
+**Example (Phase 1):** the `HandoffPackage` model validates that `samples` is a non-empty list of `Sample` records with `path: str`. The CLI wrapper checks that each `sample.path` exists as a file under the package directory AFTER model validation succeeds, and emits a distinct "SAMPLE FILE MISSING" error block.
+
+### 5.4 Principles
 - One file per top-level schema
 - Nested models for a given schema live in the same file (e.g., `Task`, `Module`, `SharedConstant` all live in `plan.py`)
-- Cross-cutting utilities (base class, formatter, CLI) live in `_base.py`, `errors.py`, `validators.py`
+- Cross-cutting utilities (base classes, formatter, CLI) live in `_base.py`, `errors.py`, `validators.py`
 - Cross-skill imports flow through `skills/scripts/models/` as a neutral location — no skill depends on another skill's scripts directly
 
-### 5.3 Why Not Per-Skill Model Directories
+### 5.5 Why Not Per-Skill Model Directories
 Placing `Plan` in `skills/writing-plans/scripts/models/` would force `subagent-driven-development` to import from `writing-plans`, introducing directional skill coupling. The neutral shared location avoids this.
 
 ---
