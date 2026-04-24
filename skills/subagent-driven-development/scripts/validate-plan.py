@@ -21,7 +21,9 @@ import argparse
 import json
 import os
 import re
+import subprocess
 import sys
+import tempfile
 from typing import Dict, List, Optional, Tuple
 
 # -----------------------------------------------------------------------
@@ -378,6 +380,7 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
       warnings, blockers.
     """
     lines = content.splitlines()
+    has_frontmatter = content.startswith("---")
     plan_lines = len(lines)
     warnings: List[str] = []
     blockers: List[str] = []
@@ -458,6 +461,33 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
             "status": "PASS",
             "detail": "All task numbers are unique",
         }
+
+    # --- Pydantic validation (Phase 1) ---
+    if has_frontmatter:
+        validators_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", "..", "scripts", "models", "validators.py"
+        )
+        if os.path.isfile(validators_path):
+            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
+                tmp.write(content)
+                tmp_path = tmp.name
+            try:
+                pydantic_result = subprocess.run(
+                    [sys.executable, validators_path, "plan", tmp_path],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if pydantic_result.returncode == 1:
+                    blockers.append(
+                        f"Pydantic validation failed:\n{pydantic_result.stderr.strip()}"
+                    )
+            finally:
+                os.unlink(tmp_path)
+    else:
+        warnings.append(
+            "No YAML frontmatter detected. Post-Phase 1 plans should include "
+            "frontmatter with schema_version, feature_archetype, and tasks fields."
+        )
 
     # --- Overall status ---
     if blockers:
