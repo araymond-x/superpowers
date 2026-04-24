@@ -116,12 +116,12 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 122 checks), install (static, 103 checks), unit (pytest, 70 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 4 test layers — regression (static, 122 checks), install (static, 105 checks), unit (pytest, 70 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
 
 - `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
-- `tests/ARaymond-installation/verify-symlink-install.sh` — 103 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
+- `tests/ARaymond-installation/verify-symlink-install.sh` — 105 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
 - `tests/unit/` — 70 pytest tests: validate-plan.py (task numbering collisions, module header detection), controller-checkpoint.py (stale artifact detection, honesty check gate, trace audit gate, minimum-tier ratio cap), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log global capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
@@ -187,6 +187,15 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
   - Trace audit complete (`reports/trace-audit.md` from `extract-execution-trace.py` + `trace-auditor-prompt.md`)
   - Minimum-tier quality review ratio ≤ 20% (too many minimum-tier reviews triggers FAIL)
 - Stop hook (`sdd-stop-hook.sh`) captures honesty logs globally so trace audit can cross-reference across sessions.
+
+## Pydantic Validation (Phase 1)
+- Models at `skills/scripts/models/` — `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
+- Two base classes: `StrictModel` (nested types, `extra="forbid"`) and `SchemaVersionedModel` (top-level artifacts, `schema_version` pinned)
+- CLI: `python3 validators.py plan <path>` / `python3 validators.py handoff <dir>`
+- Exit codes: 0 pass / 1 validation fail / 2 infrastructure
+- Bypass: `export SUPERPOWERS_VALIDATOR_BYPASS=1` (emergency unblock, stderr warning)
+- Schema version: `CURRENT_SCHEMA_VERSION = 1` in `_base.py`. Bump per `docs/plans/2026-04-24-pydantic-meta-design.md` Section 4.2.
+- Plans without YAML frontmatter are hard FAILs — add frontmatter to validate.
 
 ## Worktree Sessions
 - Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`

@@ -377,6 +377,22 @@ else
   warn ".superpowers/ not in .gitignore — visual companion output may be committed"
 fi
 
+# ─── 7. Pydantic Validation ───────────────────────────────────────────────────
+
+section "Pydantic Validation"
+
+if .venv/bin/python3 -c 'import pydantic; v=pydantic.VERSION.split("."); assert v[0]=="2" and int(v[1])>=7' 2>/dev/null; then
+  pass "Pydantic v2.7+ importable"
+else
+  fail "Pydantic v2.7+ not importable — run: .venv/bin/pip install -r requirements.txt"
+fi
+
+if .venv/bin/python3 -c 'import sys; sys.path.insert(0,"skills/scripts/models"); from plan import Plan; from handoff import HandoffPackage; from errors import format_validation_error; from _base import CURRENT_SCHEMA_VERSION' 2>/dev/null; then
+  pass "Pydantic model modules import cleanly"
+else
+  fail "Pydantic model modules failed to import — check skills/scripts/models/"
+fi
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""
