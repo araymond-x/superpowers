@@ -211,6 +211,41 @@ If Source Contracts reference a handoff package from another agent or team, veri
 
 The **Shared Constants** field prevents a specific failure mode: subagents that need a value (e.g., `LIABILITY_TYPES`, `VALID_ACCOUNT_TYPES`) but don't know it exists as a constant, so they hardcode an array. When the constant changes, the hardcoded copy diverges silently. By enumerating shared constants in the plan, the controller can inject them into every subagent dispatch (see the SDD skill's Shared Constants Passthrough). If the plan has no shared constants, verify that no tasks import from files that define reusable constants.
 
+## YAML Frontmatter (Required)
+
+Every plan file must begin with a YAML frontmatter block between `---` delimiters. The frontmatter contains typed fields that the Pydantic validator checks. The markdown body follows below.
+
+```yaml
+---
+schema_version: 1
+feature_archetype: greenfield  # greenfield | replacement | extension | refactor | migration
+source_contracts: "path/to/spec.md"  # or null
+shared_constants:
+  - path: "app.config.X"
+    value: "42"
+    reason: "Used in task 3"
+pattern_references:
+  - name: "existing-pattern"
+    source_files: ["src/example.py"]
+    reason: "Follow this layout"
+modules:  # only if modular plan
+  - id: 1
+    title: "Core"
+    task_ids: [0, 1, 2]
+tasks:
+  - id: 0
+    title: "Setup"
+  - id: 1
+    title: "Implement"
+    depends_on: [0]
+    module_id: 1
+    shared_constants_used: ["app.config.X"]
+    pattern_references: ["existing-pattern"]
+---
+```
+
+The validator checks: sequential task IDs, valid dependency references (no forward refs), declared shared constants and pattern references, and module-task consistency. Run the validator to see explanatory error messages for any issues.
+
 ## Write-Scope Partitioning
 
 **Every plan intended for subagent execution should include this section before the task list.**

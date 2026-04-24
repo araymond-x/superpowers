@@ -21,6 +21,32 @@ your-handoff-package/
 └── scripts/               # Reference implementations if applicable (recommended)
 ```
 
+## YAML Frontmatter (Required)
+
+Handoff package README.md files must begin with YAML frontmatter:
+
+```yaml
+---
+schema_version: 1
+package_name: "your-package-name"
+feeds_into: "brainstorming"  # which skill consumes this
+one_sentence_purpose: "Describe the package in one sentence."
+contract_constraints:
+  - name: "field_name"
+    kind: "string"  # string | integer | float | boolean | date | enum
+    format_hint: "YYYY-MM-DD"  # optional
+    nullable: false  # optional, default false
+format_rules:
+  - applies_to: ["field_name"]
+    rule: "Must be positive"
+samples:
+  - path: "samples/example.csv"
+    description: "Example data file"
+---
+```
+
+The validator checks that format_rules reference declared fields and that sample files exist on disk.
+
 ## README.md Structure
 
 The README must follow this structure. The order matters — the first 50 lines are mechanically checked.
