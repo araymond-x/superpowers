@@ -27,6 +27,10 @@ Phase 2 extends the Phase 1 infrastructure (`_base.py`, `errors.py`, `validators
 - Instructor / forced tool-use output (meta-design Appendix A rejects this)
 - Hypothesis property-based tests (meta-design Section 12.4 defers indefinitely)
 
+### Schema Versioning Note
+
+The meta-design Section 4.1 states `CURRENT_SCHEMA_VERSION` is "defined per module." The current `_base.py` implementation has a single global constant. All models (Plan, HandoffPackage, ImplementerReport, CheckpointResult) share `CURRENT_SCHEMA_VERSION = 1`. This is correct while all schemas are at v1. When a future phase bumps one schema independently, the constant must be split into per-module constants (e.g., `IMPLEMENTER_REPORT_SCHEMA_VERSION` in `implementer_report.py`). Phase 2 uses the shared constant as-is.
+
 ---
 
 ## 2. Decisions
@@ -76,14 +80,25 @@ contract_compliance:
 
 ### 3.3 Markdown Body (prose sections)
 
-Below the frontmatter, the markdown body contains prose sections checked for presence by `_report_utils.py`:
+Below the frontmatter, the markdown body contains prose sections checked for presence by `_report_utils.py`.
 
+**Sections that remain as prose (5 of the current 9):**
 - **Implementation Summary** — 2-3 sentences describing what was built
 - **Source Files Read** — files read and what was learned
-- **CLAUDE.md Files Read** — CLAUDE.md files found in modified directories
 - **Deviations from Plan** — decisions that differed from plan instructions
 - **Self-Review Findings** — issues found during self-review
 - **Concerns** — uncertainties or items the controller should know
+
+**Sections that move to frontmatter (4 of the current 9):**
+- **Status** → `status` field in frontmatter
+- **Files Changed** → `files_changed` list in frontmatter
+- **Tests** → `tests` object in frontmatter
+- **Contract Compliance** → `contract_compliance` list in frontmatter
+
+**Prose-only section (not in `REQUIRED_SECTIONS`, not in frontmatter):**
+- **CLAUDE.md Files Read** — free-text, listed in prompt template but not mechanically validated
+
+`_report_utils.py`'s `REQUIRED_SECTIONS` list shrinks from 9 to 5, removing the four sections that migrated to frontmatter. The prose section-presence check runs after Pydantic frontmatter validation (see Section 7.2).
 
 ### 3.4 Pydantic Model Shape
 
@@ -133,9 +148,9 @@ Three `@model_validator(mode="after")` rules:
 
 2. **`files_changed_non_empty_for_done`** — if `status` is `DONE` or `DONE_WITH_CONCERNS`, `files_changed` must contain at least one entry. A completed task with no files changed is suspicious (setup-only tasks should use a description-only file entry).
 
-3. **`done_with_concerns_requires_flag`** — warning-level: if `status` is `DONE` but the markdown body (passed via validation context) has non-empty Deviations or Concerns sections, the validator notes this mismatch. This is informational, not blocking — the controller uses status as a routing signal, and the section-presence check in `_report_utils.py` provides the prose-level enforcement.
+### CLI-Level Check (not a model validator)
 
-Note: Validator #3 touches the markdown body, which raises a question about the pure-model/IO split (meta-design Section 5.3). The prose content would need to be passed via Pydantic's `model_validate(data, context={"markdown_body": body})` mechanism. If this feels like a violation of the pure-model principle, this validator can be moved to the CLI wrapper instead.
+**`done_with_concerns_check`** — implemented in the CLI wrapper (`validate-report.py` / `validators.py`), NOT as a `@model_validator`. If `status` is `DONE` but the markdown body has non-empty Deviations or Concerns sections, emit a warning. This is informational, not blocking — the controller uses status as a routing signal. This check lives in the CLI wrapper because it requires the markdown body, which is external to the model (per meta-design Section 5.3: "Pydantic models validate data shape only"). The CLI wrapper already reads the full file and can inspect both frontmatter and body.
 
 ---
 
@@ -155,7 +170,7 @@ from pydantic import model_validator
 from _base import StrictModel, SchemaVersionedModel
 
 Phase = Literal["pre-execution", "pre-dispatch", "pre-completion"]
-CheckStatus = Literal["PASS", "FAIL", "WARN", "SKIP", "OK", "WARNING"]
+CheckStatus = Literal["PASS", "FAIL", "SKIP", "OK", "WARNING"]
 
 
 class CheckResult(StrictModel):
@@ -216,6 +231,25 @@ def _build_result(phase, task_number, overall_status, checks, warnings, blockers
 ```
 
 The downstream JSON output is identical except for the added `schema_version` field. All consumers (hooks, SDD skill, dispatch log readers) access specific keys and are unaffected by the addition.
+
+### 4.5 Exit Code Interaction
+
+`controller-checkpoint.py` uses its own exit codes: `0 = PASS, 1 = FAIL, 2 = WARNING, 3 = script error`. These differ from the validator CLI convention (`0/1/2`). The existing `except Exception` handler in `main()` (line 1119) catches unexpected errors and routes to exit 3. A Pydantic `ValidationError` during `CheckpointResult` construction would be caught by this handler and produce exit 3 with a clear error message. This is correct — a construction failure is a developer bug in the checkpoint script, not a producer error.
+
+### 4.6 Progress Field Population by Phase
+
+The `Progress` model has optional fields that are populated differently per phase:
+
+| Field | pre-execution | pre-dispatch | pre-completion |
+|-------|:---:|:---:|:---:|
+| `tasks_total` | yes | yes | yes |
+| `tasks_completed` | no | yes | yes |
+| `checkboxes_total` | yes | yes | yes |
+| `checkboxes_checked` | yes | yes | yes |
+| `checkboxes_unchecked` | yes | no | no |
+| `percentage` | no | yes | yes |
+
+Test fixtures must reflect this phase-dependent population pattern.
 
 ---
 
@@ -335,22 +369,31 @@ Implementation follows the established `validate_plan()` pattern:
 
 ### 7.2 `validate-report.py` — Pydantic Validation Step
 
-The existing `validate-report.py` gains a Pydantic validation step before the prose section check:
+The `validate_report()` function lives in `validators.py` (following the pattern where `validate_plan()` already lives). `validate-report.py` calls into `validators.py`'s `validate_report()` for the Pydantic check, then runs its own prose section check.
 
-1. Extract frontmatter → validate with `ImplementerReport.model_validate()`
+Validation sequence in `validate-report.py`:
+
+1. Call `validate_report()` from `validators.py` — Pydantic frontmatter validation
 2. If frontmatter absent → hard FAIL ("report predates Phase 2 cutover — add YAML frontmatter")
-3. If frontmatter invalid → `format_validation_error()`
+3. If frontmatter invalid → `format_validation_error()`, exit 1
 4. If frontmatter valid → proceed to prose section-presence check via `_report_utils.validate_report_sections()`
+5. Prose section check uses the reduced 5-section `REQUIRED_SECTIONS` list
 
-The `sdd-pre-dispatch-hook.sh` already calls `validate-report.py` — no hook changes needed.
+**Old report interaction:** Reports without frontmatter fail at step 2 (hard FAIL) and never reach the prose section check. This means old 9-section reports and new 5-section reports are never compared against the wrong section count.
 
-### 7.3 CheckpointResult — No CLI Subcommand
+The `sdd-pre-dispatch-hook.sh` already calls `validate-report.py` and checks its exit code — no hook changes needed. The hook sees the same exit code semantics (0 = pass, 1 = fail) regardless of which validation layer produced the failure.
 
-`CheckpointResult` validates at construction time inside `controller-checkpoint.py`. No external CLI invocation needed. If construction fails, the script produces a Pydantic error — this indicates a developer bug in the checkpoint script, not a producer error.
+### 7.3 Import Mechanism
 
-### 7.4 Exit Code Convention
+`controller-checkpoint.py` lives at `skills/subagent-driven-development/scripts/`. To import from `skills/scripts/models/`, it needs a `sys.path.insert(0, ...)` pointing to the models directory, following the same pattern used by `validators.py`. The models directory uses relative imports internally (e.g., `from _base import StrictModel`), with `sys.path` manipulation at the entry point.
 
-Unchanged from Phase 1: `0` = pass, `1` = validation fail, `2` = infrastructure error.
+### 7.4 CheckpointResult — No CLI Subcommand
+
+`CheckpointResult` validates at construction time inside `controller-checkpoint.py`. No external CLI invocation needed. See Section 4.5 for exit code interaction.
+
+### 7.5 Exit Code Convention
+
+Unchanged from Phase 1 for `validators.py`: `0` = pass, `1` = validation fail, `2` = infrastructure error. `controller-checkpoint.py` retains its own convention (see Section 4.5).
 
 ---
 
@@ -396,7 +439,7 @@ tests/
 - `blockers_reference_check_names` validator: blocker referencing non-existent check fails
 - `task_number_required_for_pre_dispatch` validator: pre-dispatch without task_number fails
 - `schema_version` present in `.model_dump()` output
-- `CheckStatus` enum covers all 6 values: PASS, FAIL, WARN, SKIP, OK, WARNING
+- `CheckStatus` enum covers all 5 values: PASS, FAIL, SKIP, OK, WARNING
 - Optional fields (`task_number`, `progress`) absent for pre-execution passes
 - All 3 phases produce valid output from golden inputs
 
@@ -449,9 +492,28 @@ Existing reports without frontmatter produce a hard FAIL if re-validated (expect
 
 ---
 
-## 10. Meta-Design Updates
+## 10. CLAUDE.md and Regression Test Updates
 
-Phase 2 updates `docs/plans/2026-04-24-pydantic-meta-design.md`:
+### 10.1 `CLAUDE.md` (Fork Root)
+
+The "Pydantic Validation" section gains:
+- `implementer_report.py` and `checkpoint_result.py` added to the models list
+- `validators.py report <path>` documented as new CLI subcommand
+- Note that `validate-report.py` now runs Pydantic validation before prose section checks
+
+### 10.2 Regression Test (`validate-all-skills.py`)
+
+Phase 2 modifies `implementer-prompt.md` (a skill file). The regression test suite validates skill file structure (frontmatter, size, cross-refs). The prompt template change adds content but does not alter the file's skill structure — no regression test changes expected. Verify by running `python3 tests/ARaymond-skill-regression/validate-all-skills.py` after the prompt template edit.
+
+### 10.3 `__init__.py`
+
+`skills/scripts/models/__init__.py` updated to include the new modules in its docstring. No re-exports needed — consumers import directly from the module files.
+
+---
+
+## 11. Meta-Design Updates
+
+Phase 2 updates `docs/plans/2026-04-24-pydantic-meta-design.md` (changes applied after implementation):
 
 | Section | Update |
 |---------|--------|
@@ -465,7 +527,7 @@ Phase 2 updates `docs/plans/2026-04-24-pydantic-meta-design.md`:
 
 ---
 
-## 11. Directory Structure (New Additions)
+## 12. Directory Structure (New Additions)
 
 ```
 skills/scripts/models/                    # EXISTING — Phase 1 infra
@@ -494,10 +556,11 @@ tests/fixtures/_smoke-test-reports/       # NEW — throwaway, deleted post-ship
 
 ---
 
-## 12. Acceptance Criteria
+## 13. Acceptance Criteria
 
 - [ ] `skills/scripts/models/implementer_report.py` exists with `ImplementerReport(SchemaVersionedModel)`, `FileChange`, `TestSummary`, `ContractComplianceItem` nested models
-- [ ] `ImplementerReport` validates 3 cross-field relationships: `test_counts_consistent`, `files_changed_non_empty_for_done`, `done_with_concerns_requires_flag`
+- [ ] `ImplementerReport` validates 2 cross-field relationships as `@model_validator`: `test_counts_consistent`, `files_changed_non_empty_for_done`
+- [ ] `done_with_concerns_check` implemented in CLI wrapper (not model validator) — warns when status is DONE but body has non-empty Deviations/Concerns
 - [ ] `skills/scripts/models/checkpoint_result.py` exists with `CheckpointResult(SchemaVersionedModel)`, `CheckResult`, `Progress` nested models
 - [ ] `CheckpointResult` validates 3 cross-field relationships: `fail_requires_blockers`, `blockers_reference_check_names`, `task_number_required_for_pre_dispatch`
 - [ ] `validators.py` has a `report` subcommand that validates implementer report files
@@ -510,7 +573,9 @@ tests/fixtures/_smoke-test-reports/       # NEW — throwaway, deleted post-ship
 - [ ] `_report_utils.py` re-exports `VALID_STATUSES` from the Pydantic model's `Status` type
 - [ ] `_report_utils.py` docstring notes Phase 7 cleanup target
 - [ ] `_report_utils.py` `extract_implementer_status()` documented as deprecated (status now from frontmatter)
+- [ ] `_report_utils.py` `REQUIRED_SECTIONS` reduced from 9 to 5 (Status, Files Changed, Tests, Contract Compliance removed — now in frontmatter)
 - [ ] Pre-existing `validate_report_sections()` duplication in `controller-checkpoint.py` noted as Phase 7 cleanup candidate (not fixed in Phase 2)
+- [ ] `validate-report.py` calls `validate_report()` from `validators.py` for Pydantic check (shared code, not duplicated)
 - [ ] Meta-design Sections 2, 5, 11, 12 updated per Section 10 of this spec
 - [ ] Meta-design Phase 3 scope includes cross-artifact contract validation as user-requested candidate
 - [ ] ~37 new unit tests pass across `test_implementer_report_model.py`, `test_checkpoint_result_model.py`, `test_validate_report_pydantic.py`
@@ -519,3 +584,7 @@ tests/fixtures/_smoke-test-reports/       # NEW — throwaway, deleted post-ship
 - [ ] `tests/fixtures/_smoke-test-reports/` deleted in merge commit
 - [ ] All existing tests continue to pass after changes
 - [ ] `SUPERPOWERS_VALIDATOR_BYPASS=1` env var honored by `report` subcommand
+- [ ] `controller-checkpoint.py` has `sys.path.insert` for models directory import
+- [ ] `CLAUDE.md` Pydantic section updated with new models and CLI subcommand
+- [ ] `skills/scripts/models/__init__.py` docstring updated
+- [ ] Regression test (`validate-all-skills.py`) passes after prompt template change
