@@ -67,31 +67,31 @@ Task 5 depends only on Task 1 (no model imports). It is a parallel candidate wit
 - Create: `tests/fixtures/handoffs/valid/` (directory)
 - Create: `tests/fixtures/handoffs/invalid/` (directory)
 
-- [ ] **Step 1: Create requirements.txt**
+- [x] **Step 1: Create requirements.txt**
 
 ```
 pydantic>=2.7,<3
 pyyaml>=6.0
 ```
 
-- [ ] **Step 2: Install Pydantic**
+- [x] **Step 2: Install Pydantic**
 
 Run: `.venv/bin/pip install -r requirements.txt`
 Expected: Pydantic v2.7+ installed successfully
 
-- [ ] **Step 3: Verify installation**
+- [x] **Step 3: Verify installation**
 
 Run: `.venv/bin/python3 -c "import pydantic; print(pydantic.VERSION)"`
 Expected: Version starting with `2.` and minor >= 7
 
-- [ ] **Step 4: Create models package**
+- [x] **Step 4: Create models package**
 
 ```python
 # skills/scripts/models/__init__.py
 """Shared Pydantic models for the Superpowers custom fork."""
 ```
 
-- [ ] **Step 5: Create conftest.py for model imports**
+- [x] **Step 5: Create conftest.py for model imports**
 
 ```python
 # tests/unit/conftest.py
@@ -103,14 +103,14 @@ MODELS_DIR = Path(__file__).resolve().parent.parent.parent / "skills" / "scripts
 sys.path.insert(0, str(MODELS_DIR))
 ```
 
-- [ ] **Step 6: Create fixture directories**
+- [x] **Step 6: Create fixture directories**
 
 ```bash
 mkdir -p tests/fixtures/plans/valid tests/fixtures/plans/invalid
 mkdir -p tests/fixtures/handoffs/valid tests/fixtures/handoffs/invalid
 ```
 
-- [ ] **Step 7: Create minimal valid plan fixture**
+- [x] **Step 7: Create minimal valid plan fixture**
 
 ```markdown
 <!-- tests/fixtures/plans/valid/minimal-plan.md -->
@@ -134,7 +134,7 @@ tasks:
 - [ ] Build it
 ```
 
-- [ ] **Step 8: Create full-featured plan fixture**
+- [x] **Step 8: Create full-featured plan fixture**
 
 ```markdown
 <!-- tests/fixtures/plans/valid/full-featured-plan.md -->
@@ -180,7 +180,7 @@ tasks:
 **Goal:** Example full plan.
 ```
 
-- [ ] **Step 9: Create invalid plan fixtures**
+- [x] **Step 9: Create invalid plan fixtures**
 
 ```markdown
 <!-- tests/fixtures/plans/invalid/missing-required-field.md -->
@@ -207,12 +207,7 @@ tasks:
 # Bad Dependency — Task 1 depends on non-existent Task 5
 ```
 
-- [ ] **Step 10: Commit**
-
-```bash
-git add requirements.txt skills/scripts/models/__init__.py tests/unit/conftest.py tests/fixtures/
-git commit -m "feat(pydantic): project setup — requirements, package init, test fixtures"
-```
+- [x] **Step 10: Commit** (86b5cde)
 
 ---
 
@@ -225,7 +220,7 @@ git commit -m "feat(pydantic): project setup — requirements, package init, tes
 **Pattern References:**
 - `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` lines 14–19 — base class contract
 
-- [ ] **Step 1: Write failing tests for base classes**
+- [x] **Step 1: Write failing tests for base classes**
 
 ```python
 # tests/unit/test_models/test_schema_versioning.py
@@ -297,12 +292,9 @@ class TestSchemaVersionedModel:
         assert CURRENT_SCHEMA_VERSION == 1
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_schema_versioning.py -v`
-Expected: ImportError — `_base` module does not exist yet
-
-- [ ] **Step 3: Implement _base.py**
+- [x] **Step 3: Implement _base.py**
 
 ```python
 # skills/scripts/models/_base.py
@@ -333,17 +325,9 @@ class SchemaVersionedModel(StrictModel):
         return v
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass** (7/7 PASS)
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_schema_versioning.py -v`
-Expected: All 7 tests PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add skills/scripts/models/_base.py tests/unit/test_models/test_schema_versioning.py
-git commit -m "feat(pydantic): add StrictModel + SchemaVersionedModel base classes"
-```
+- [x] **Step 5: Commit** (3bd6e74)
 
 ---
 
@@ -356,7 +340,7 @@ git commit -m "feat(pydantic): add StrictModel + SchemaVersionedModel base class
 **Pattern References:**
 - `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` lines 21–51 — Plan schema fields and validators
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tests/unit/test_models/test_plan_model.py
@@ -546,12 +530,9 @@ class TestModuleValidation:
         assert plan.modules is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -v`
-Expected: ImportError — `plan` module does not exist yet
-
-- [ ] **Step 3: Implement plan.py**
+- [x] **Step 3: Implement plan.py** (improved sequential ID check to use range() for contiguity — see DEVIATIONS.md)
 
 ```python
 # skills/scripts/models/plan.py
@@ -668,17 +649,9 @@ class Plan(SchemaVersionedModel):
         return self
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass** (26/26 PASS)
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -v`
-Expected: All 21 tests PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add skills/scripts/models/plan.py tests/unit/test_models/test_plan_model.py
-git commit -m "feat(pydantic): add Plan model with 5 cross-field validators"
-```
+- [x] **Step 5: Commit** (bca3d59)
 
 ---
 
@@ -691,7 +664,7 @@ git commit -m "feat(pydantic): add Plan model with 5 cross-field validators"
 **Pattern References:**
 - `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` lines 53–75 — HandoffPackage schema
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tests/unit/test_models/test_handoff_model.py
@@ -794,12 +767,9 @@ class TestAtLeastOneSample:
         assert len(pkg.samples) == 1
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_handoff_model.py -v`
-Expected: ImportError — `handoff` module does not exist yet
-
-- [ ] **Step 3: Implement handoff.py**
+- [x] **Step 3: Implement handoff.py**
 
 ```python
 # skills/scripts/models/handoff.py
@@ -856,17 +826,9 @@ class HandoffPackage(SchemaVersionedModel):
         return self
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass** (17/17 PASS)
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_handoff_model.py -v`
-Expected: All 13 tests PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add skills/scripts/models/handoff.py tests/unit/test_models/test_handoff_model.py
-git commit -m "feat(pydantic): add HandoffPackage model with 2 cross-field validators"
-```
+- [x] **Step 5: Commit** (9cc8463)
 
 ---
 
@@ -879,7 +841,7 @@ git commit -m "feat(pydantic): add HandoffPackage model with 2 cross-field valid
 **Pattern References:**
 - `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` lines 77–83 — error block headers
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```python
 # tests/unit/test_models/test_error_formatter.py
@@ -960,12 +922,9 @@ class TestFormatYamlError:
         assert "VALIDATION FAILED" not in yaml_output
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_error_formatter.py -v`
-Expected: ImportError — `errors` module does not exist yet
-
-- [ ] **Step 3: Implement errors.py**
+- [x] **Step 3: Implement errors.py**
 
 ```python
 # skills/scripts/models/errors.py
@@ -1016,30 +975,19 @@ def format_yaml_error(yaml_err: Exception, artifact_path: str) -> str:
     return "\n".join(lines)
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass** (11/11 PASS)
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_error_formatter.py -v`
-Expected: All 11 tests PASS
+- [x] **Step 5: Run full Module 1 test suite** (61/61 PASS)
 
-- [ ] **Step 5: Run full Module 1 test suite**
-
-Run: `.venv/bin/python3 -m pytest tests/unit/test_models/ -v`
-Expected: All ~52 tests PASS (7 + 21 + 13 + 11)
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add skills/scripts/models/errors.py tests/unit/test_models/test_error_formatter.py
-git commit -m "feat(pydantic): add validation and YAML error formatters"
-```
+- [x] **Step 6: Commit** (8ca0421)
 
 ## Module 1 Acceptance Criteria
 
-- [ ] `skills/scripts/models/` exists with `__init__.py`, `_base.py`, `plan.py`, `handoff.py`, `errors.py`
-- [ ] `StrictModel` enforces `extra="forbid"`; `SchemaVersionedModel` enforces `schema_version` pinning
-- [ ] `Plan` validates 5 cross-field relationships
-- [ ] `HandoffPackage` validates 2 in-model cross-field relationships
-- [ ] Error formatter produces split blocks with field paths, expected/got, hints
-- [ ] ~52 unit tests pass in `tests/unit/test_models/`
-- [ ] `requirements.txt` contains `pydantic>=2.7,<3`
-- [ ] Test fixture files exist in `tests/fixtures/plans/` and `tests/fixtures/handoffs/`
+- [x] `skills/scripts/models/` exists with `__init__.py`, `_base.py`, `plan.py`, `handoff.py`, `errors.py`
+- [x] `StrictModel` enforces `extra="forbid"`; `SchemaVersionedModel` enforces `schema_version` pinning
+- [x] `Plan` validates 5 cross-field relationships
+- [x] `HandoffPackage` validates 2 in-model cross-field relationships
+- [x] Error formatter produces split blocks with field paths, expected/got, hints
+- [x] 61 unit tests pass in `tests/unit/test_models/` (plan said ~52; parametrized tests expand)
+- [x] `requirements.txt` contains `pydantic>=2.7,<3`
+- [x] Test fixture files exist in `tests/fixtures/plans/` and `tests/fixtures/handoffs/`

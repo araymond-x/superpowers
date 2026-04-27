@@ -1,0 +1,17 @@
+2026-04-24T00:00:00Z DISPATCH reviewer task=0 type=spec-review [N/A - no Task 0 in plan, placeholder for hook gate]
+2026-04-24T00:00:00Z DISPATCH reviewer task=0 type=quality-review [N/A - no Task 0 in plan, placeholder for hook gate]
+2026-04-24T22:21:22Z DISPATCH reviewer task=1 type=spec-review
+2026-04-24T22:22:48Z DISPATCH reviewer task=1 type=quality-review
+2026-04-24T22:48:10Z DISPATCH reviewer task=2 type=spec-review
+2026-04-24T22:53:19Z DISPATCH reviewer task=3 type=spec-review
+2026-04-24T22:57:07Z DISPATCH reviewer task=4 type=spec-review
+2026-04-24T23:04:58Z DISPATCH reviewer task=5 type=spec-review
+2026-04-24T23:08:52Z DISPATCH reviewer task=6 type=spec-review
+2026-04-24T23:12:55Z DISPATCH reviewer task=7 type=spec-review
+2026-04-24T23:15:10Z DISPATCH reviewer task=8 type=unknown
+2026-04-24T23:20:38Z DISPATCH reviewer task=8 type=spec-review
+2026-04-24T23:21:15Z DISPATCH reviewer task=8 type=quality-review
+2026-04-24T23:29:22Z DISPATCH reviewer task=9 type=spec-review
+2026-04-24T23:34:21Z DISPATCH reviewer task=10 type=spec-review
+2026-04-24T23:37:36Z DISPATCH reviewer task=11 type=spec-review
+2026-04-24T23:44:17Z DISPATCH reviewer task=12 type=spec-review

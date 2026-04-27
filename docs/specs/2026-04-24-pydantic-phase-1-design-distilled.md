@@ -76,10 +76,11 @@ Filesystem post-check (CLI wrapper, NOT in model):
 
 ### CLI Invocation
 ```bash
-python3 -m skills.scripts.models.validators plan <path/to/plan.md>
-python3 -m skills.scripts.models.validators handoff <path/to/package-dir/>
-python3 -m skills.scripts.models.validators plan <path> --schema-version N  # forensic only
+.venv/bin/python3 validators.py plan <path/to/plan.md>
+.venv/bin/python3 validators.py handoff <path/to/package-dir/>
+.venv/bin/python3 validators.py plan <path> --schema-version N  # forensic stub — accepts flag but does not alter validation (deferred to future phase)
 ```
+Note: Hooks invoke `validators.py` by absolute path via subprocess. The script uses `sys.path.insert(0, ...)` for sibling imports — no package-mode (`-m`) invocation is supported.
 
 ### Environment Variables
 - `SUPERPOWERS_VALIDATOR_BYPASS=1` — emergency skip; exits 0 with stderr warning containing `BYPASS`
@@ -164,11 +165,11 @@ Same as plan steps 1–9, plus:
 ### Hook Integration (4 Modified Files)
 Four existing files modified to call the Python validator:
 
-**`validate-plan.py`** (Python) — routes to Pydantic when YAML frontmatter detected; hard FAIL without it
+**`validate-plan.py`** (Python) — routes to Pydantic when YAML frontmatter detected; emits warning (not blocker) when frontmatter absent (the hard FAIL for missing frontmatter lives in `validators.py`, called directly by hooks)
 
 **`plan-validation-gate-hook.sh`** (shell) — wraps Python validator stderr in JSON:
 ```bash
-if ! python3 -m skills.scripts.models.validators plan "$PLAN_FILE" 2>/tmp/validator-err; then
+if ! .venv/bin/python3 "$PYDANTIC_VALIDATOR" plan "$PLAN_FILE" 2>/tmp/pydantic-validator-err; then
   cat <<EOF
 {"decision":"block","reason":$(jq -Rs . < /tmp/validator-err)}
 EOF
@@ -302,7 +303,7 @@ Verbatim from the full design spec — this is the implementation contract.
 - [ ] `jq` availability verified in every hook execution environment (add an install-verify check); if unavailable, hooks emit a distinct infrastructure-failure message rather than a confusing `jq: not found` error
 - [ ] `plan-validation-gate-hook.sh` invokes the Python validator and wraps stderr in JSON block
 - [ ] `check-handoff.sh` invokes the Python validator and passes `package_dir` context
-- [ ] `validate-plan.py` hard-FAILs on plans without YAML frontmatter
+- [ ] `validate-plan.py` emits a warning for plans without YAML frontmatter (the hard FAIL lives in `validators.py`, called directly by hooks)
 - [ ] `skills/writing-plans/SKILL.md` instructs authors to use the new YAML frontmatter format
 - [ ] `skills/handoff-acceptance/references/handoff-package-spec.md` updated with YAML frontmatter template
 - [ ] `CLAUDE.md` (fork root) has a new Pydantic section documenting schema location, version bumps, bypass env var

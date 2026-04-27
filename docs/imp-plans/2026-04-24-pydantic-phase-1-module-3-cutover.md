@@ -48,7 +48,7 @@ Tasks 10+11 and Task 12 are parallel candidates (disjoint write sets).
 - Modify: `skills/handoff-acceptance/references/handoff-package-spec.md`
 - Modify: `skills/subagent-driven-development/SKILL.md`
 
-- [ ] **Step 1: Add YAML frontmatter section to writing-plans/SKILL.md**
+- [x] **Step 1: Add YAML frontmatter section to writing-plans/SKILL.md**
 
 Add a new section after the "Plan Document Header" section in `skills/writing-plans/SKILL.md`. Insert before the "Write-Scope Partitioning" section:
 
@@ -89,7 +89,7 @@ tasks:
 The validator checks: sequential task IDs, valid dependency references (no forward refs), declared shared constants and pattern references, and module-task consistency. Run the validator to see explanatory error messages for any issues.
 ```
 
-- [ ] **Step 2: Update handoff-package-spec.md with YAML frontmatter template**
+- [x] **Step 2: Update handoff-package-spec.md with YAML frontmatter template**
 
 In `skills/handoff-acceptance/references/handoff-package-spec.md`, add a YAML frontmatter section near the top, after the existing structure template:
 
@@ -121,7 +121,7 @@ samples:
 The validator checks that format_rules reference declared fields and that sample files exist on disk.
 ```
 
-- [ ] **Step 3: Add one-line note to SDD SKILL.md**
+- [x] **Step 3: Add one-line note to SDD SKILL.md** (extracted Context Health Protocol to references/, 4809 words)
 
 **WARNING:** SDD SKILL.md is at 5029 words (over the 5000 soft limit). Before adding, check word count with `wc -w skills/subagent-driven-development/SKILL.md`. If over limit, extract content to `references/` to offset before adding.
 
@@ -131,19 +131,9 @@ Add a single sentence to the plan ingestion section of `skills/subagent-driven-d
 Plans consumed by SDD now use YAML frontmatter — the typed fields are validated by Pydantic before execution begins.
 ```
 
-- [ ] **Step 4: Run skill regression tests**
+- [x] **Step 4: Run skill regression tests** (122 PASS, 0 FAIL, 1 WARNING)
 
-Run: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
-Expected: All 122 checks PASS. If any fail due to word count or section changes, fix before proceeding.
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add skills/writing-plans/SKILL.md \
-  skills/handoff-acceptance/references/handoff-package-spec.md \
-  skills/subagent-driven-development/SKILL.md
-git commit -m "docs: update prompt templates for YAML frontmatter format"
-```
+- [x] **Step 5: Commit** (627c3e4)
 
 ---
 
@@ -153,7 +143,7 @@ git commit -m "docs: update prompt templates for YAML frontmatter format"
 - Modify: `CLAUDE.md`
 - Modify: `tests/ARaymond-installation/verify-symlink-install.sh`
 
-- [ ] **Step 1: Add Pydantic section to CLAUDE.md**
+- [x] **Step 1: Add Pydantic section to CLAUDE.md**
 
 Add a new section after "Hooks-Based Enforcement" in `CLAUDE.md`:
 
@@ -168,7 +158,7 @@ Add a new section after "Hooks-Based Enforcement" in `CLAUDE.md`:
 - Plans without YAML frontmatter are hard FAILs — add frontmatter to validate.
 ```
 
-- [ ] **Step 2: Add 2 Pydantic checks to verify-symlink-install.sh**
+- [x] **Step 2: Add 2 Pydantic checks to verify-symlink-install.sh**
 
 Add after the existing checks section in `tests/ARaymond-installation/verify-symlink-install.sh`:
 
@@ -188,17 +178,9 @@ else
 fi
 ```
 
-- [ ] **Step 3: Run installation verification**
+- [x] **Step 3: Run installation verification** (105 PASS, 0 FAIL)
 
-Run: `bash tests/ARaymond-installation/verify-symlink-install.sh`
-Expected: All checks PASS including 2 new Pydantic checks (total 105)
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add CLAUDE.md tests/ARaymond-installation/verify-symlink-install.sh
-git commit -m "docs: add Pydantic section to CLAUDE.md + 2 install verification checks"
-```
+- [x] **Step 4: Commit** (55b397e)
 
 ---
 
@@ -208,7 +190,7 @@ git commit -m "docs: add Pydantic section to CLAUDE.md + 2 install verification 
 - Create: `tests/unit/test_smoke_real_plans.py`
 - Create: `tests/fixtures/_smoke-test-plans/` (populated with real plan copies)
 
-- [ ] **Step 1: Identify recent plans (post 2026-04-08)**
+- [x] **Step 1: Identify recent plans (post 2026-04-08)**
 
 ```bash
 # macOS: use -newermt for date comparison (GNU find) or reference file
@@ -222,7 +204,7 @@ Also check this repo:
 ls docs/imp-plans/2026-04-08-*.md docs/imp-plans/2026-04-24-*.md 2>/dev/null
 ```
 
-- [ ] **Step 2: Copy plans into smoke test directory**
+- [x] **Step 2: Copy plans into smoke test directory**
 
 ```bash
 mkdir -p tests/fixtures/_smoke-test-plans
@@ -233,7 +215,7 @@ For each plan found, copy it (do NOT modify originals):
 cp <source-plan.md> tests/fixtures/_smoke-test-plans/<name>.md
 ```
 
-- [ ] **Step 3: Add YAML frontmatter to each copy**
+- [x] **Step 3: Add YAML frontmatter to each copy** (7 fixtures, all needed frontmatter added)
 
 For each copied plan, add YAML frontmatter reflecting what the author would have written in the new format. Read each plan's header to extract: feature_archetype, source_contracts, tasks (IDs and titles), modules (if present), shared_constants, pattern_references.
 
@@ -251,7 +233,7 @@ tasks:
 ---
 ```
 
-- [ ] **Step 4: Write smoke test file**
+- [x] **Step 4: Write smoke test file**
 
 ```python
 # tests/unit/test_smoke_real_plans.py
@@ -294,19 +276,9 @@ def test_real_plan_validates(plan_path: Path):
     )
 ```
 
-- [ ] **Step 5: Run smoke tests**
+- [x] **Step 5: Run smoke tests** (7/7 PASS)
 
-Run: `.venv/bin/python3 -m pytest tests/unit/test_smoke_real_plans.py -v`
-Expected: All fixtures PASS. If any FAIL:
-- Schema bug → fix the schema, re-run
-- Real plan-authoring mistake → document in test output, do NOT relax schema
-
-- [ ] **Step 6: Commit (smoke test will be deleted in merge commit)**
-
-```bash
-git add tests/unit/test_smoke_real_plans.py tests/fixtures/_smoke-test-plans/
-git commit -m "test: add pre-ship smoke test with real plan fixtures"
-```
+- [x] **Step 6: Commit** (ae689a3)
 
 ---
 
@@ -316,7 +288,7 @@ git commit -m "test: add pre-ship smoke test with real plan fixtures"
 
 This task is required by the Migration feature archetype. It verifies no stale references to legacy patterns remain after cutover.
 
-- [ ] **Step 1: Grep for legacy patterns that should be routed around**
+- [x] **Step 1: Grep for legacy patterns that should be routed around**
 
 ```bash
 # Check that no NEW code calls the old regex path directly
@@ -326,7 +298,7 @@ grep -rn "TASK_HEADER_RE\|MODULE_HEADER_RE" skills/subagent-driven-development/s
 
 Expected: These patterns STILL EXIST in validate-plan.py (kept for Phase 7 cleanup). Verify they are only in the legacy branch (after the frontmatter detection guard).
 
-- [ ] **Step 2: Verify prompt templates reference new format**
+- [x] **Step 2: Verify prompt templates reference new format**
 
 ```bash
 grep -rn "YAML frontmatter" skills/writing-plans/SKILL.md
@@ -336,7 +308,7 @@ grep -rn "YAML frontmatter" skills/subagent-driven-development/SKILL.md
 
 Expected: Each file contains at least one reference to the new format.
 
-- [ ] **Step 3: Verify no prompt template still instructs old format exclusively**
+- [x] **Step 3: Verify no prompt template still instructs old format exclusively**
 
 ```bash
 grep -rn "Contract Constraints.*first 50 lines" skills/
@@ -344,17 +316,9 @@ grep -rn "Contract Constraints.*first 50 lines" skills/
 
 Expected: The old "first 50 lines" instruction should NOT appear in updated templates. If found in templates NOT modified by this plan, that's acceptable (Phase 7 cleanup).
 
-- [ ] **Step 4: Run full test suite**
+- [x] **Step 4: Run full test suite** (163 + 122 + 105 = 390 checks, all PASS)
 
-```bash
-.venv/bin/python3 -m pytest tests/unit/ -v
-python3 tests/ARaymond-skill-regression/validate-all-skills.py
-bash tests/ARaymond-installation/verify-symlink-install.sh
-```
-
-Expected: All tests pass. Document any deviations in DEVIATIONS.md.
-
-- [ ] **Step 5: Log findings**
+- [x] **Step 5: Log findings**
 
 If any stale references are found that are outside the scope of this plan (Phase 7 cleanup candidates), log them to DEVIATIONS.md:
 
@@ -367,20 +331,15 @@ If any stale references are found that are outside the scope of this plan (Phase
 | First-50-lines grep in check-handoff.sh | `check-handoff.sh:10-25` | Kept — Phase 7 cleanup |
 ```
 
-- [ ] **Step 6: Commit if any deviations logged**
-
-```bash
-git add DEVIATIONS.md
-git commit -m "docs: log obsolescence verification findings for Phase 7"
-```
+- [x] **Step 6: Commit** (ba06948)
 
 ## Module 3 Acceptance Criteria
 
-- [ ] `writing-plans/SKILL.md` has YAML frontmatter section with template
-- [ ] `handoff-package-spec.md` has YAML frontmatter template
-- [ ] `SDD SKILL.md` has one-line note about YAML frontmatter
-- [ ] `CLAUDE.md` has Pydantic section (schema location, version bumps, bypass)
-- [ ] `verify-symlink-install.sh` has 2 new Pydantic checks (total 105)
-- [ ] Pre-ship smoke test present with ≥5 real plan fixtures, all PASS
-- [ ] Obsolescence grep audit complete, findings logged
-- [ ] All 3 test suites pass (pytest, regression, installation)
+- [x] `writing-plans/SKILL.md` has YAML frontmatter section with template
+- [x] `handoff-package-spec.md` has YAML frontmatter template
+- [x] `SDD SKILL.md` has one-line note about YAML frontmatter (4809 words after extraction)
+- [x] `CLAUDE.md` has Pydantic section (schema location, version bumps, bypass)
+- [x] `verify-symlink-install.sh` has 2 new Pydantic checks (total 105)
+- [x] Pre-ship smoke test present with 7 real plan fixtures, all PASS
+- [x] Obsolescence grep audit complete, 5 findings logged
+- [x] All 3 test suites pass (163 pytest + 122 regression + 105 installation)
