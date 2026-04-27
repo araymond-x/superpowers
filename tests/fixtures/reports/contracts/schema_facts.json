@@ -1,0 +1,21 @@
+{
+  "implementer_report": {
+    "status_values": ["DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT"],
+    "test_result_values": ["PASS", "FAIL"],
+    "compliance_status_values": ["compliant", "non_compliant", "partial", "not_applicable"],
+    "required_fields": ["schema_version", "task_id", "status", "files_changed", "tests"],
+    "optional_fields": ["contract_compliance"],
+    "validator_count": 2,
+    "validator_names": ["test_counts_consistent", "files_changed_non_empty_for_done"]
+  },
+  "checkpoint_result": {
+    "phase_values": ["pre-execution", "pre-dispatch", "pre-completion"],
+    "check_status_values": ["PASS", "FAIL", "SKIP", "OK", "WARNING"],
+    "top_status_values": ["PASS", "FAIL"],
+    "required_fields": ["schema_version", "phase", "status", "checks", "warnings", "blockers"],
+    "optional_fields": ["task_number", "progress"],
+    "validator_count": 3,
+    "validator_names": ["fail_requires_blockers", "blockers_reference_check_names", "task_number_required_for_pre_dispatch"]
+  },
+  "current_schema_version": 1
+}
