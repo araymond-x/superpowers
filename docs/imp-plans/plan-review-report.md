@@ -1,6 +1,6 @@
-# Plan Review Report — Pydantic Phase 1
+# Plan Review Report — Pydantic Phase 2
 
-**Date:** 2026-04-24
+**Date:** 2026-04-27
 **Reviewer:** Plan-document-reviewer subagent (general-purpose)
 **Plan files reviewed:** 4 (parent + 3 modules)
 
@@ -10,39 +10,39 @@
 
 **Round 1 — Issues Found:**
 
-1 blocking issue, 5 advisory recommendations.
+2 blocking issues, 3 advisory recommendations.
 
-**Blocking Issue (fixed):**
-- [SPEC LOCK / BUILDABILITY]: Task 9, validate-plan.py frontmatter detection would break 22 existing test fixtures. **Resolution:** Restructured Task 9 so validate-plan.py adds Pydantic as an additive check (when frontmatter present) and a warning (when absent), preserving backward compatibility. Hard FAIL for missing frontmatter lives only in validators.py (the Pydantic CLI called by hooks).
+**Blocking Issues (fixed):**
+
+1. **[Spec Alignment]: `done_with_concerns_check` not covered by any task.**
+   Spec AC #3 requires: if status is DONE but markdown body has non-empty Deviations or Concerns, emit warning in CLI wrapper. No task implemented this. **Resolution:** Added Layer 3 warning check to Task 7 (validate-report.py) — reads frontmatter status and prose body, emits warning to stderr if DONE with content in Deviations/Concerns. Does not affect exit code.
+
+2. **[Spec Lock]: Task 11 context-summary.py added old-format fallback.**
+   Spec says "No old-format fallback" but plan code had `fm_files if fm_files else extract_files_changed(content)`. **Resolution:** Removed fallback — frontmatter-only parsing for both files and status.
 
 **Advisory Recommendations (addressed):**
-1. Missing PyYAML in requirements.txt — **Fixed**: Added `pyyaml>=6.0` to Task 1.
-2. conftest.py collision risk — **Noted**: Low risk, acceptable. sys.path addition is benign.
-3. Task 8 Step 5 vague (handoff-gate-hook.sh) — **Fixed**: Replaced with explicit implementation showing Pydantic validation block placement.
-4. Task 8 Step 4 check-handoff.sh path derivation — **Noted**: Acceptable — check-handoff.sh always receives README.md path from its callers.
-5. Task 12 `find -newer` syntax wrong for macOS — **Fixed**: Replaced with `ls -lt` and date-pattern glob.
-6. Test count discrepancy (spec ~45, plan ~78) — **Noted**: Plan delivers more tests than spec estimated. Not a problem.
-7. SDD SKILL.md word count handled in plan — **Noted**: Plan correctly warns about offset.
+
+1. **Intermediate test breakage window:** Added note to parent plan that existing tests will fail between Module 2 completion and Module 3 Task 13 (test helper update). Task 15 is the verification point.
+2. **Line number references approximate:** Noted — implementers should match by function name, not line number.
+3. **`import re` preservation in Task 8:** Added clarification that `import re` at line 11 must be preserved; only lines 18-39 are replaced.
 
 **Snippet Verification:**
-- Snippet 1 (plan.py model, Module 1 Task 3): **VERIFIED** — all field names, types, validators match spec
-- Snippet 2 (handoff.py model, Module 1 Task 4): **VERIFIED** — all field names, types, validators match spec
-- Snippet 3 (errors.py formatter, Module 1 Task 5): **VERIFIED** — three distinct headers, ctx.expected handling, schema_version hint
-- Snippet 4 (validators.py CLI, Module 2 Task 6): **ILLUSTRATIVE** — direct invocation vs -m invocation; both work, plan approach matches existing patterns
+- Snippet 1 [Task 1 — ImplementerReport model]: **VERIFIED** — field types, validators, import patterns match `_base.py` and `plan.py` contracts
+- Snippet 2 [Task 3 — CheckpointResult model]: **VERIFIED** — Progress fields match all 3 phase variants; CheckStatus values match actual usage
+- Snippet 3 [Task 6 — validate_report()]: **VERIFIED** — follows `validate_plan()` pattern exactly
+- Snippet 4 [Task 9 — _build_result() update]: **VERIFIED** — CheckResult construction matches existing dict shape; `exclude_none=True` preserves output shape
+- Snippet 5 [Task 10 — sdd-pre-dispatch-hook.sh Check 4b]: **VERIFIED** — correctly captures stderr, checks exit code, messages updated to 5 sections
 
 **Cross-Document Audit:**
-- `Plan.feature_archetype`: spec=`Literal["greenfield","replacement","extension","refactor","migration"]` → plan=identical → code=identical — **MATCH**
-- `HandoffPackage.contract_constraints`: spec=`list[FieldType]` → plan=identical → code=identical — **MATCH**
-- `SchemaVersionedModel.schema_version`: spec=int pinned via @field_validator → plan=identical → code=identical — **MATCH**
+- `ImplementerReport.status`: source=`set{"DONE","DONE_WITH_CONCERNS","BLOCKED","NEEDS_CONTEXT"}` → spec=`Literal[4 values]` → plan=`Literal[4 values]` — **MATCH**
+- `CheckpointResult.checks` value type: source=`{"status": str, "detail": str}` → spec=`CheckResult(StrictModel)` → plan=`CheckResult(StrictModel)` — **MATCH**
+- `Progress.checkboxes_unchecked`: source=present only in pre-execution → spec=`int | None = None` → plan=`int | None = None` — **MATCH**
 
 ## Validation Results
 
-| File | Status | Blockers | Warnings |
-|------|--------|----------|----------|
-| Parent plan | PASS | 0 | 0 |
-| Module 1 (Models) | WARNING | 0 | 1 (Task 3 at 335 lines) |
-| Module 2 (CLI+Hooks) | WARNING | 0 | 3 (Tasks 6-7 slightly over 200 lines) |
-| Module 3 (Cutover) | PASS | 0 | 0 |
-| Cross-module collision | PASS | 0 | — |
-
-Task size warnings are accepted: Plan model has 5 cross-field validators requiring thorough tests, and CLI subcommands need full test + implementation code. Splitting these would fragment TDD cycles without meaningful benefit.
+| File | validate-plan.py | Pydantic validator |
+|------|------------------|--------------------|
+| Parent plan | WARNING (coordination doc, no task headers in first 50 lines) | PASS |
+| Module 1 (Models) | PASS (6 tasks, 958 lines) | PASS |
+| Module 2 (CLI+Consumers) | PASS (7 tasks, 841 lines) | PASS |
+| Module 3 (Cutover) | PASS (3 tasks, 350 lines) | PASS |
