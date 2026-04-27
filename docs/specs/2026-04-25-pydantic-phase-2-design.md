@@ -17,7 +17,7 @@ Add Pydantic validation models for two Tier A artifacts:
 - **A1: ImplementerReport** — the highest-volume artifact in SDD, currently validated by regex in `_report_utils.py`. Migrates to YAML frontmatter + markdown body, consistent with Phase 1's Plan model.
 - **A2: CheckpointResult** — the JSON output of `controller-checkpoint.py`, already structured. Wraps in Pydantic for typed construction and downstream consumer safety.
 
-Phase 2 extends the Phase 1 infrastructure (`_base.py`, `errors.py`, `validators.py`) without deleting or replacing existing code. `_report_utils.py` transitions to a re-export wrapper sourcing constants from the Pydantic model.
+Phase 2 extends the Phase 1 infrastructure (`_base.py`, `errors.py`, `validators.py`) and updates all consumers of the old report format. `_report_utils.py` transitions to a re-export wrapper sourcing constants from the Pydantic model, with old-format helpers removed (not deprecated).
 
 ### Out of Scope
 
@@ -40,7 +40,7 @@ The meta-design Section 4.1 states `CURRENT_SCHEMA_VERSION` is "defined per modu
 | 1 | ImplementerReport format | YAML frontmatter + markdown body (same pattern as Plan) | Markdown-only with `from_markdown()` parser; JSON via tool-use (rejected by meta-design Appendix A) |
 | 2 | CheckpointResult format | Pure JSON (locked by meta-design Section 3.2) | N/A — machine-emitted artifacts use JSON |
 | 3 | Frontmatter scope | Structured fields in YAML; prose sections stay in markdown body | Minimal frontmatter (status only); everything in frontmatter (LLM YAML compliance risk) |
-| 4 | `_report_utils.py` fate | Model owns constants, utils re-exports for backwards compat. Cleanup in Phase 7. | Keep utils as-is; delete utils immediately |
+| 4 | `_report_utils.py` fate | Model owns constants, utils re-exports `VALID_STATUSES`. Old-format helpers (`STATUS_VALUE_PATTERN`, `extract_implementer_status()`) removed. | Keep utils as-is; deprecate but retain all helpers |
 | 5 | Renderer | None — humans read the file as-is | `.to_markdown()` on model; separate `renderers.py` module |
 | 6 | Cross-artifact validation | Deferred to Phase 3 (documented as candidate) | Lightweight cross-check in Phase 2 |
 | 7 | Migration | Hard cutover (locked by meta-design Section 10.1) | Shadow mode (overridden by meta-design) |
@@ -142,7 +142,7 @@ class ImplementerReport(SchemaVersionedModel):
 
 ### 3.5 Model Validators
 
-Three `@model_validator(mode="after")` rules:
+Two `@model_validator(mode="after")` rules:
 
 1. **`test_counts_consistent`** — `tests.passing` must be `<= tests.written`. A report claiming more tests passing than written is always a mistake.
 
@@ -227,10 +227,10 @@ def _build_result(phase, task_number, overall_status, checks, warnings, blockers
         task_number=task_number,
         progress=progress_model,
     )
-    return result.model_dump()
+    return result.model_dump(exclude_none=True)
 ```
 
-The downstream JSON output is identical except for the added `schema_version` field. All consumers (hooks, SDD skill, dispatch log readers) access specific keys and are unaffected by the addition.
+Using `exclude_none=True` preserves the current output shape — absent optional fields (`task_number`, `progress`, optional `Progress` sub-fields) are omitted rather than emitted as `null`. The only visible change is the added `schema_version` field.
 
 ### 4.5 Exit Code Interaction
 
@@ -257,12 +257,14 @@ Test fixtures must reflect this phase-dependent population pattern.
 
 ### 5.1 Phase 2 Changes
 
-The Pydantic model becomes the single source of truth for report constants. `_report_utils.py` re-exports from the model for backwards compatibility.
+The Pydantic model becomes the single source of truth for report constants. `_report_utils.py` re-exports `VALID_STATUSES` from the model. Old-format helpers are removed.
 
 **Constants that migrate to the model:**
-- `VALID_STATUSES` → `Status` Literal type on `ImplementerReport`
-- `STATUS_VALUE_PATTERN` → no longer needed (status comes from typed frontmatter)
-- `extract_implementer_status()` → no longer needed (status is a typed field)
+- `VALID_STATUSES` → re-exported from `Status` Literal type on `ImplementerReport`
+- `STATUS_VALUE_PATTERN` → **removed** (status comes from typed frontmatter, no regex extraction needed)
+- `extract_implementer_status()` → **removed** (status is a typed field, not parsed from prose)
+
+Hard cutover means these helpers have zero callers after the cutover commit. Deprecating would leave dead code. `extract-execution-trace.py` has its own local fallback regex for parsing historical session transcripts — it is unaffected.
 
 **Re-export pattern:**
 ```python
@@ -280,14 +282,18 @@ Prose section-presence checking remains in `_report_utils.py`:
 - `validate_report_sections()` — orchestrates prose section checks
 - `SECTION_HEADER_PATTERN`, `PLACEHOLDER_VALUES` — supporting constants
 
-### 5.3 Documentation
+### 5.3 Placeholder Detection Fix
 
-- Docstring at top of `_report_utils.py` updated to note re-export pattern and Phase 7 cleanup target
-- `VALID_STATUSES` and `extract_implementer_status()` docstrings note they are sourced from the Pydantic model
+`section_contains_content()` uses `PLACEHOLDER_VALUES` (`{"none", "n/a", "na", "-", "—", ""}`) and a `len <= 10` heuristic. The prompt template instructs agents to write `"None — implemented exactly as specified"` (44 chars) — this bypasses both checks and triggers the `done_with_concerns_check` warning on clean reports. Fix by adding the prompt's standard placeholder phrases to `PLACEHOLDER_VALUES` or matching them explicitly.
 
-### 5.4 Pre-existing Duplication
+### 5.4 Documentation
 
-`controller-checkpoint.py` contains its own `validate_report_sections()` function (lines 207-244) that duplicates `_report_utils.py`'s logic. Phase 2 does not fix this — it is a pre-existing issue. Noted as a Phase 7 cleanup candidate.
+- Docstring at top of `_report_utils.py` updated to note re-export pattern
+- `VALID_STATUSES` docstring notes it is sourced from the Pydantic model
+
+### 5.5 Inline Validator in `controller-checkpoint.py`
+
+`controller-checkpoint.py` contains its own `validate_report_sections()` function (lines 207-244) that duplicates `_report_utils.py`'s logic with a hardcoded 9-section list. After cutover, new reports have 5 prose sections — this inline validator would fail every checkpoint gate. Phase 2 **must** update this to match the new 5-section list, or replace it with a call to shared validation in `_report_utils.py`.
 
 ---
 
@@ -342,10 +348,14 @@ The prose section template below the frontmatter is unchanged from today.
 
 The prompt template change ships in the same commit as the validator changes, per meta-design Section 10.4.
 
-### 6.3 Other Files Unchanged
+### 6.3 SDD Skill Report Persistence Instructions
+
+`skills/subagent-driven-development/SKILL.md` (line 428) currently instructs controllers to prefix report files with markdown headers (`# Task NNN Report`, `# Date:`, `# Status:`). Under the new contract, report files must begin with `---` (YAML frontmatter). Update this section to instruct controllers that reports start with the frontmatter block. The old `# Task...` prefix would cause immediate hard FAIL from the frontmatter detector.
+
+### 6.4 Other Prompt Template Notes
 
 - `controller-checkpoint.py` — gains `schema_version` via `CheckpointResult` construction, but its invocation interface doesn't change
-- No other prompt templates affected
+- No other prompt templates affected beyond Section 6.1 and 6.3
 
 ---
 
@@ -381,17 +391,27 @@ Validation sequence in `validate-report.py`:
 
 **Old report interaction:** Reports without frontmatter fail at step 2 (hard FAIL) and never reach the prose section check. This means old 9-section reports and new 5-section reports are never compared against the wrong section count.
 
-The `sdd-pre-dispatch-hook.sh` already calls `validate-report.py` and checks its exit code — no hook changes needed. The hook sees the same exit code semantics (0 = pass, 1 = fail) regardless of which validation layer produced the failure.
+### 7.2.1 Hook Changes Required: `sdd-pre-dispatch-hook.sh`
 
-### 7.3 Import Mechanism
+The hook's Check 4b (line 257) currently discards `validate-report.py` stderr (`2>/dev/null`) and only parses JSON stdout. The new Pydantic validation path emits errors to stderr with a nonzero exit code — the hook would silently miss these failures. Changes required:
+
+1. **Capture exit code**: Block on nonzero exit from `validate-report.py`, regardless of stdout content
+2. **Update error message**: Change "all 9 required sections" (line 262) to "all 5 required sections"
+3. **Handle stderr**: Either capture stderr for the error message, or ensure `validate-report.py` emits hook-compatible JSON on failure
+
+### 7.3 `context-summary.py` — Frontmatter Parsing
+
+`context-summary.py` extracts file lists from the "Files Changed" prose section (line 121). After cutover, files are in YAML frontmatter — the prose section no longer exists. Update `extract_files_changed()` to parse `files_changed` from YAML frontmatter instead of regex-matching prose headers. No old-format fallback needed (hard cutover).
+
+### 7.4 Import Mechanism
 
 `controller-checkpoint.py` lives at `skills/subagent-driven-development/scripts/`. To import from `skills/scripts/models/`, it needs a `sys.path.insert(0, ...)` pointing to the models directory, following the same pattern used by `validators.py`. The models directory uses relative imports internally (e.g., `from _base import StrictModel`), with `sys.path` manipulation at the entry point.
 
-### 7.4 CheckpointResult — No CLI Subcommand
+### 7.5 CheckpointResult — No CLI Subcommand
 
 `CheckpointResult` validates at construction time inside `controller-checkpoint.py`. No external CLI invocation needed. See Section 4.5 for exit code interaction.
 
-### 7.5 Exit Code Convention
+### 7.6 Exit Code Convention
 
 Unchanged from Phase 1 for `validators.py`: `0` = pass, `1` = validation fail, `2` = infrastructure error. `controller-checkpoint.py` retains its own convention (see Section 4.5).
 
@@ -452,14 +472,18 @@ tests/
 - Missing frontmatter → exit 1, message references "Phase 2 cutover"
 - YAML parse error → exit 1, stderr contains `YAML PARSE FAILED`
 
-### 8.5 Pre-Ship Smoke Test
+### 8.5 Existing Test Helper Updates
+
+`tests/unit/sdd_test_helpers.py` (line 52) generates old 9-section, no-frontmatter reports for hook and checkpoint tests. After hard cutover, these fixtures no longer represent valid reports. Update `IMPLEMENTER_REPORT_TEMPLATE` to use YAML frontmatter + 5 prose sections. This ensures existing hook/checkpoint tests validate against the new format rather than failing or testing dead paths.
+
+### 8.6 Pre-Ship Smoke Test
 
 - Copy real implementer reports from `reports/` (from Phase 1 SDD session) into `tests/fixtures/_smoke-test-reports/`
 - Add YAML frontmatter to copies (never modify originals)
 - Run validator against all copies — all must PASS
 - Delete `_smoke-test-reports/` in the merge commit
 
-### 8.6 Estimated Test Counts
+### 8.7 Estimated Test Counts
 
 | Layer | Before Phase 2 | After Phase 2 | Delta |
 |-------|---------------|--------------|-------|
@@ -478,8 +502,12 @@ All changes ship atomically (meta-design Section 10.4):
 - `validators.py` report subcommand
 - `validate-report.py` Pydantic validation step
 - `implementer-prompt.md` frontmatter instructions
-- `controller-checkpoint.py` `CheckpointResult` construction
-- `_report_utils.py` re-export changes
+- `SKILL.md` report persistence instructions (remove `# Task...` prefix)
+- `controller-checkpoint.py` `CheckpointResult` construction + inline validator update (9→5 sections)
+- `sdd-pre-dispatch-hook.sh` exit code/stderr handling + section count message
+- `context-summary.py` frontmatter file extraction
+- `_report_utils.py` re-export + old helper removal + placeholder detection fix
+- `sdd_test_helpers.py` report template update
 - Test files and fixtures
 
 Existing reports without frontmatter produce a hard FAIL if re-validated (expected — same behavior as archived plans in Phase 1).
@@ -571,10 +599,15 @@ tests/fixtures/_smoke-test-reports/       # NEW — throwaway, deleted post-ship
 - [ ] `implementer-prompt.md` report format template includes YAML frontmatter block
 - [ ] Prompt template and validators ship atomically (same commit)
 - [ ] `_report_utils.py` re-exports `VALID_STATUSES` from the Pydantic model's `Status` type
-- [ ] `_report_utils.py` docstring notes Phase 7 cleanup target
-- [ ] `_report_utils.py` `extract_implementer_status()` documented as deprecated (status now from frontmatter)
+- [ ] `_report_utils.py` `STATUS_VALUE_PATTERN` and `extract_implementer_status()` removed (not deprecated)
 - [ ] `_report_utils.py` `REQUIRED_SECTIONS` reduced from 9 to 5 (Status, Files Changed, Tests, Contract Compliance removed — now in frontmatter)
-- [ ] Pre-existing `validate_report_sections()` duplication in `controller-checkpoint.py` noted as Phase 7 cleanup candidate (not fixed in Phase 2)
+- [ ] `_report_utils.py` placeholder detection updated to handle prompt template phrases (e.g., "None — implemented exactly as specified")
+- [ ] `controller-checkpoint.py` inline `validate_report_sections()` updated to match 5-section list (or replaced with call to shared validation)
+- [ ] `sdd-pre-dispatch-hook.sh` captures `validate-report.py` exit code and blocks on nonzero
+- [ ] `sdd-pre-dispatch-hook.sh` error message updated from "9 required sections" to "5 required sections"
+- [ ] `context-summary.py` extracts files from YAML frontmatter instead of prose section
+- [ ] `SKILL.md` report persistence instructions updated (reports start with `---`, not `# Task...`)
+- [ ] `sdd_test_helpers.py` `IMPLEMENTER_REPORT_TEMPLATE` updated to new frontmatter format
 - [ ] `validate-report.py` calls `validate_report()` from `validators.py` for Pydantic check (shared code, not duplicated)
 - [ ] Meta-design Sections 2, 5, 11, 12 updated per Section 10 of this spec
 - [ ] Meta-design Phase 3 scope includes cross-artifact contract validation as user-requested candidate
