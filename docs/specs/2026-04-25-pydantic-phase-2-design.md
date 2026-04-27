@@ -158,7 +158,7 @@ Two `@model_validator(mode="after")` rules:
 
 ### 4.1 Format
 
-Pure JSON, unchanged from current output. `controller-checkpoint.py` constructs via `CheckpointResult(...)` and calls `.model_dump()`. The only visible change is the addition of `schema_version` to the output.
+Pure JSON, unchanged from current output. `controller-checkpoint.py` constructs via `CheckpointResult(...)` and calls `.model_dump(exclude_none=True)`. The only visible change is the addition of `schema_version` to the output.
 
 ### 4.2 Pydantic Model Shape
 
@@ -212,8 +212,8 @@ Three `@model_validator(mode="after")` rules:
 The `_build_result()` function changes from returning a raw dict to constructing via `CheckpointResult`:
 
 ```python
-from skills.scripts.models._base import CURRENT_SCHEMA_VERSION
-from skills.scripts.models.checkpoint_result import CheckpointResult, Progress
+from _base import CURRENT_SCHEMA_VERSION
+from checkpoint_result import CheckpointResult, Progress
 
 def _build_result(phase, task_number, overall_status, checks, warnings, blockers, progress):
     progress_model = Progress(**progress) if progress else None
@@ -269,7 +269,7 @@ Hard cutover means these helpers have zero callers after the cutover commit. Dep
 **Re-export pattern:**
 ```python
 # _report_utils.py
-from skills.scripts.models.implementer_report import Status
+from implementer_report import Status
 VALID_STATUSES = set(Status.__args__)  # {"DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT"}
 ```
 
@@ -342,7 +342,7 @@ contract_compliance:
 ...
 ```
 
-The prose section template below the frontmatter is unchanged from today.
+The remaining prose template contains the five required prose sections (Implementation Summary, Source Files Read, Deviations from Plan, Self-Review Findings, Concerns).
 
 ### 6.2 Atomicity
 
