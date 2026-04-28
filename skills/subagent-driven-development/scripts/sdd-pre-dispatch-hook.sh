@@ -23,8 +23,9 @@ MIN_REPORT_BYTES=50
 CONTEXT_LOAD_WARNING_BYTES=$((400 * 1024))
 
 # Prefer venv python for PyYAML/Pydantic availability; fall back to system python3
+# Resolve to absolute path — the hook cd's to $CWD later, so relative paths break.
 if [ -f ".venv/bin/python3" ]; then
-  PYTHON=".venv/bin/python3"
+  PYTHON="$(pwd)/.venv/bin/python3"
 else
   PYTHON="python3"
 fi

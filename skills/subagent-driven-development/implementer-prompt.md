@@ -185,15 +185,30 @@ Task tool (general-purpose):
 
     ## Report Format
 
-    When done, report using this exact structure. Do not omit sections.
+    When done, report using this exact structure. Your report MUST begin with a YAML
+    frontmatter block (between --- delimiters), followed by the prose sections below.
+    Do not omit sections.
 
-    **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    ---
+    schema_version: 1
+    task_id: [your task number]
+    status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
+    files_changed:
+      - path: "path/to/file.py"
+        description: "what changed and why"
+    tests:
+      written: [count]
+      passing: [count]
+      command: "[exact command run]"
+      result: PASS | FAIL
+    contract_compliance:
+      - constraint: "[constraint text from plan]"
+        status: compliant | non_compliant | partial | not_applicable
+        detail: "[how you complied]"
+    ---
 
     **Implementation Summary:**
     [2-3 sentences: what you built and the approach taken]
-
-    **Files Changed:**
-    - `path/to/file.py` — [what changed and why]
 
     **Source Files Read:**
     - `path/to/source.py` — [what you learned from reading it]
@@ -202,16 +217,6 @@ Task tool (general-purpose):
     **CLAUDE.md Files Read:**
     - `path/to/CLAUDE.md` — [key conventions or patterns found]
     - (Write "None found in modified directories" if no CLAUDE.md files exist)
-
-    **Tests:**
-    - Tests written: [count and names]
-    - Tests passing: [count]
-    - Test command: [exact command run]
-    - Test output summary: [PASS/FAIL with relevant details]
-
-    **Contract Compliance:**
-    - [For each Contract Constraint: state whether your implementation complies and how]
-    - (Write "No Contract Constraints for this task" if applicable)
 
     **Deviations from Plan:**
     - [Any decisions you made that differ from the plan's instructions]

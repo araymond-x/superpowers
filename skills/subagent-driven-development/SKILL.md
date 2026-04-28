@@ -423,12 +423,7 @@ Do NOT use module-prefixed names (`m2-task-1-*`), do NOT create symlinks between
 
 The `reports/` directory is the controller's flight recorder. If the session crashes, a new session can read these files to understand what happened and resume execution.
 
-**Report file format**: Each report file should contain the implementer's or reviewer's full output, prefixed with:
-```
-# Task NNN Report — [task name]
-# Date: [ISO timestamp]
-# Status: [DONE/DONE_WITH_CONCERNS/BLOCKED/NEEDS_CONTEXT]
-```
+**Report file format**: Implementer report files must begin with YAML frontmatter (between `---` delimiters) containing structured fields (schema_version, task_id, status, files_changed, tests, contract_compliance), followed by prose sections. Reviewer and spec-review reports retain their existing markdown format.
 
 ## Plan Status Tracking
 

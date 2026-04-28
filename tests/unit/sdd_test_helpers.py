@@ -49,42 +49,38 @@ def make_guard_input(command: str) -> str:
     return json.dumps(payload)
 
 
-# The 9 required sections from _report_utils.py REQUIRED_SECTIONS
 IMPLEMENTER_REPORT_TEMPLATE = """\
-# Task {task_number:03d} Report -- {title}
-# Date: {date}
-# Status: DONE
+---
+schema_version: 1
+task_id: {task_number}
+status: DONE
+files_changed:
+  - path: "src/module.py"
+    description: "modified"
+  - path: "tests/test_module.py"
+    description: "created"
+tests:
+  written: 2
+  passing: 2
+  command: "pytest tests/test_module.py -v"
+  result: PASS
+---
 
-## Status
-DONE
-
-## Implementation Summary
+**Implementation Summary:**
 Implemented the feature as specified in the plan. All requirements met.
 
-## Files Changed
-- src/module.py (modified)
-- tests/test_module.py (created)
-
-## Source Files Read
+**Source Files Read:**
 - docs/imp-plans/plan.md
 - src/existing_module.py
 
-## Tests
-- test_feature_basic: PASS
-- test_feature_edge_case: PASS
-All tests passing.
+**Deviations from Plan:**
+None — implemented exactly as specified
 
-## Contract Compliance
-All contracts verified. Input/output types match spec.
-
-## Deviations from Plan
-None.
-
-## Self-Review Findings
+**Self-Review Findings:**
 No issues found during self-review.
 
-## Concerns
-None.
+**Concerns:**
+No concerns
 """
 
 SPEC_REVIEW_TEMPLATE = """\
@@ -121,19 +117,23 @@ def setup_sdd_workspace(tmpdir: str, task_count: int) -> None:
     # Create DEVIATIONS.md
     dev_path = os.path.join(tmpdir, "DEVIATIONS.md")
     with open(dev_path, "w") as f:
-        f.write("# Deviations Register\n\n"
-                "> Auto-maintained by controller during subagent-driven-development execution.\n\n"
-                "| Task | Type | Description | Disposition |\n"
-                "|------|------|-------------|-------------|\n")
+        f.write(
+            "# Deviations Register\n\n"
+            "> Auto-maintained by controller during subagent-driven-development execution.\n\n"
+            "| Task | Type | Description | Disposition |\n"
+            "|------|------|-------------|-------------|\n"
+        )
 
     # Create pre-execution audit (>50 bytes)
     audit_path = os.path.join(reports_dir, "pre-execution-audit.md")
     with open(audit_path, "w") as f:
-        f.write("# Pre-Execution Audit\n\n"
-                "## Self-Assessment\n"
-                "All prerequisites verified. Plan ingested. Deviations register created.\n\n"
-                "## Auditor Verdict\n"
-                "CLEAR -- No remediation orders.\n")
+        f.write(
+            "# Pre-Execution Audit\n\n"
+            "## Self-Assessment\n"
+            "All prerequisites verified. Plan ingested. Deviations register created.\n\n"
+            "## Auditor Verdict\n"
+            "CLEAR -- No remediation orders.\n"
+        )
 
     # Create plan with task headers in docs/imp-plans/
     plan_dir = os.path.join(tmpdir, "docs", "imp-plans")
@@ -149,30 +149,45 @@ def setup_sdd_workspace(tmpdir: str, task_count: int) -> None:
     # Git init on feature branch
     subprocess.run(
         ["git", "init"],
-        cwd=tmpdir, capture_output=True, check=True,
+        cwd=tmpdir,
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "checkout", "-b", "feature-test"],
-        cwd=tmpdir, capture_output=True, check=True,
+        cwd=tmpdir,
+        capture_output=True,
+        check=True,
     )
     # Initial commit so git is functional
     subprocess.run(
         ["git", "add", "."],
-        cwd=tmpdir, capture_output=True, check=True,
+        cwd=tmpdir,
+        capture_output=True,
+        check=True,
     )
     subprocess.run(
         ["git", "commit", "-m", "initial"],
-        cwd=tmpdir, capture_output=True, check=True,
-        env={**os.environ, "GIT_AUTHOR_NAME": "test", "GIT_AUTHOR_EMAIL": "test@test.com",
-             "GIT_COMMITTER_NAME": "test", "GIT_COMMITTER_EMAIL": "test@test.com"},
+        cwd=tmpdir,
+        capture_output=True,
+        check=True,
+        env={
+            **os.environ,
+            "GIT_AUTHOR_NAME": "test",
+            "GIT_AUTHOR_EMAIL": "test@test.com",
+            "GIT_COMMITTER_NAME": "test",
+            "GIT_COMMITTER_EMAIL": "test@test.com",
+        },
     )
 
 
-def create_task_reports(tmpdir: str, task_number: int, include_dispatch_log: bool = True) -> None:
+def create_task_reports(
+    tmpdir: str, task_number: int, include_dispatch_log: bool = True
+) -> None:
     """Create implementer-report, spec-review, and quality-review for a task.
 
     All files use zero-padded 3-digit naming (task-NNN-*).
-    Implementer report has all 9 required sections and is >50 bytes.
+    Implementer report has YAML frontmatter + 5 prose sections and is >50 bytes.
     Optionally appends reviewer dispatch entries to .dispatch-log.
 
     Args:
@@ -188,9 +203,13 @@ def create_task_reports(tmpdir: str, task_number: int, include_dispatch_log: boo
     # Implementer report with all 9 sections
     impl_path = os.path.join(reports_dir, f"task-{padded}-implementer-report.md")
     with open(impl_path, "w") as f:
-        f.write(IMPLEMENTER_REPORT_TEMPLATE.format(
-            task_number=task_number, title=f"Step {task_number}", date=now,
-        ))
+        f.write(
+            IMPLEMENTER_REPORT_TEMPLATE.format(
+                task_number=task_number,
+                title=f"Step {task_number}",
+                date=now,
+            )
+        )
 
     # Spec review
     spec_path = os.path.join(reports_dir, f"task-{padded}-spec-review.md")
@@ -220,17 +239,24 @@ def create_checkpoint_file(tmpdir: str, task_number: int) -> None:
     reports_dir = os.path.join(tmpdir, "reports")
     os.makedirs(reports_dir, exist_ok=True)
     padded = f"{task_number:03d}"
-    checkpoint_path = os.path.join(reports_dir, f"checkpoint-pre-dispatch-{padded}.json")
+    checkpoint_path = os.path.join(
+        reports_dir, f"checkpoint-pre-dispatch-{padded}.json"
+    )
     with open(checkpoint_path, "w") as f:
-        json.dump({
-            "status": "PASS",
-            "phase": "pre-dispatch",
-            "task": task_number,
-            "detail": "checkpoint for pre-dispatch verification",
-        }, f)
+        json.dump(
+            {
+                "status": "PASS",
+                "phase": "pre-dispatch",
+                "task": task_number,
+                "detail": "checkpoint for pre-dispatch verification",
+            },
+            f,
+        )
 
 
-def setup_full_sdd_workspace(tmpdir: str, total_tasks: int, completed_tasks: int) -> None:
+def setup_full_sdd_workspace(
+    tmpdir: str, total_tasks: int, completed_tasks: int
+) -> None:
     """Full workspace: plan, DEVIATIONS.md, audit, reports + dispatch log + checkpoint files for all completed tasks.
 
     Args:
@@ -251,7 +277,9 @@ def setup_full_sdd_workspace(tmpdir: str, total_tasks: int, completed_tasks: int
             padded = f"{i:03d}"
             partner_path = os.path.join(reports_dir, f"partner-review-{padded}.md")
             with open(partner_path, "w") as f:
-                f.write(f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60)
+                f.write(
+                    f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
+                )
 
     # Create checkpoint and partner review for the next task to be dispatched
     if completed_tasks < total_tasks:
@@ -260,4 +288,6 @@ def setup_full_sdd_workspace(tmpdir: str, total_tasks: int, completed_tasks: int
             padded = f"{completed_tasks:03d}"
             partner_path = os.path.join(reports_dir, f"partner-review-{padded}.md")
             with open(partner_path, "w") as f:
-                f.write(f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60)
+                f.write(
+                    f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
+                )
