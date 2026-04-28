@@ -22,6 +22,13 @@ MIN_REPORT_BYTES=50
 # 400KB of accumulated files is roughly 100K tokens.
 CONTEXT_LOAD_WARNING_BYTES=$((400 * 1024))
 
+# Prefer venv python for PyYAML/Pydantic availability; fall back to system python3
+if [ -f ".venv/bin/python3" ]; then
+  PYTHON=".venv/bin/python3"
+else
+  PYTHON="python3"
+fi
+
 # Absolute path to validate-report.py (must use absolute path — bare scripts/ resolves from CWD)
 VALIDATE_REPORT_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/validate-report.py"
 
@@ -254,7 +261,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   if [ "$RESULT" = "OK" ] && [ -f "$VALIDATE_REPORT_SCRIPT" ]; then
     IMPL_LATEST=$(ls $IMPL_GLOB 2>/dev/null | sort | tail -1)
     if [ -n "$IMPL_LATEST" ]; then
-      VALIDATE_OUTPUT=$(python3 "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
+      VALIDATE_OUTPUT=$($PYTHON "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
       VALIDATE_EXIT=$?
       if [ "$VALIDATE_EXIT" -ne 0 ]; then
         ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT). Re-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")

@@ -23,7 +23,10 @@ import os
 import sys
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    yaml = None
 
 # Add the script directory to the path so _report_utils can be imported
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
