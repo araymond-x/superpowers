@@ -29,6 +29,11 @@ import os
 import re
 import sys
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 # Pattern to extract task number from report filename (task-N-implementer-report*)
 TASK_NUMBER_PATTERN = re.compile(r"task-(\d+)-implementer-report", re.IGNORECASE)
 
@@ -147,6 +152,50 @@ def extract_files_changed(content: str) -> list:
     return files
 
 
+def extract_files_from_frontmatter(content: str) -> list:
+    """
+    Extract file paths from YAML frontmatter's files_changed field.
+    Returns a list of file path strings. Returns empty list if no frontmatter
+    or yaml not available.
+    """
+    if yaml is None:
+        return []
+    if not content.startswith("---"):
+        return []
+    end = content.find("---", 3)
+    if end == -1:
+        return []
+    try:
+        data = yaml.safe_load(content[3:end])
+    except yaml.YAMLError:
+        return []
+    if not isinstance(data, dict):
+        return []
+    files_changed = data.get("files_changed", [])
+    if not isinstance(files_changed, list):
+        return []
+    return [
+        fc["path"] for fc in files_changed
+        if isinstance(fc, dict) and "path" in fc
+    ]
+
+
+def extract_status_from_frontmatter(content: str) -> str:
+    """Extract status from YAML frontmatter. Returns 'UNKNOWN' if not found."""
+    if yaml is None or not content.startswith("---"):
+        return "UNKNOWN"
+    end = content.find("---", 3)
+    if end == -1:
+        return "UNKNOWN"
+    try:
+        data = yaml.safe_load(content[3:end])
+    except yaml.YAMLError:
+        return "UNKNOWN"
+    if isinstance(data, dict) and "status" in data:
+        return data["status"]
+    return "UNKNOWN"
+
+
 def parse_report(report_path: str) -> dict:
     """
     Parse a single implementer report file.
@@ -172,8 +221,8 @@ def parse_report(report_path: str) -> dict:
         result["parse_error"] = str(e)
         return result
 
-    result["status"] = extract_status(content)
-    result["files_changed"] = extract_files_changed(content)
+    result["status"] = extract_status_from_frontmatter(content)
+    result["files_changed"] = extract_files_from_frontmatter(content)
     result["concerns"] = extract_section_content(CONCERNS_PATTERN, content)
     result["deviations_from_plan"] = extract_section_content(
         DEVIATIONS_FROM_PLAN_PATTERN, content
