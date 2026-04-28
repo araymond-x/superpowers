@@ -254,12 +254,15 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   if [ "$RESULT" = "OK" ] && [ -f "$VALIDATE_REPORT_SCRIPT" ]; then
     IMPL_LATEST=$(ls $IMPL_GLOB 2>/dev/null | sort | tail -1)
     if [ -n "$IMPL_LATEST" ]; then
-      VALIDATE_OUTPUT=$(python3 "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>/dev/null || echo "")
-      if [ -n "$VALIDATE_OUTPUT" ]; then
+      VALIDATE_OUTPUT=$(python3 "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
+      VALIDATE_EXIT=$?
+      if [ "$VALIDATE_EXIT" -ne 0 ]; then
+        ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT). Re-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")
+      else
         VALIDATE_STATUS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
         if [ "$VALIDATE_STATUS" = "INCOMPLETE" ]; then
           MISSING_SECTIONS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(', '.join(json.load(sys.stdin).get('sections_missing',[])))" 2>/dev/null)
-          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) is structurally incomplete — missing sections: $MISSING_SECTIONS. Re-dispatch the implementer to complete all 9 required sections before proceeding.")
+          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) is structurally incomplete — missing sections: $MISSING_SECTIONS. Re-dispatch the implementer to complete all 5 required prose sections before proceeding.")
         fi
       fi
     fi
