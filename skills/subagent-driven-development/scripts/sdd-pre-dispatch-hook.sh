@@ -22,16 +22,19 @@ MIN_REPORT_BYTES=50
 # 400KB of accumulated files is roughly 100K tokens.
 CONTEXT_LOAD_WARNING_BYTES=$((400 * 1024))
 
-# Prefer venv python for PyYAML/Pydantic availability; fall back to system python3
-# Resolve to absolute path — the hook cd's to $CWD later, so relative paths break.
-if [ -f ".venv/bin/python3" ]; then
-  PYTHON="$(pwd)/.venv/bin/python3"
+# Resolve the superpowers repo root. Self-resolves from script location by default;
+# set SUPERPOWERS_ROOT env var to override (e.g., for team distribution).
+SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+
+# Python with PyYAML/Pydantic — use the superpowers venv, fall back to system python3
+if [ -f "$SUPERPOWERS_ROOT/.venv/bin/python3" ]; then
+  PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
 else
   PYTHON="python3"
 fi
 
-# Absolute path to validate-report.py (must use absolute path — bare scripts/ resolves from CWD)
-VALIDATE_REPORT_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/validate-report.py"
+# Script paths derived from repo root (no hardcoded absolute paths)
+VALIDATE_REPORT_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/validate-report.py"
 
 # Read stdin
 INPUT=$(cat)
@@ -412,7 +415,7 @@ fi
 
 # ─── Check 6: Token budget estimation ─────────────────────────────────────
 
-ESTIMATE_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/estimate-task-tokens.py"
+ESTIMATE_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/estimate-task-tokens.py"
 TOKEN_WARNING=""
 
 if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
