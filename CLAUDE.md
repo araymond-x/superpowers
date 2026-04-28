@@ -188,14 +188,18 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
   - Minimum-tier quality review ratio ≤ 20% (too many minimum-tier reviews triggers FAIL)
 - Stop hook (`sdd-stop-hook.sh`) captures honesty logs globally so trace audit can cross-reference across sessions.
 
-## Pydantic Validation (Phase 1)
+## Pydantic Validation (Phase 1 + Phase 2)
 - Models at `skills/scripts/models/` — `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
+- `implementer_report.py` — ImplementerReport model (YAML frontmatter + markdown body), 2 validators
+- `checkpoint_result.py` — CheckpointResult model (pure JSON), 3 validators
 - Two base classes: `StrictModel` (nested types, `extra="forbid"`) and `SchemaVersionedModel` (top-level artifacts, `schema_version` pinned)
 - CLI: `python3 validators.py plan <path>` / `python3 validators.py handoff <dir>`
+- CLI: `python3 validators.py report <path>` — validates implementer report frontmatter
+- `validate-report.py` runs Pydantic validation before prose section checks
 - Exit codes: 0 pass / 1 validation fail / 2 infrastructure
 - Bypass: `export SUPERPOWERS_VALIDATOR_BYPASS=1` (emergency unblock, stderr warning)
 - Schema version: `CURRENT_SCHEMA_VERSION = 1` in `_base.py`. Bump per `docs/plans/2026-04-24-pydantic-meta-design.md` Section 4.2.
-- Plans without YAML frontmatter are hard FAILs — add frontmatter to validate.
+- Plans and reports without YAML frontmatter are hard FAILs — add frontmatter to validate.
 
 ## Worktree Sessions
 - Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`

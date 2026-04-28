@@ -29,9 +29,9 @@ This document captures **cross-phase architectural decisions** for the Pydantic 
 
 | Phase | Candidates | Status |
 |-------|-----------|--------|
-| 1 | A3 Plan + B4 HandoffPackage | In progress (this session) |
-| 2 | A1 ImplementerReport + A2 CheckpointResult | Deferred |
-| 3 | B1 DeviationsRegister + B2 HonestyCheck + B3 TraceAudit | Deferred |
+| 1 | A3 Plan + B4 HandoffPackage | Complete |
+| 2 | A1 ImplementerReport + A2 CheckpointResult | Complete |
+| 3 | B1 DeviationsRegister + B2 HonestyCheck + B3 TraceAudit + Cross-artifact contract validation (PlanExecutionContract) — user-requested candidate. Validates relationships between Plan and ImplementerReport: task_id exists in plan, files_changed cross-task ownership, contract_compliance covers plan constraints. | Deferred |
 | 4 | C1 SpecReview + C2 QualityReview + C3 PartnerReview | Deferred |
 | 5 | C4 PlanReview + C5 PreExecutionAudit + C6 DispatchLogEntry + C7 PlanManifest + C8 ContextSummary | Deferred |
 | 6 | D1 TokenEstimate + D2 DesignSpec + D2 DistilledSpec | Stretch |
@@ -112,8 +112,8 @@ skills/scripts/models/
 ├── handoff.py            # Phase 1
 ├── errors.py             # Formatter
 ├── validators.py         # CLI entry
-├── implementer_report.py # Phase 2
-├── checkpoint_result.py  # Phase 2
+├── implementer_report.py # Phase 2 — ImplementerReport (YAML frontmatter + markdown body)
+├── checkpoint_result.py  # Phase 2 — CheckpointResult (pure JSON)
 ├── deviations.py         # Phase 3
 └── ...
 ```
@@ -289,7 +289,7 @@ Prompt templates and validators ship in the same commit. Decoupling creates a wi
 
 ## 11. Cross-Phase Lessons Learned (Evolves)
 
-### Phase 1 — 2026-04-24 (In Progress)
+### Phase 1 — 2026-04-24 (Complete)
 _This section will be updated post-implementation with a post-mortem._
 
 Placeholder for:
@@ -297,6 +297,9 @@ Placeholder for:
 - What needed adjustment
 - Adjustments that invalidate locked decisions above (if any)
 - New patterns that might generalize
+
+### Phase 2 — 2026-04-27 (Complete)
+Phase 2 completed in 16 tasks across 3 modules. Models, CLI, and all consumers updated atomically. Intermediate test breakage window was managed via the modular plan's dependency ordering. One unanticipated integration issue: hook used system python3 without PyYAML — fixed by resolving to venv python.
 
 ### CHANGELOG of Locked-Decision Updates
 _No updates yet. Each future change lands a dated entry here._
@@ -312,15 +315,21 @@ These were raised during Phase 1 brainstorm but intentionally not committed. The
 
 **Deferred to:** Phase 2 (A1 ImplementerReport is the first schema where subagent-emission-then-human-rendering actually matters — in Phase 1, authors write YAML + markdown directly).
 
+**Resolved — No renderer; humans read file as-is.**
+
 ### 12.2 Sub-Agent Tool-Use Integration
 **Question:** Should subagents emit JSON via forced tool-use (Instructor-style), or write YAML frontmatter + markdown by hand?
 
 **Deferred to:** Phase 2 for the same reason — ImplementerReport is emitted by subagents; Plan/HandoffPackage in Phase 1 are written by skills + humans.
 
+**Resolved — YAML frontmatter, same as Plan.**
+
 ### 12.3 Cross-Artifact Contract Validation
 **Question:** Should there be a `PlanExecutionContract` meta-model that validates relationships *between* artifacts (e.g., `Plan.contracts_implemented` must be a superset of next `Task.depends_on`)?
 
 **Deferred to:** Phase 2+ — this is only meaningful once multiple schemas coexist at runtime and their relationships become load-bearing.
+
+**Updated — Phase 3 candidate for PlanExecutionContract.**
 
 ### 12.4 Hypothesis Property-Based Tests
 **Question:** Should the test suite include Hypothesis-driven property tests?
