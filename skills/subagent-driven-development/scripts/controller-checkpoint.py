@@ -38,6 +38,11 @@ import json
 import os
 import re
 import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
+from _base import CURRENT_SCHEMA_VERSION
+from checkpoint_result import CheckpointResult, CheckResult, Progress
 
 # Character-to-token approximation (standard industry estimate: 1 token = 4 chars)
 CHARS_PER_TOKEN = 4
@@ -206,23 +211,17 @@ def _count_review_tiers(reports_dir, review_type):
 
 def validate_report_sections(report_content: str) -> dict:
     """
-    Inline implementation of validate-report.py logic.
+    Validate that a report has the 5 required prose sections.
     Returns {"complete": bool, "sections_found": int, "sections_total": int}.
     """
-    # Required sections (from implementer-prompt-v0.1.md contract)
     required_patterns = [
-        (r"status", "Status"),
         (r"implementation\s+summary", "Implementation Summary"),
-        (r"files?\s+changed", "Files Changed"),
         (r"source\s+files?\s+read", "Source Files Read"),
-        (r"tests?", "Tests"),
-        (r"contract\s+compliance", "Contract Compliance"),
         (r"deviations?\s+from\s+plan", "Deviations from Plan"),
         (r"self[\-\s]review\s+findings?", "Self-Review Findings"),
         (r"concerns?", "Concerns"),
     ]
 
-    # Find all header candidates (bold markers and ATX headers)
     header_pattern = re.compile(r"(?:\*\*([^*]+)\*\*|^#{1,4}\s+(.+))", re.MULTILINE)
     headers = []
     for match in header_pattern.finditer(report_content):
@@ -1019,19 +1018,23 @@ def _build_result(
     blockers: list,
     progress,
 ) -> dict:
-    """Assemble the final result dict."""
-    result = {
-        "phase": phase,
-        "status": overall_status,
-        "checks": checks,
-        "warnings": warnings,
-        "blockers": blockers,
+    """Assemble the final result dict via CheckpointResult model."""
+    check_models = {
+        name: CheckResult(status=v["status"], detail=v["detail"])
+        for name, v in checks.items()
     }
-    if task_number is not None:
-        result["task_number"] = task_number
-    if progress is not None:
-        result["progress"] = progress
-    return result
+    progress_model = Progress(**progress) if progress else None
+    result = CheckpointResult(
+        schema_version=CURRENT_SCHEMA_VERSION,
+        phase=phase,
+        status=overall_status,
+        task_number=task_number,
+        checks=check_models,
+        warnings=warnings,
+        blockers=blockers,
+        progress=progress_model,
+    )
+    return result.model_dump(exclude_none=True)
 
 
 def main() -> int:
