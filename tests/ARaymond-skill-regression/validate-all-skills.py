@@ -1019,31 +1019,36 @@ def check_prompt_templates(skills_dir):
                 "implementer-prompt: 'Source Files' section missing",
             )
 
-        # implementer-prompt report format: all 9 required sections listed
-        required_report_sections = [
-            "Status",
+        # implementer-prompt report format: YAML frontmatter fields + 5 prose sections
+        # Phase 2 moved Status, Files Changed, Tests, Contract Compliance to YAML frontmatter
+        required_frontmatter_fields = [
+            "schema_version",
+            "task_id",
+            "status",
+            "files_changed",
+            "tests",
+            "contract_compliance",
+        ]
+        required_prose_sections = [
             "Implementation Summary",
-            "Files Changed",
             "Source Files Read",
-            "Tests",
-            "Contract Compliance",
             "Deviations from Plan",
             "Self-Review Findings",
             "Concerns",
         ]
-        missing_sections = [
-            s for s in required_report_sections if s not in impl_content
-        ]
-        if not missing_sections:
+        missing_fm = [f for f in required_frontmatter_fields if f not in impl_content]
+        missing_prose = [s for s in required_prose_sections if s not in impl_content]
+        all_missing = missing_fm + missing_prose
+        if not all_missing:
             check_pass(
                 CATEGORY_7,
-                "implementer-prompt: all 9 required report sections listed in Report Format",
+                "implementer-prompt: YAML frontmatter fields + 5 prose sections in Report Format",
             )
         else:
             check_fail(
                 CATEGORY_7,
-                "implementer-prompt: Report Format is missing sections: {}".format(
-                    ", ".join(missing_sections)
+                "implementer-prompt: Report Format is missing: {}".format(
+                    ", ".join(all_missing)
                 ),
             )
 
