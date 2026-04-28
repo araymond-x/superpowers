@@ -43,7 +43,7 @@ All v0.1 files have been promoted to active and the originals removed. The impro
 ### Deterministic Scripts (`skills/subagent-driven-development/scripts/`)
 - `_report_utils.py` — shared library for report parsing (single source of truth — do NOT duplicate logic)
 - `estimate-task-tokens.py` — pre-dispatch context budget check (OK/WARNING/TOO_LARGE)
-- `validate-report.py` — implementer report completeness (9 required sections)
+- `validate-report.py` — two-layer report validation: Pydantic frontmatter (via validators.py) then 5 prose sections
 - `controller-checkpoint.py` — 3-phase controller health (pre-execution/pre-dispatch/pre-completion)
 - `context-summary.py` — compresses completed task reports into one summary file
 - `validate-plan.py` — mechanical plan structure checks (size, sections, Task 0)
@@ -116,13 +116,13 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 122 checks), install (static, 105 checks), unit (pytest, 70 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 4 test layers — regression (static, 122 checks), install (static, 105 checks), unit (pytest, 231 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
 
 - `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 105 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 70 pytest tests: validate-plan.py (task numbering collisions, module header detection), controller-checkpoint.py (stale artifact detection, honesty check gate, trace audit gate, minimum-tier ratio cap), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file gate, partner review gate), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log global capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 231 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -166,7 +166,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 
 ## Hooks-Based Enforcement
 - Skill frontmatter hooks do NOT fire for symlink-installed skills (confirmed 2026-03-24). Use `~/.claude/settings.json` with absolute paths instead.
-- SDD enforcement hook: `PreToolUse` → `Agent` → `/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
+- SDD enforcement hook: `PreToolUse` → `Agent` → `sdd-pre-dispatch-hook.sh` (path in settings.json). Hook self-resolves `SUPERPOWERS_ROOT` from `BASH_SOURCE`; override via env var for team distribution.
 - Bash report guard: `PreToolUse` → `Bash` → same directory `/scripts/sdd-report-guard.sh`
 - Hook blocks implementer dispatches without: DEVIATIONS.md, reports/ dir, previous task's 3 report files (>50 bytes each), Task 0 report (if Source Contracts), dispatch provenance log entries, checkpoint file, context summary (at midpoint), token estimation (task header in plan)
 - Hook injects `additionalContext` reminder on every allowed dispatch
@@ -207,6 +207,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Branch check blocks on main when SDD artifacts exist (agent drifted out of worktree). Override with `.allow-main` file.
 
 ## Hook Development Gotchas
+- Hook scripts use `$PYTHON` (resolved to `$SUPERPOWERS_ROOT/.venv/bin/python3`). Scripts called by hooks that import PyYAML or Pydantic MUST use this — system `python3` doesn't have these packages. If adding a new `python3` call to a hook, use `$PYTHON` instead.
 - Stop hooks: use `systemMessage` not `hookSpecificOutput.additionalContext` (not supported for Stop events)
 - Bash hooks: avoid `set -u` — jq pipe chains produce empty vars that cause silent exits with no stderr
 - Permission globs: `*` does NOT cross path separators in Bash permissions (`**` is literal, not recursive). Use `/*/*` for two-level paths. The `!`...`` preprocessor rejects piped commands — use wrapper scripts instead.
@@ -216,8 +217,8 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 
 ## Global Settings Changes
 Four additions to `~/.claude/settings.json`:
-1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path)
-2. `PreToolUse` → `Bash` matcher: second hook entry for report forgery guard (absolute path)
+1. `PreToolUse` → `Agent` matcher: SDD pre-dispatch enforcement hook (absolute path in settings.json, self-resolves internally via SUPERPOWERS_ROOT)
+2. `PreToolUse` → `Bash` matcher: report forgery guard (absolute path in settings.json)
 3. `PreToolUse` → `Skill` matcher: handoff-gate-hook + plan-validation-gate-hook (absolute paths)
 4. `permissions.allow`: `Bash(bash ~/.claude/skills/superpowers/scripts/strip-frontmatter.sh *)` for skill command stub loading. Command stubs use `strip-frontmatter.sh` (single command, no pipe) instead of `cat | awk` (piped compound command). The `!`...`` preprocessor has a stricter permission checker than the Bash tool — it rejects piped commands even when individual subcommands are allowed. The helper script at `skills/scripts/strip-frontmatter.sh` eliminates the pipe.
 
