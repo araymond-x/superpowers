@@ -1,48 +1,47 @@
 """
 _report_utils.py
 
-Shared utilities for report parsing, section detection, and status extraction.
+Shared utilities for report parsing, section detection, and content heuristics.
 Used by validate-report.py, controller-checkpoint.py, and context-summary.py.
 
-This is the single source of truth for report structure definitions.
-Do NOT duplicate this logic in other scripts — import from here.
+VALID_STATUSES is re-exported from the Pydantic model (single source of truth).
+Prose section validation covers the 5 sections that remain in the markdown body
+after Phase 2 moved Status, Files Changed, Tests, and Contract Compliance to
+YAML frontmatter.
 """
 
 import re
+import sys
+from pathlib import Path
 
-# ---------------------------------------------------------------------------
-# Required sections as defined in implementer-prompt-v0.1.md.
-# Each entry is (canonical_name, list_of_accepted_header_patterns).
-# Patterns are matched case-insensitively against bold or ATX headers.
-# ---------------------------------------------------------------------------
+# Re-export VALID_STATUSES from the Pydantic model (single source of truth)
+sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
+from implementer_report import Status
+VALID_STATUSES = set(Status.__args__)
+
+# Required prose sections — 5 remain after Phase 2 moved 4 to frontmatter
 REQUIRED_SECTIONS = [
-    ("Status", [r"\bstatus\b"]),
     ("Implementation Summary", [r"implementation\s+summary"]),
-    ("Files Changed", [r"files?\s+changed"]),
     ("Source Files Read", [r"source\s+files?\s+read"]),
-    (
-        "Tests",
-        [r"\btests?\b"],
-    ),  # Word-boundary anchored to avoid "Contract" false positive
-    ("Contract Compliance", [r"contract\s+compliance"]),
     ("Deviations from Plan", [r"deviations?\s+from\s+plan"]),
     ("Self-Review Findings", [r"self[\-\s]review\s+findings?"]),
     ("Concerns", [r"\bconcerns?\b"]),
 ]
-
-# Valid implementer status values
-VALID_STATUSES = {"DONE", "DONE_WITH_CONCERNS", "BLOCKED", "NEEDS_CONTEXT"}
-
-# Matches status value in report content
-STATUS_VALUE_PATTERN = re.compile(
-    r"\b(DONE_WITH_CONCERNS|DONE|BLOCKED|NEEDS_CONTEXT)\b"
-)
 
 # Matches bold (**Section**) or ATX (## Section) headers
 SECTION_HEADER_PATTERN = re.compile(r"(?:\*\*([^*]+)\*\*|^#{1,4}\s+(.+))", re.MULTILINE)
 
 # Placeholder values that indicate "no content"
 PLACEHOLDER_VALUES = {"none", "n/a", "na", "-", "\u2014", ""}
+
+PROMPT_PLACEHOLDER_PHRASES = [
+    "none \u2014 implemented exactly as specified",
+    "no issues found",
+    "no concerns",
+    "none \u2014 no source files listed for this task",
+    "none found in modified directories",
+    "no contract constraints for this task",
+]
 
 
 def find_sections(content):
@@ -72,17 +71,6 @@ def section_is_present(canonical_name, patterns, headers):
     return False
 
 
-def extract_implementer_status(content):
-    """
-    Find the implementer's status value in the report.
-    Returns the status string or "UNKNOWN" if not found.
-    """
-    match = STATUS_VALUE_PATTERN.search(content)
-    if match:
-        return match.group(1)
-    return "UNKNOWN"
-
-
 def section_contains_content(section_name, content):
     """
     Heuristic check: returns True if a section likely has non-trivial content.
@@ -110,7 +98,11 @@ def section_contains_content(section_name, content):
     body = match.group(1).strip()
     if not body or body.lower() in PLACEHOLDER_VALUES:
         return False
-    # Short text like "None — implemented exactly as specified" is a placeholder
+    # Check against prompt template placeholder phrases
+    body_lower = body.lower()
+    for phrase in PROMPT_PLACEHOLDER_PHRASES:
+        if body_lower.startswith(phrase):
+            return False
     if len(body) <= 10:
         return False
     return True
@@ -132,7 +124,6 @@ def validate_report_sections(content):
         status: "COMPLETE" or "INCOMPLETE"
         sections_found: list of canonical names found
         sections_missing: list of canonical names missing
-        implementer_status: extracted status string
         has_deviations: bool
         has_concerns: bool
     """
@@ -151,7 +142,6 @@ def validate_report_sections(content):
         "status": "COMPLETE" if not sections_missing else "INCOMPLETE",
         "sections_found": sections_found,
         "sections_missing": sections_missing,
-        "implementer_status": extract_implementer_status(content),
         "has_deviations": section_contains_content("Deviations from Plan", content),
         "has_concerns": section_contains_content("Concerns", content),
     }

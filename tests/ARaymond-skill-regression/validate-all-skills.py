@@ -786,18 +786,21 @@ def check_critical_fixes(skills_dir):
                 "validate-report.py does not use 'from _report_utils import' — may have duplicated logic",
             )
 
-    # Check 4: "Tests" regex in _report_utils.py uses word boundary (\btests?\b)
+    # Check 4: "Tests" section removed from REQUIRED_SECTIONS (moved to YAML frontmatter in Phase 2)
     ru_content = read_file(report_utils_path)
     if ru_content is not None:
-        if r"\btests?\b" in ru_content:
+        # After Phase 2, "Tests" is in YAML frontmatter, not prose sections.
+        # The \btests?\b pattern should no longer appear in REQUIRED_SECTIONS.
+        has_tests_in_required = bool(re.search(r'REQUIRED_SECTIONS\s*=\s*\[.*?"Tests"', ru_content, re.DOTALL))
+        if not has_tests_in_required:
             check_pass(
                 CATEGORY_6,
-                r"_report_utils.py: 'Tests' regex uses \btests?\b word boundary (avoids 'Contract' false match)",
+                r"_report_utils.py: 'Tests' section not in REQUIRED_SECTIONS (moved to YAML frontmatter)",
             )
         else:
             check_fail(
                 CATEGORY_6,
-                r"_report_utils.py: 'Tests' regex does not use \btests?\b — may match 'Contract' as a false positive",
+                r"_report_utils.py: 'Tests' section still in REQUIRED_SECTIONS — should be removed (Phase 2 moved it to YAML)",
             )
 
         # Check 5: section_contains_content handles ATX headers (^#{1,4} pattern)
