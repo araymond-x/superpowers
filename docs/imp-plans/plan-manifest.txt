@@ -1,4 +1,4 @@
-docs/imp-plans/2026-04-25-pydantic-phase-2-plan.md
-docs/imp-plans/2026-04-25-pydantic-phase-2-module-1-models.md
-docs/imp-plans/2026-04-25-pydantic-phase-2-module-2-cli-consumers.md
-docs/imp-plans/2026-04-25-pydantic-phase-2-module-3-cutover.md
+docs/imp-plans/2026-05-02-per-feature-directory-plan.md
+docs/imp-plans/2026-05-02-per-feature-directory-module-1-infrastructure.md
+docs/imp-plans/2026-05-02-per-feature-directory-module-2-hooks.md
+docs/imp-plans/2026-05-02-per-feature-directory-module-3-skills.md
