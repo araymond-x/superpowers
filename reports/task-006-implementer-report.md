@@ -1,28 +1,38 @@
-# Task 006 Report — CLI Validator Plan Subcommand
-# Date: 2026-04-24
+# Task 006 Report — validators.py report Subcommand
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Created validators.py with plan subcommand (validate_plan, _extract_frontmatter, _check_bypass, main). 12 subprocess tests cover happy path, failures (bad archetype, no frontmatter, malformed YAML), infrastructure (missing file), bypass, and forensic flag stub.
+Added validate_report() function and "report" CLI subcommand to validators.py, following the validate_plan() pattern. Validates YAML frontmatter against ImplementerReport Pydantic model.
 
 **Files Changed:**
-- `skills/scripts/models/validators.py` — CLI entry point with plan subcommand
-- `tests/unit/test_validators/test_validate_plan_pydantic.py` — 12 tests
+- `skills/scripts/models/validators.py` — added validate_report() + "report" in main() choices
 
-**Source Files Read:** validate-plan.py (CLI pattern), Module 1 model files
-**CLAUDE.md Files Read:** Project root CLAUDE.md
+**Source Files Read:**
+- `skills/scripts/models/validators.py` — existing validate_plan() pattern
+- `skills/scripts/models/implementer_report.py` — the model to validate against
+- `skills/scripts/models/errors.py` — format helpers
+
+**CLAUDE.md Files Read:**
+- Project root CLAUDE.md
 
 **Tests:**
-- Tests written: 12
-- Tests passing: 12 (143 total suite)
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_validators/test_validate_plan_pydantic.py -v
-- Test output summary: 12 PASS in 1.58s
+- Valid reports: exit 0 (minimal + full-featured)
+- Invalid reports: exit 1 (all 4 invalid fixtures)
+- Missing file: exit 2
+- 222 unit tests pass, 122 regression checks pass
 
 **Contract Compliance:**
-- Exit codes 0/1/2 ✓, BYPASS env var ✓, no frontmatter message ✓, --schema-version stub ✓
+- Exit codes 0/1/2: verified
+- Reports without frontmatter → hard FAIL with "Phase 2 cutover" message: verified
 
-**Deviations from Plan:** None
-**Self-Review Findings:** No issues found
-**Concerns:** No concerns
+**Deviations from Plan:**
+- Minor: updated module docstring to include report usage line
+
+**Self-Review Findings:**
+- No issues found
+
+**Concerns:**
+- No concerns

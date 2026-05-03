@@ -1,5 +1,5 @@
-# Task 002-005 Quality Review — Module 1: Core Models
-# Date: 2026-04-24
-# Verdict: PASS (all 4 tasks)
+# Task 009 Quality Review — controller-checkpoint.py Updates
+# Date: 2026-04-27
+# Verdict: PASS
 
-Comprehensive review of _base.py, plan.py, handoff.py, errors.py and all test files. All Pydantic models correct — inheritance hierarchy, field types, validators. 61 tests pass. No security, quality, or correctness issues. Sequential ID improvement noted as beneficial deviation. Supersedes minimum-tier reviews for Tasks 2-5.
+Full tier review due to shared infrastructure modification. Changes are clean: model imports at top with sys.path.insert, validate_report_sections() 5 patterns match _report_utils.py alignment, _build_result() correctly wraps existing dict-based checks into CheckResult/Progress models. model_dump(exclude_none=True) preserves output shape for downstream consumers. The CheckpointResult model validators (fail_requires_blockers, blockers_reference_check_names, task_number_required_for_pre_dispatch) will now fire at construction time — any existing callers that construct invalid states will get validation errors. This is the intended hard cutover behavior.

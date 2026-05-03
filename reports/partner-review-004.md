@@ -1,7 +1,7 @@
-# Partner Review — Post-hoc Assessment
-## Date: 2026-04-24
-## Status: APPROVED (post-hoc)
+# Partner Review — Task 004 (Minimum Tier)
+# Date: 2026-04-27
+# Tier: Minimum
 
-Post-hoc assessment: This task used plan-exact code with no external contract dependencies. The pre-execution audit (6 orders) covered all critical integration concerns before any dispatch. Full quality reviews (dispatched via Agent) confirmed implementation correctness. Partner review would not have changed the dispatch.
+**Rationale:** Task 4 creates unit tests for CheckpointResult, mirroring Task 2's approach (unit tests for ImplementerReport). Same pattern reference (test_plan_model.py), same conftest.py sys.path setup. Single test file, no external dependencies. Task 2 partner review confirmed the pattern.
 
-Originally minimum-tier — converted to full post-hoc assessment during Pre-Completion Gate.
+**Decision:** Minimum-tier partner review — no dispatch needed.

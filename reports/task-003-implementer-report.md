@@ -1,36 +1,36 @@
-# Task 003 Report — Plan Model + Tests
-# Date: 2026-04-24
+# Task 003 Report — CheckpointResult Model
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Created Plan model with 5 cross-field validators and 26 tests. Improved the sequential ID check from sort-order-only to contiguous-range check. All validators work correctly.
+Created checkpoint_result.py with 2 Literal type aliases (Phase, CheckStatus), 2 nested StrictModel classes (CheckResult, Progress), and top-level CheckpointResult(SchemaVersionedModel) with 3 model validators. Follows plan.py pattern exactly.
 
 **Files Changed:**
-- `skills/scripts/models/plan.py` — Plan, Task, Module, SharedConstant, PatternReference, FeatureArchetype
-- `tests/unit/test_models/test_plan_model.py` — 26 tests across 8 test classes
+- `skills/scripts/models/checkpoint_result.py` — new file with CheckpointResult model
 
-**Source Files Read:** None
+**Source Files Read:**
+- `skills/scripts/models/_base.py` — confirmed base classes
+- `skills/scripts/models/plan.py` — pattern reference
 
-**CLAUDE.md Files Read:** Project root CLAUDE.md
+**CLAUDE.md Files Read:**
+- None found in skills/scripts/models/
 
 **Tests:**
-- Tests written: 26
-- Tests passing: 26
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -v
-- Test output summary: All 26 PASS in 0.09s
+- Import verification: OK
+- 7 inline behavioral checks pass (validators, exclude_none, extra fields)
 
 **Contract Compliance:**
-- Plan inherits SchemaVersionedModel ✓
-- All nested types inherit StrictModel ✓
-- FeatureArchetype is 5-value Literal ✓
-- 5 cross-field validators, all mode="after" ✓
+- All CheckpointResult fields match spec: phase (3 values), status (PASS/FAIL), task_number (optional), checks (dict[str, CheckResult]), warnings, blockers, progress (optional)
+- All 3 validators implemented per spec: fail_requires_blockers, blockers_reference_check_names, task_number_required_for_pre_dispatch
+- exclude_none=True on model_dump() verified to strip None fields
 
 **Deviations from Plan:**
-- Sequential ID check improved: `ids != sorted(ids)` changed to `ids != list(range(ids[0], ids[0]+len(ids)))` for contiguous check
-- Duplicate check reordered before sequential check so [0,0] gets "Duplicate" error first
+- None — implemented exactly as specified
 
-**Self-Review Findings:** No issues found
+**Self-Review Findings:**
+- No issues found
 
-**Concerns:** No concerns
+**Concerns:**
+- No concerns

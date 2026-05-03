@@ -1,5 +1,5 @@
-# Task 006 Spec Review — CLI Validator Plan Subcommand
-# Date: 2026-04-24
+# Task 006 Spec Review — validators.py report Subcommand
+# Date: 2026-04-27
 # Verdict: PASS
 
-All functions present and correct. Exit codes 0/1/2 verified. Bypass exits 0 with "BYPASS" in stderr. No frontmatter exits 1 with "predates". --schema-version stub accepted. Handoff is stub exit 2. 12 tests cover all paths.
+All 7 checks pass: ImplementerReport imported, validate_report() present in correct position, follows validate_plan() pattern exactly, main() accepts "report", "Phase 2 cutover" message present, exit codes 0/1/2 correct, no extra changes.

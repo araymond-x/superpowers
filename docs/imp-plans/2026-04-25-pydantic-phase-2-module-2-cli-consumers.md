@@ -87,17 +87,17 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `validators.py` has `report` subcommand with exit codes 0/1/2 and bypass support
-- [ ] `validate-report.py` calls `validate_report()` from `validators.py` for Pydantic check before prose check
-- [ ] Reports without frontmatter → hard FAIL with "Phase 2 cutover" message
-- [ ] `_report_utils.py` re-exports `VALID_STATUSES` from model, `STATUS_VALUE_PATTERN` and `extract_implementer_status()` removed
-- [ ] `_report_utils.py` `REQUIRED_SECTIONS` has exactly 5 entries
-- [ ] `_report_utils.py` placeholder detection handles "None — implemented exactly as specified"
-- [ ] `controller-checkpoint.py` `_build_result()` uses `CheckpointResult` + `.model_dump(exclude_none=True)`
-- [ ] `controller-checkpoint.py` inline `validate_report_sections()` updated to 5 sections
-- [ ] `sdd-pre-dispatch-hook.sh` captures exit code and blocks on nonzero, message says "5 required sections"
-- [ ] `context-summary.py` extracts files from YAML frontmatter
-- [ ] ~10 CLI entry-point tests pass
+- [x] `validators.py` has `report` subcommand with exit codes 0/1/2 and bypass support
+- [x] `validate-report.py` calls `validate_report()` from `validators.py` for Pydantic check before prose check
+- [x] Reports without frontmatter → hard FAIL with "Phase 2 cutover" message
+- [x] `_report_utils.py` re-exports `VALID_STATUSES` from model, `STATUS_VALUE_PATTERN` and `extract_implementer_status()` removed
+- [x] `_report_utils.py` `REQUIRED_SECTIONS` has exactly 5 entries
+- [x] `_report_utils.py` placeholder detection handles "None — implemented exactly as specified"
+- [x] `controller-checkpoint.py` `_build_result()` uses `CheckpointResult` + `.model_dump(exclude_none=True)`
+- [x] `controller-checkpoint.py` inline `validate_report_sections()` updated to 5 sections
+- [x] `sdd-pre-dispatch-hook.sh` captures exit code and blocks on nonzero, message says "5 required sections"
+- [x] `context-summary.py` extracts files from YAML frontmatter
+- [x] ~10 CLI entry-point tests pass (9 passing)
 
 ---
 
@@ -112,7 +112,7 @@ tasks:
 **Pattern References:**
 - `skills/scripts/models/validators.py` — follow the `validate_plan()` function pattern exactly
 
-- [ ] **Step 1: Add validate_report() function**
+- [x] **Step 1: Add validate_report() function**
 
   Add to `skills/scripts/models/validators.py`, after the existing `validate_handoff()` function and before `main()`. Also add the import for `ImplementerReport` at the top with the other model imports:
 
@@ -168,7 +168,7 @@ tasks:
       return 0
   ```
 
-- [ ] **Step 2: Update main() to accept "report" command**
+- [x] **Step 2: Update main() to accept "report" command**
 
   In `main()`, update the `choices` list and add the elif branch:
 
@@ -193,7 +193,7 @@ tasks:
           sys.exit(validate_report(args.path, args.schema_version))
   ```
 
-- [ ] **Step 3: Verify it runs**
+- [x] **Step 3: Verify it runs**
 
   Run: `.venv/bin/python3 skills/scripts/models/validators.py report tests/fixtures/reports/valid/minimal-report.md`
   Expected: exit code 0
@@ -201,7 +201,7 @@ tasks:
   Run: `.venv/bin/python3 skills/scripts/models/validators.py report tests/fixtures/reports/invalid/missing-status.md`
   Expected: exit code 1, stderr contains `VALIDATION FAILED`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (60d74d0)
 
   ```bash
   git add skills/scripts/models/validators.py
@@ -216,7 +216,7 @@ tasks:
 - Modify: `skills/subagent-driven-development/scripts/validate-report.py`
 - Read: `skills/scripts/models/validators.py`
 
-- [ ] **Step 1: Add Pydantic pre-check to validate-report.py**
+- [x] **Step 1: Add Pydantic pre-check to validate-report.py**
 
   Replace the current `main()` function in `validate-report.py`. The new version calls `validate_report()` from `validators.py` first for Pydantic frontmatter validation, then falls through to prose section check only if Pydantic passes:
 
@@ -341,7 +341,7 @@ tasks:
       yaml = None
   ```
 
-- [ ] **Step 2: Verify both layers work**
+- [x] **Step 2: Verify both layers work**
 
   Run against a valid fixture:
   ```bash
@@ -356,7 +356,7 @@ tasks:
   ```
   Expected: exit 1, stderr contains "Phase 2" or "frontmatter"
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (bbd3385)
 
   ```bash
   git add skills/subagent-driven-development/scripts/validate-report.py
@@ -371,7 +371,7 @@ tasks:
 - Modify: `skills/subagent-driven-development/scripts/_report_utils.py`
 - Read: `skills/scripts/models/implementer_report.py`
 
-- [ ] **Step 1: Update _report_utils.py**
+- [x] **Step 1: Update _report_utils.py**
 
   Make the following changes to `skills/subagent-driven-development/scripts/_report_utils.py`:
 
@@ -466,12 +466,12 @@ tasks:
   }
   ```
 
-- [ ] **Step 2: Verify imports work**
+- [x] **Step 2: Verify imports work**
 
   Run: `python3 -c "import sys; sys.path.insert(0, 'skills/subagent-driven-development/scripts'); from _report_utils import VALID_STATUSES, REQUIRED_SECTIONS; print(len(REQUIRED_SECTIONS), VALID_STATUSES)"`
   Expected: `5 {'DONE', 'DONE_WITH_CONCERNS', 'BLOCKED', 'NEEDS_CONTEXT'}`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (43badb5)
 
   ```bash
   git add skills/subagent-driven-development/scripts/_report_utils.py
@@ -486,7 +486,7 @@ tasks:
 - Modify: `skills/subagent-driven-development/scripts/controller-checkpoint.py`
 - Read: `skills/scripts/models/checkpoint_result.py`, `skills/subagent-driven-development/scripts/_report_utils.py`
 
-- [ ] **Step 1: Add model imports**
+- [x] **Step 1: Add model imports**
 
   Near the top of `controller-checkpoint.py`, after the existing `sys` and `os` imports, add:
 
@@ -497,7 +497,7 @@ tasks:
   from checkpoint_result import CheckpointResult, CheckResult, Progress
   ```
 
-- [ ] **Step 2: Update inline validate_report_sections()**
+- [x] **Step 2: Update inline validate_report_sections()**
 
   Replace the `validate_report_sections()` function (lines 207-244) — update the `required_patterns` list from 9 to 5 sections:
 
@@ -536,7 +536,7 @@ tasks:
       }
   ```
 
-- [ ] **Step 3: Update _build_result()**
+- [x] **Step 3: Update _build_result()**
 
   Replace the `_build_result()` function (lines 1013-1034) with the Pydantic construction:
 
@@ -569,7 +569,7 @@ tasks:
       return result.model_dump(exclude_none=True)
   ```
 
-- [ ] **Step 4: Verify checkpoint still runs**
+- [x] **Step 4: Verify checkpoint still runs**
 
   Run a quick check that the script still starts up correctly:
   ```bash
@@ -577,7 +577,7 @@ tasks:
   ```
   Expected: Help text prints, no import errors
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (3e5026d)
 
   ```bash
   git add skills/subagent-driven-development/scripts/controller-checkpoint.py
@@ -591,7 +591,7 @@ tasks:
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 
-- [ ] **Step 1: Update Check 4b to capture exit code**
+- [x] **Step 1: Update Check 4b to capture exit code**
 
   Replace the Check 4b block (lines 254-266) with:
 
@@ -624,7 +624,7 @@ tasks:
   - Zero exit code → proceed to JSON status check as before
   - "9 required sections" → "5 required prose sections" in both error messages
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit** (fea142c)
 
   ```bash
   git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -638,7 +638,7 @@ tasks:
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/context-summary.py`
 
-- [ ] **Step 1: Add YAML frontmatter extraction**
+- [x] **Step 1: Add YAML frontmatter extraction**
 
   Add a YAML import and a frontmatter extraction helper near the top of `context-summary.py` (after the existing imports):
 
@@ -680,7 +680,7 @@ tasks:
       ]
   ```
 
-- [ ] **Step 2: Update parse_report() to use frontmatter**
+- [x] **Step 2: Update parse_report() to use frontmatter**
 
   In the `parse_report()` function (around line 176), replace the status and files extraction with frontmatter-only parsing. No old-format fallback (hard cutover):
 
@@ -708,7 +708,7 @@ tasks:
       return "UNKNOWN"
   ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (fe1b45a)
 
   ```bash
   git add skills/subagent-driven-development/scripts/context-summary.py
@@ -726,7 +726,7 @@ tasks:
 **Pattern References:**
 - `tests/unit/test_validators/test_validate_plan_pydantic.py` — follow the subprocess test pattern
 
-- [ ] **Step 1: Write CLI entry-point tests**
+- [x] **Step 1: Write CLI entry-point tests**
 
   Create `tests/unit/test_validators/test_validate_report_pydantic.py`:
 
@@ -829,12 +829,12 @@ tasks:
           assert "BYPASS" in result.stderr
   ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests** (9 passed)
 
   Run: `.venv/bin/python3 -m pytest tests/unit/test_validators/test_validate_report_pydantic.py -v`
   Expected: All ~10 tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (204039f)
 
   ```bash
   git add tests/unit/test_validators/test_validate_report_pydantic.py

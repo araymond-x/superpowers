@@ -1,37 +1,49 @@
-# Task 010 Report — Prompt Template Updates
-# Date: 2026-04-24
-# Status: DONE
+---
+schema_version: 1
+task_id: 10
+status: DONE_WITH_CONCERNS
+files_changed:
+  - path: "skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+    description: "Updated Check 4b to capture validate-report.py exit code and block on Pydantic failures"
+tests:
+  written: 0
+  passing: 0
+  command: "bash script — no unit tests for this task"
+  result: PASS
+---
 
-**Status:** DONE
+# Task 010 Report — sdd-pre-dispatch-hook.sh Updates
+# Date: 2026-04-27
+# Status: DONE_WITH_CONCERNS
+
+**Status:** DONE_WITH_CONCERNS
 
 **Implementation Summary:**
-Updated 3 prompt templates with YAML frontmatter instructions. Extracted Context Health Protocol from SDD SKILL.md to references/ to stay under 5000-word limit (now 4809).
+Updated Check 4b in sdd-pre-dispatch-hook.sh: changed stderr redirect from 2>/dev/null to 2>&1, added VALIDATE_EXIT=$? check, added BLOCKED error for nonzero exits, updated both error messages from "9 required sections" to "5 required prose sections".
 
 **Files Changed:**
-- `skills/writing-plans/SKILL.md` — Added YAML Frontmatter section
-- `skills/handoff-acceptance/references/handoff-package-spec.md` — Added YAML frontmatter template
-- `skills/subagent-driven-development/SKILL.md` — One sentence + Context Health Protocol extraction
-- `skills/subagent-driven-development/references/context-health-protocol.md` — New (extracted content)
+- `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 
 **Source Files Read:**
-- All 3 modified SKILL.md/spec files (read before modifying)
+- sdd-pre-dispatch-hook.sh, validate-report.py, test_sdd_hard_gates.py, sdd_test_helpers.py
 
 **CLAUDE.md Files Read:**
 - Project root CLAUDE.md
 
 **Tests:**
-- Tests written: 0 (docs task)
-- Tests passing: 122 regression checks PASS
-- Test command: python3 tests/ARaymond-skill-regression/validate-all-skills.py
-- Test output summary: 122 PASS, 0 FAIL, 1 WARNING
+- 4 tests in test_sdd_hard_gates.py now fail — expected intermediate breakage (parent plan documents this)
+- Old test reports lack YAML frontmatter, new hook correctly blocks them
+- Task 13 (Module 3) updates IMPLEMENTER_REPORT_TEMPLATE to fix
 
 **Contract Compliance:**
-- Prompt templates updated atomically with validators ✓
-- SDD SKILL.md under 5000 words (4809) ✓
+- Captures exit code and blocks on nonzero: YES
+- Error messages say "5 required prose sections": YES
 
 **Deviations from Plan:**
-- Added context-health-protocol.md extraction (not in plan's git add but necessary to offset word count)
+- None
 
-**Self-Review Findings:** No issues found
+**Self-Review Findings:**
+- No issues with the hook change itself
 
-**Concerns:** No concerns
+**Concerns:**
+- 4 test_sdd_hard_gates.py tests fail due to old-format test reports lacking YAML frontmatter. This is the expected intermediate breakage documented in the parent plan. Task 13 fixes it.

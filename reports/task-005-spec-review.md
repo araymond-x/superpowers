@@ -1,5 +1,5 @@
-# Task 005 Spec Review — Error Formatter + Tests
-# Date: 2026-04-24
+# Task 005 Spec Review — Test Fixtures
+# Date: 2026-04-27
 # Verdict: PASS
 
-Both formatter functions match spec exactly. VALIDATION FAILED and YAML PARSE FAILED headers are distinct. Box drawing borders present. Per-error field path, problem, got values shown. Expected line for literal_error, Hint for missing schema_version. 11 tests cover all specified behaviors. Dispatched via Agent tool.
+All 6 fixtures verified: 2 valid (minimal-report.md, full-featured-report.md), 4 invalid (missing-status.md, bad-status-enum.md, test-counts-inconsistent.md, no-files-for-done.md). All use YAML frontmatter. Valid fixtures have correct field values. Invalid fixtures each target one specific validation error. File paths match plan. No extra files created.

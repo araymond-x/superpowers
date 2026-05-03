@@ -1,37 +1,39 @@
-# Task 007 Report — CLI Validator Handoff Subcommand
-# Date: 2026-04-24
+# Task 007 Report — validate-report.py Pydantic Pre-Check
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Added validate_handoff to validators.py with filesystem post-check for sample paths. SAMPLE FILE MISSING header is distinct from VALIDATION FAILED. 6 tests pass, 18 total validator tests.
+Replaced validate-report.py with 2-layer validation: Layer 1 calls validate_report() for Pydantic frontmatter check, Layer 2 runs prose section check. Reports without frontmatter hard FAIL at Layer 1. Added Layer 3 done_with_concerns warning.
 
 **Files Changed:**
-- `skills/scripts/models/validators.py` — Added validate_handoff(), updated main() handoff branch
-- `tests/unit/test_validators/test_validate_handoff_pydantic.py` — 6 tests
+- `skills/subagent-driven-development/scripts/validate-report.py` — full replacement
 
 **Source Files Read:**
-- `skills/scripts/models/handoff.py` — HandoffPackage model
-- `tests/unit/test_validators/test_validate_plan_pydantic.py` — existing test patterns
+- `skills/subagent-driven-development/scripts/validate-report.py` — original
+- `skills/scripts/models/validators.py` — provides validate_report()
+- `skills/subagent-driven-development/scripts/_report_utils.py` — provides validate_report_sections()
 
 **CLAUDE.md Files Read:**
-- `/Users/araymond/projects/claude-custom/superpowers/CLAUDE.md` — project root
+- Project root CLAUDE.md
 
 **Tests:**
-- Tests written: 6
-- Tests passing: 6 (18 total validators)
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_validators/test_validate_handoff_pydantic.py -v
-- Test output summary: 18 PASS in 2.34s
+- Valid fixture: Pydantic passes, prose check INCOMPLETE (expected — old 9-section list, Task 8 fixes)
+- No-frontmatter: exit 1, stderr has "Phase 2 Pydantic cutover" message
+- 222 unit tests pass
 
 **Contract Compliance:**
-- Exit codes 0/1/2 ✓
-- BYPASS env var works for handoff ✓
-- SAMPLE FILE MISSING header distinct from VALIDATION FAILED ✓
-- Post-check in CLI not model ✓
+- Calls validate_report() from validators.py: YES
+- No frontmatter → hard FAIL with "Phase 2 cutover": YES
+- Exit codes 0/1/2: YES
+- yaml import is unconditional (audit Order #2): YES
 
-**Deviations from Plan:** None
+**Deviations from Plan:**
+- Valid fixture returns INCOMPLETE because _report_utils still has 9-section list — expected intermediate state before Task 8
 
-**Self-Review Findings:** No issues found
+**Self-Review Findings:**
+- No issues found
 
-**Concerns:** No concerns
+**Concerns:**
+- No concerns

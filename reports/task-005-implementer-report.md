@@ -1,30 +1,40 @@
-# Task 005 Report — Error Formatter + Tests
-# Date: 2026-04-24
+# Task 005 Report — Test Fixtures
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Created errors.py with format_validation_error and format_yaml_error. TDD followed. 11 tests pass. Full Module 1 suite: 61 tests pass.
+Created 6 report validation fixture files (2 valid, 4 invalid) under tests/fixtures/reports/ with YAML frontmatter format. Each invalid fixture targets a specific validation error.
 
 **Files Changed:**
-- `skills/scripts/models/errors.py` — Two formatter functions
-- `tests/unit/test_models/test_error_formatter.py` — 11 tests
+- `tests/fixtures/reports/valid/minimal-report.md` — minimal valid report (DONE, 1 file)
+- `tests/fixtures/reports/valid/full-featured-report.md` — full report (DONE_WITH_CONCERNS, 3 files, 2 contracts)
+- `tests/fixtures/reports/invalid/missing-status.md` — missing status field
+- `tests/fixtures/reports/invalid/bad-status-enum.md` — invalid status "COMPLETED"
+- `tests/fixtures/reports/invalid/test-counts-inconsistent.md` — passing (5) > written (2)
+- `tests/fixtures/reports/invalid/no-files-for-done.md` — DONE with empty files_changed
 
-**Source Files Read:** None
-**CLAUDE.md Files Read:** Project root CLAUDE.md
+**Source Files Read:**
+- None required — pure fixture creation from spec
+
+**CLAUDE.md Files Read:**
+- None found in tests/fixtures/reports/
 
 **Tests:**
-- Tests written: 11
-- Tests passing: 11 (61 total Module 1)
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_models/ -v
-- Test output summary: 61 PASS in 0.11s
+- Verified all 6 files exist at correct paths
+- Content matches spec exactly
 
 **Contract Compliance:**
-- VALIDATION FAILED header ✓, YAML PARSE FAILED header ✓
-- Box drawing borders ✓, field paths ✓, Expected for literal_error ✓
-- Hint for missing schema_version ✓, Pydantic not attempted note ✓
+- 6 fixtures: 2 valid + 4 invalid — matches spec
+- YAML frontmatter format in all — matches spec
+- Each invalid fixture targets one validation error — matches spec
 
-**Deviations from Plan:** None
-**Self-Review Findings:** No issues found
-**Concerns:** No concerns
+**Deviations from Plan:**
+- None — implemented exactly as specified
+
+**Self-Review Findings:**
+- No issues found
+
+**Concerns:**
+- No concerns

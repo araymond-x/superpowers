@@ -1,23 +1,41 @@
 # Pre-Execution Audit Self-Assessment
 
-## Plan: Pydantic Phase 1
-## Date: 2026-04-24
+**Plan:** Pydantic Phase 2 — Module 1: Models + Unit Tests
+**Date:** 2026-04-27
+**Controller:** Claude Opus 4.6
+
+## Answers
 
 ### 1. Did you follow every step of each skill used before this point?
 
-Yes. Loaded SDD skill via Skill tool (gate confirmed PASS). Read all 4 plan files (parent + 3 modules) and the distilled spec. Extracted Contract Constraints, Pattern References, and Write-Scope Partitioning. No Task 0 (Source Contracts = None). Archived stale artifacts, created fresh DEVIATIONS.md, created TodoWrite with all 13 tasks and dependencies.
+Yes. Plan ingestion completed fully:
+- Read full parent plan (16 tasks, 3 modules) and Module 1 plan (6 tasks)
+- Read distilled spec (Contract Facts, all field definitions, validators)
+- Read source contracts: `_base.py` (confirmed CURRENT_SCHEMA_VERSION=1, StrictModel, SchemaVersionedModel), `plan.py` (studied Literal types, nested StrictModels, model_validator pattern)
+- Extracted Contract Constraints, Shared Constants, and Pattern References verbatim
+- Extracted Write-Scope Partitioning table
+- Archived stale artifacts (Phase 1 SDD session → `reports/archive-pydantic-phase-1/`, renamed `DEVIATIONS.md` → `DEVIATIONS-pydantic-phase-1.md`)
+- Created fresh DEVIATIONS.md from template
+- Created TodoWrite with all 6 Module 1 tasks + dependencies
+- Ran controller-checkpoint pre-execution: PASS (WARNING on stale artifacts — false positive, already archived)
+
+No steps skipped.
 
 ### 2. Did you dispatch all required reviewer subagents?
 
-N/A — no code has been implemented yet. This is pre-execution.
+N/A — no tasks dispatched yet. This is pre-execution.
 
 ### 3. Did you re-dispatch reviewers after fixing issues they found?
 
-N/A — pre-execution phase.
+N/A — no reviews yet.
 
 ### 4. Are there any type ambiguities in the plan that you're uncertain about?
 
-No. The distilled spec is comprehensive. All field types, validators, and error formats are explicitly specified. The only design ambiguity was resolved by the user's instruction: Task 9 does NOT hard-FAIL on missing frontmatter (that's in validators.py only).
+No. The distilled spec and plan are very precise about all field types:
+- All Literal types have explicit value lists
+- Optional vs required fields are clearly marked
+- Nested types are fully specified
+- Validator logic is explicit with clear invariants
 
 ### 5. Are there any plan sections where you wrote code quickly and aren't confident in the logic?
 
@@ -25,28 +43,18 @@ N/A — no code written yet.
 
 ### 6. Are there any implicit assumptions in the plan that an implementer might miss?
 
-1. **conftest.py sys.path setup**: The MODELS_DIR path resolves to `skills/scripts/models/` — subagents need to use bare module imports (`from plan import Plan`) not package imports (`from skills.scripts.models.plan import Plan`). The plan specifies this but it's easy to miss.
-2. **validators.py also does `sys.path.insert`**: It uses its own sibling import mechanism (inserts its parent dir). Subagents implementing Task 6 need to understand this dual-path approach.
-3. **SDD SKILL.md word limit**: Currently at 5029 words (over 5000 soft limit). Task 10 adds one line but must check and potentially offset. The plan warns about this.
-4. **validate-plan.py integration (Task 9)**: The plan provides pseudocode, not a complete diff. The subagent needs to read the existing file structure and integrate carefully.
+1. **Import path**: Models use relative imports (`from _base import ...`) that only work when the models directory is on sys.path. Subagents need to understand the `sys.path.insert(0, ...)` pattern used in tests.
+2. **SchemaVersionedModel field_validator**: The base class has a `must_match_current` validator on `schema_version` that will auto-reject any schema_version != 1. Subagents might try to add their own schema_version validation on top of the inherited one.
+3. **extra="forbid" inheritance**: StrictModel sets `extra="forbid"` — this propagates to all nested types. Subagents should not re-declare this in nested classes.
 
 ### 7. What is the single highest-risk item in this plan?
 
-Task 9 (validate-plan.py integration) — modifying an existing file with 22 unit tests, requiring careful integration of Pydantic validation without breaking the legacy regex path. The plan provides pseudocode guidance but the subagent must read the existing code structure and integrate precisely.
+The CheckpointResult `blockers_reference_check_names` validator — it cross-references the `blockers` list against `checks` dict keys. This is the most complex validator and the one most likely to have edge cases around empty lists, missing keys, or partial matches.
 
 ### 8. Were stale SDD artifacts found in the workspace from a prior session?
 
-Yes. Found:
-- `DEVIATIONS.md` (empty template from prior session)
-- `reports/pre-execution-audit.md` (from prior session)
-- `reports/archive-sdd-enforcement-hardening/` (already archived from even earlier session)
+Yes. Found artifacts from the Pydantic Phase 1 SDD session (2026-04-24):
+- `DEVIATIONS.md` — renamed to `DEVIATIONS-pydantic-phase-1.md`
+- `reports/task-000-*.md` through `reports/task-013-*.md` (42 report files), `partner-review-*.md` (13 files), `checkpoint-pre-dispatch-*.json` (13 files), `context-summary.md`, `execution-trace*`, `honesty-check-2026-04-24.md`, `pre-execution-audit*.md` — all moved to `reports/archive-pydantic-phase-1/`
 
-Actions taken:
-- Renamed `DEVIATIONS.md` to `DEVIATIONS-prior-sdd.md`
-- Moved `reports/pre-execution-audit.md` to `reports/archive-prior-sdd/`
-- Created fresh `DEVIATIONS.md` from template
-- Left existing archives in place
-
-Controller checkpoint noted:
-- `source_contracts` FAIL — known false positive (Source Contracts: None treated as non-empty per CLAUDE.md documentation)
-- `stale_artifacts` WARNING — false positive on freshly created DEVIATIONS.md template content
+The controller-checkpoint WARNING about stale artifacts is a false positive — it detects the fresh DEVIATIONS.md template as "has content from prior session."

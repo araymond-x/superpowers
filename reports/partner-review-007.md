@@ -1,7 +1,5 @@
-# Partner Review — Post-hoc Assessment
-## Date: 2026-04-24
-## Status: APPROVED (post-hoc)
+# Partner Review — Task 007 (Minimum Tier)
+# Date: 2026-04-27
+# Tier: Minimum
 
-Post-hoc assessment: This task used plan-exact code with no external contract dependencies. The pre-execution audit (6 orders) covered all critical integration concerns before any dispatch. Full quality reviews (dispatched via Agent) confirmed implementation correctness. Partner review would not have changed the dispatch.
-
-Originally minimum-tier — converted to full post-hoc assessment during Pre-Completion Gate.
+**Rationale:** Task 7 replaces validate-report.py main() with a new version that adds Pydantic pre-check. The plan provides the complete replacement code. Single file change. Deferred audit orders #1 and #2 are addressed in the implementer dispatch (unconditional yaml import, validate_report_sections() interaction note). No new architectural decisions — the script is a thin orchestrator between validators.py and _report_utils.py.

@@ -1,42 +1,39 @@
-# Task 008 Report — Hook Integration
-# Date: 2026-04-24
+# Task 008 Report — _report_utils.py Re-Export + Cleanup
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Integrated Pydantic validators into 3 hook scripts as additive blocks. Plan validation gate got Gate 1b. check-handoff.sh validates before contract check. handoff-gate-hook.sh validates before acceptance report check. All guarded by frontmatter detection.
+Updated _report_utils.py: re-export VALID_STATUSES from Pydantic Status type, removed STATUS_VALUE_PATTERN and extract_implementer_status(), reduced REQUIRED_SECTIONS from 9 to 5, added PROMPT_PLACEHOLDER_PHRASES for placeholder detection, removed implementer_status from return dict. Also updated regression test Check 4 to expect new 5-section pattern.
 
 **Files Changed:**
-- `skills/writing-plans/scripts/plan-validation-gate-hook.sh` — Added Gate 1b Pydantic block
-- `skills/handoff-acceptance/scripts/check-handoff.sh` — Added Pydantic block at top
-- `skills/handoff-acceptance/scripts/handoff-gate-hook.sh` — Added Pydantic block before handoff dir check
-- `tests/unit/test_hooks_pydantic.py` — 7 integration tests
+- `skills/subagent-driven-development/scripts/_report_utils.py` — re-export, cleanup, 5 sections
+- `tests/ARaymond-skill-regression/validate-all-skills.py` — Check 4 updated for Phase 2
 
 **Source Files Read:**
-- `skills/writing-plans/scripts/plan-validation-gate-hook.sh` (251 lines, read before modifying)
-- `skills/handoff-acceptance/scripts/check-handoff.sh` (31 lines, read before modifying)
-- `skills/handoff-acceptance/scripts/handoff-gate-hook.sh` (66 lines, read before modifying)
+- `skills/subagent-driven-development/scripts/_report_utils.py` — original
+- `skills/scripts/models/implementer_report.py` — Status type
 
 **CLAUDE.md Files Read:**
 - Project root CLAUDE.md
 
 **Tests:**
-- Tests written: 7
-- Tests passing: 7 (156 total suite)
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_hooks_pydantic.py -v
-- Test output summary: 7 PASS in 0.74s
+- Import: `5 {'DONE', 'DONE_WITH_CONCERNS', 'NEEDS_CONTEXT', 'BLOCKED'}` — OK
+- validate-report.py now returns COMPLETE for valid fixtures (was INCOMPLETE before this task)
+- 222 unit tests pass, 122 regression checks pass
 
 **Contract Compliance:**
-- JSON wrapping with jq -Rs . ✓
-- Exit 1 blocks, exit 2 warns ✓
-- Frontmatter detection guard ✓
-- Validator path relative to script ✓
+- STATUS_VALUE_PATTERN removed: YES
+- extract_implementer_status() removed: YES
+- REQUIRED_SECTIONS = 5: YES
+- VALID_STATUSES re-exported from model: YES
 
 **Deviations from Plan:**
-- Used PYDANTIC_HANDOFF_DIR instead of HANDOFF_DIR in handoff-gate-hook.sh to avoid shadowing existing variable
-- Added exit-code-2 handling in check-handoff.sh for consistency
+- Added regression test update (validate-all-skills.py Check 4) — not in plan but necessary to prevent regression suite FAIL
 
-**Self-Review Findings:** No issues found
+**Self-Review Findings:**
+- No issues found
 
-**Concerns:** No concerns
+**Concerns:**
+- No concerns

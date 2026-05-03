@@ -1,7 +1,7 @@
-# Partner Review — Post-hoc Assessment
-## Date: 2026-04-24
-## Status: APPROVED (post-hoc)
+# Partner Review — Task 005 (Minimum Tier)
+# Date: 2026-04-27
+# Tier: Minimum
 
-Post-hoc assessment: This task used plan-exact code with no external contract dependencies. The pre-execution audit (6 orders) covered all critical integration concerns before any dispatch. Full quality reviews (dispatched via Agent) confirmed implementation correctness. Partner review would not have changed the dispatch.
+**Rationale:** Task 5 creates 6 static markdown fixture files (2 valid, 4 invalid). No code, no logic, no imports, no external dependencies. These are test data files with YAML frontmatter. Minimum-tier partner review.
 
-Originally minimum-tier — converted to full post-hoc assessment during Pre-Completion Gate.
+**Decision:** Minimum-tier — no dispatch needed.

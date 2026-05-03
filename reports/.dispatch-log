@@ -15,3 +15,15 @@
 2026-04-24T23:34:21Z DISPATCH reviewer task=10 type=spec-review
 2026-04-24T23:37:36Z DISPATCH reviewer task=11 type=spec-review
 2026-04-24T23:44:17Z DISPATCH reviewer task=12 type=spec-review
+2026-04-27T23:30:25Z DISPATCH reviewer task=0 type=spec-review
+2026-04-27T23:32:37Z DISPATCH reviewer task=1 type=unknown
+2026-04-27T23:35:30Z DISPATCH reviewer task=1 type=spec-review
+2026-04-27T23:35:38Z DISPATCH reviewer task=1 type=quality-review
+2026-04-27T23:40:39Z DISPATCH reviewer task=2 type=spec-review
+2026-04-27T23:40:46Z DISPATCH reviewer task=2 type=quality-review
+2026-04-27T23:45:01Z DISPATCH reviewer task=3 type=spec-review
+2026-04-27T23:45:05Z DISPATCH reviewer task=3 type=quality-review
+2026-04-27T23:49:20Z DISPATCH reviewer task=4 type=spec-review
+2026-04-28T01:09:57Z DISPATCH reviewer task=6 type=spec-review
+2026-04-28T01:24:43Z DISPATCH reviewer task=9 type=quality-review
+2026-04-28T04:06:23Z DISPATCH reviewer task=13 type=spec-review

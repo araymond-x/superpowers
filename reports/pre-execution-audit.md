@@ -1,56 +1,46 @@
 # Pre-Execution Audit Report
 
-## Plan: Pydantic Phase 1
-## Date: 2026-04-24
-## Auditor Verdict: ORDERS_ISSUED (6 orders)
+**Plan:** Pydantic Phase 2 — Module 1: Models + Unit Tests
+**Date:** 2026-04-27
+**Audit Verdict:** ORDERS_ISSUED → ALL RESOLVED
 
-All 6 orders resolved below. Execution may proceed.
+## Remediation Orders — Resolution Log
 
----
+### Order #1 (IMPORTANT) — Task 7/Task 8 interaction note
+**Finding:** Task 7 uses `validate_report_sections()` return dict, Task 8 modifies that dict. Cross-task dependency not documented.
+**Module:** 2
+**Resolution:** DEFERRED TO MODULE 2. Will add explicit note to Task 7 implementer dispatch about `validate_report_sections()` return dict interaction with Task 8 changes.
+**Status:** RESOLVED (deferred with tracking)
 
-## Order Resolutions
+### Order #2 (IMPORTANT) — yaml import fragility in Task 7
+**Finding:** `done_with_concerns_check` calls `yaml.safe_load()` but yaml import is conditional; could be None.
+**Module:** 2
+**Resolution:** DEFERRED TO MODULE 2. Will instruct Task 7 implementer to use unconditional `import yaml` since the script already hard-depends on PyYAML via validators.py.
+**Status:** RESOLVED (deferred with tracking)
 
-### Order 1: Wrong path in test_hooks_pydantic.py (BLOCKING)
-**Finding:** Task 8's `test_hooks_pydantic.py` uses `.parent.parent` but should use `.parent.parent.parent` to reach repo root from `tests/unit/`.
-**Resolution:** RESOLVED — Will inject path correction into Task 8 subagent dispatch prompt. The plan code snippet has the bug but the subagent will receive the corrected version.
+### Order #3 (IMPORTANT) — conftest.py vs explicit sys.path in Tasks 2/4
+**Finding:** Plan's Task 2 and Task 4 code snippets include `sys.path.insert(0, ...)` but `tests/unit/conftest.py` already adds the models directory to sys.path. Existing pattern (`test_plan_model.py`) does NOT include explicit sys.path manipulation.
+**Module:** 1
+**Resolution:** RESOLVED NOW. Will instruct Task 2 and Task 4 implementers to follow the established `test_plan_model.py` pattern — no `sys.path.insert` calls. The conftest.py handles this. The plan code snippets diverge from the pattern reference; the pattern reference takes precedence.
 **Status:** RESOLVED
 
-### Order 2: `--schema-version` flag accepted but never used (BLOCKING)
-**Finding:** The `--schema-version` flag is parsed by argparse but never consumed by `validate_plan()` or `validate_handoff()`.
-**Resolution:** RESOLVED — The distilled spec explicitly states "Forensic flag `--schema-version N` is for human archival review only — hooks NEVER use it" (line 91). This is an intentionally accepted CLI stub for Phase 1. Updated the spec's CLI Invocation comment to say "forensic stub — accepts flag but does not alter validation (deferred to future phase)". Will instruct Task 6 subagent to name the test `test_forensic_flag_stub_accepted` with docstring noting it's a stub.
-**Status:** RESOLVED
+### Order #4 (IMPORTANT) — Progress strict model vs existing dict shapes in Task 9
+**Finding:** `Progress` has `extra="forbid"` (inherited from StrictModel). Existing `controller-checkpoint.py` progress dicts may have unexpected keys that would cause ValidationError.
+**Module:** 2
+**Resolution:** DEFERRED TO MODULE 2. Will add explicit verification step in Task 9 implementer dispatch to grep all progress dict constructions and verify field compatibility.
+**Status:** RESOLVED (deferred with tracking)
 
-### Order 3: Plan/spec contradiction on validate-plan.py frontmatter behavior (BLOCKING)
-**Finding:** Spec said "hard-FAILs" but plan Task 9 implements warning-only. User explicitly resolved: hard FAIL is in validators.py only.
-**Resolution:** RESOLVED — Updated 4 locations:
-1. `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` line 168 — changed to "emits warning"
-2. `docs/specs/2026-04-24-pydantic-phase-1-design-distilled.md` acceptance criteria line 306 — changed to "emits a warning"
-3. `docs/imp-plans/2026-04-24-pydantic-phase-1-module-2-cli-hooks.md` line 14 — updated Contract Constraints
-4. `docs/imp-plans/2026-04-24-pydantic-phase-1-module-2-cli-hooks.md` line 874 — updated Module 2 acceptance criteria
-**Status:** RESOLVED
+### Order #5 (IMPORTANT) — extract-execution-trace.py VALID_STATUSES import cascade
+**Finding:** After Task 8 removes `STATUS_VALUE_PATTERN`, `extract-execution-trace.py`'s try block fails, cascading to hardcoded fallbacks for BOTH `STATUS_VALUE_PATTERN` AND `VALID_STATUSES`. Re-exported `VALID_STATUSES` is never reached.
+**Module:** 2
+**Resolution:** DEFERRED TO MODULE 2. Will log as accepted deviation — fallback values match current status enum. If status enum ever changes, `extract-execution-trace.py` would need updating. Spec explicitly states "has its own local fallback regex — unaffected by removal."
+**Status:** RESOLVED (deferred with tracking — logged in DEVIATIONS.md)
 
-### Order 4: Spec CLI invocation mismatch (IMPORTANT)
-**Finding:** Spec documented `python3 -m skills.scripts.models.validators` but plan uses direct script execution.
-**Resolution:** RESOLVED — Updated spec CLI Invocation section (lines 78-82) to match plan's direct execution pattern (`.venv/bin/python3 validators.py ...`). Added note explaining hooks use absolute path, no `-m` invocation. Also updated hook snippet example.
-**Status:** RESOLVED
+## Summary
 
-### Order 5: Task 9 missing import declarations (IMPORTANT)
-**Finding:** Task 9 pseudocode adds `import json as json_module` colliding with existing `import json`.
-**Resolution:** RESOLVED — Will inject explicit integration notes into Task 9 subagent dispatch: "Use existing `import json` (already imported). Add `import subprocess` and `import tempfile` to the import block. Do NOT alias json."
-**Status:** RESOLVED
+- 1 order resolved immediately (Order #3 — Module 1 pattern inconsistency)
+- 4 orders deferred to Module 2 pre-dispatch with explicit tracking
+- All orders have clear resolution paths
+- No BLOCKING orders
 
-### Order 6: Task 9 missing `result` variable context (IMPORTANT)
-**Finding:** Task 9 pseudocode references `result["blockers"]` without showing where the dict comes from.
-**Resolution:** RESOLVED — Will inject integration notes into Task 9 subagent dispatch with line number references from the actual file, showing where to insert frontmatter detection and where `blockers`/`warnings` lists are defined.
-**Status:** RESOLVED
-
----
-
-## Controller Checkpoint Known False Positives
-- `source_contracts` FAIL — Plan has `Source Contracts: None`; checkpoint treats "None" as non-empty (documented in CLAUDE.md)
-- `stale_artifacts` WARNING — Fresh DEVIATIONS.md template content detected as prior session (false positive after archival)
-
-## Stale Artifact Archival (FYI)
-Prior session artifacts archived before this session:
-- `DEVIATIONS.md` → `DEVIATIONS-prior-sdd.md`
-- `reports/pre-execution-audit.md` → `reports/archive-prior-sdd/`
+Proceeding to Module 1 SDD execution.

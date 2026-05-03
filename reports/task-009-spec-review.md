@@ -1,5 +1,5 @@
-# Task 009 Spec Review — validate-plan.py Pydantic Integration
-# Date: 2026-04-24
+# Task 009 Spec Review — controller-checkpoint.py Updates
+# Date: 2026-04-27
 # Verdict: PASS
 
-All contract constraints met. Imports correct (no json alias). has_frontmatter properly set. Pydantic block before status determination. Blocker on Pydantic failure, warning on missing frontmatter. 15 existing tests pass. Exit codes unchanged.
+All 3 changes verified: model imports added (CURRENT_SCHEMA_VERSION, CheckpointResult, CheckResult, Progress), validate_report_sections() updated to 5 sections, _build_result() uses CheckpointResult construction with model_dump(exclude_none=True). --help runs without import errors. Audit Order #4 verified: all progress dict constructions use only Progress model fields.

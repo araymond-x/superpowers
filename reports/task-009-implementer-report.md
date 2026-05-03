@@ -1,35 +1,37 @@
-# Task 009 Report — validate-plan.py Pydantic Integration
-# Date: 2026-04-24
+# Task 009 Report — controller-checkpoint.py Updates
+# Date: 2026-04-27
 # Status: DONE
 
 **Status:** DONE
 
 **Implementation Summary:**
-Added Pydantic validation path to validate-plan.py. Three surgical edits: imports, frontmatter detection, Pydantic block before status determination. Existing regex checks always run. Pydantic is additive. Missing frontmatter = warning.
+Updated controller-checkpoint.py: added Pydantic imports, replaced _build_result() with CheckpointResult model construction + model_dump(exclude_none=True), replaced inline validate_report_sections() from 9 to 5 sections. Audit Order #4 verified — all 3 progress dict constructions use only Progress model fields.
 
 **Files Changed:**
-- `skills/subagent-driven-development/scripts/validate-plan.py` — lines 24-25 (imports), 383 (detection), 465-490 (Pydantic block)
+- `skills/subagent-driven-development/scripts/controller-checkpoint.py`
 
 **Source Files Read:**
-- `skills/subagent-driven-development/scripts/validate-plan.py` (read entire file before modifying)
+- controller-checkpoint.py, checkpoint_result.py, _base.py, _report_utils.py
 
 **CLAUDE.md Files Read:**
 - Project root CLAUDE.md
 
 **Tests:**
-- Tests written: 0 (modifying existing file with 15 existing tests)
-- Tests passing: 15 (all existing pass, no regressions)
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v
-- Test output summary: 15 PASS in 0.97s
+- --help prints cleanly, no import errors
+- 32 unit tests pass
+- Audit Order #4: all progress dicts verified
 
 **Contract Compliance:**
-- Existing regex checks always run ✓
-- Pydantic additive when frontmatter present ✓
-- Missing frontmatter = warning not blocker ✓
-- Exit codes unchanged ✓
+- _build_result() uses CheckpointResult + model_dump(exclude_none=True): YES
+- Inline validator updated to 5 sections: YES
+- sys.path.insert for models: YES
+- Exit codes unchanged: YES
 
-**Deviations from Plan:** Plan mentioned "22 existing tests" but file has 15.
+**Deviations from Plan:**
+- None
 
-**Self-Review Findings:** No issues found
+**Self-Review Findings:**
+- No issues found. Minor: inline Concerns pattern `r"concerns?"` vs _report_utils `r"\bconcerns?\b"` — functionally equivalent for header matching.
 
-**Concerns:** No concerns
+**Concerns:**
+- No concerns

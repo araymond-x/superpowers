@@ -56,15 +56,15 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `implementer-prompt.md` has YAML frontmatter block in report format template
-- [ ] `SKILL.md` report persistence says reports start with `---`
-- [ ] `sdd_test_helpers.py` `IMPLEMENTER_REPORT_TEMPLATE` uses frontmatter + 5 prose sections
-- [ ] `CLAUDE.md` Pydantic section lists `implementer_report.py`, `checkpoint_result.py`, `validators.py report`
-- [ ] Meta-design sections 2, 5, 11, 12 updated; Phase 3 cross-artifact noted
-- [ ] `__init__.py` docstring updated
-- [ ] All existing tests pass after changes
-- [ ] `validate-all-skills.py` passes (122 checks)
-- [ ] `verify-symlink-install.sh` passes (105 checks)
+- [x] `implementer-prompt.md` has YAML frontmatter block in report format template
+- [x] `SKILL.md` report persistence says reports start with `---`
+- [x] `sdd_test_helpers.py` `IMPLEMENTER_REPORT_TEMPLATE` uses frontmatter + 5 prose sections
+- [x] `CLAUDE.md` Pydantic section lists `implementer_report.py`, `checkpoint_result.py`, `validators.py report`
+- [x] Meta-design sections 2, 5, 11, 12 updated; Phase 3 cross-artifact noted
+- [x] `__init__.py` docstring updated
+- [x] All existing tests pass after changes (231 passed)
+- [x] `validate-all-skills.py` passes (122 checks)
+- [x] `verify-symlink-install.sh` passes (105 checks)
 
 ---
 
@@ -77,7 +77,7 @@ tasks:
 - Modify: `skills/subagent-driven-development/SKILL.md`
 - Modify: `tests/unit/sdd_test_helpers.py`
 
-- [ ] **Step 1: Update implementer-prompt.md report format**
+- [x] **Step 1: Update implementer-prompt.md report format**
 
   In `skills/subagent-driven-development/implementer-prompt.md`, replace the Report Format section (lines 186-236) with the new format that includes YAML frontmatter before prose sections:
 
@@ -152,7 +152,7 @@ tasks:
       (The controller uses DONE_WITH_CONCERNS as a routing signal — it triggers reading deviations before review. A DONE report with concerns buried in the body will be reviewed without the controller knowing to look for them.)
   ```
 
-- [ ] **Step 2: Update SKILL.md report persistence prefix**
+- [x] **Step 2: Update SKILL.md report persistence prefix**
 
   In `skills/subagent-driven-development/SKILL.md`, replace the report file format block (lines 426-431):
 
@@ -171,7 +171,7 @@ tasks:
   **Report file format**: Implementer report files must begin with YAML frontmatter (between `---` delimiters) containing structured fields (schema_version, task_id, status, files_changed, tests, contract_compliance), followed by prose sections. Reviewer and spec-review reports retain their existing markdown format.
   ```
 
-- [ ] **Step 3: Update sdd_test_helpers.py report template**
+- [x] **Step 3: Update sdd_test_helpers.py report template**
 
   In `tests/unit/sdd_test_helpers.py`, replace `IMPLEMENTER_REPORT_TEMPLATE` (lines 52-88):
 
@@ -213,12 +213,12 @@ tasks:
 
   Also update the docstring for `create_task_reports()` (line 175): change "all 9 required sections" to "YAML frontmatter + 5 prose sections".
 
-- [ ] **Step 4: Run existing tests to verify no breakage**
+- [x] **Step 4: Run existing tests to verify no breakage** (231 passed)
 
   Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
   Expected: All existing tests pass (existing hook/checkpoint tests use the updated template)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (3b80f96)
 
   ```bash
   git add skills/subagent-driven-development/implementer-prompt.md skills/subagent-driven-development/SKILL.md tests/unit/sdd_test_helpers.py
@@ -234,7 +234,7 @@ tasks:
 - Modify: `docs/plans/2026-04-24-pydantic-meta-design.md`
 - Modify: `skills/scripts/models/__init__.py`
 
-- [ ] **Step 1: Update CLAUDE.md Pydantic section**
+- [x] **Step 1: Update CLAUDE.md Pydantic section**
 
   In `CLAUDE.md`, find the "Pydantic Validation (Phase 1)" section and update it to include Phase 2:
 
@@ -257,7 +257,7 @@ tasks:
   - Plans and reports without YAML frontmatter are hard FAILs — add frontmatter to validate.
   ```
 
-- [ ] **Step 2: Update __init__.py docstring**
+- [x] **Step 2: Update __init__.py docstring**
 
   Update `skills/scripts/models/__init__.py`:
 
@@ -275,7 +275,7 @@ tasks:
   """
   ```
 
-- [ ] **Step 3: Update meta-design**
+- [x] **Step 3: Update meta-design**
 
   Read `docs/plans/2026-04-24-pydantic-meta-design.md` and update:
   - Section 2 (Roadmap): Phase 2 status → "Complete"
@@ -286,7 +286,7 @@ tasks:
   - Section 12.3: "Updated — Phase 3 candidate for PlanExecutionContract."
   - Section 11: Add Phase 2 post-mortem (brief: what went well, what to improve)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (ba1c557)
 
   ```bash
   git add CLAUDE.md skills/scripts/models/__init__.py docs/plans/2026-04-24-pydantic-meta-design.md
@@ -300,22 +300,22 @@ tasks:
 **Files:**
 - No files created or modified — verification only
 
-- [ ] **Step 1: Run full unit test suite**
+- [x] **Step 1: Run full unit test suite** (231 passed)
 
   Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
   Expected: All tests pass (existing + ~37 new from Modules 1-2)
 
-- [ ] **Step 2: Run skill regression tests**
+- [x] **Step 2: Run skill regression tests** (122 PASS, 0 FAIL)
 
   Run: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
   Expected: 122 checks pass (prompt template change adds content but doesn't alter skill structure)
 
-- [ ] **Step 3: Run installation verification**
+- [x] **Step 3: Run installation verification** (105 passed)
 
   Run: `bash tests/ARaymond-installation/verify-symlink-install.sh`
   Expected: 105 checks pass
 
-- [ ] **Step 4: Smoke test with real reports**
+- [x] **Step 4: Smoke test with real reports** (exit 0)
 
   Copy a completed Phase 1 implementer report, add YAML frontmatter, validate:
   ```bash
@@ -333,7 +333,7 @@ tasks:
   rm -rf tests/fixtures/_smoke-test-reports
   ```
 
-- [ ] **Step 5: Verify validate-report.py end-to-end**
+- [x] **Step 5: Verify validate-report.py end-to-end** (COMPLETE, 5 sections found)
 
   Run the two-layer validation against a valid fixture:
   ```bash
@@ -341,7 +341,7 @@ tasks:
   ```
   Expected: exit 0, JSON output with `"status": "COMPLETE"`, 5 sections found
 
-- [ ] **Step 6: Final commit**
+- [x] **Step 6: Final commit** (6aa22e9 — regression test fix)
 
   If smoke test reports were committed, clean up. Otherwise just verify working tree is clean:
   ```bash

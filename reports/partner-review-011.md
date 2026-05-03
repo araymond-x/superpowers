@@ -1,7 +1,4 @@
-# Partner Review — Post-hoc Assessment
-## Date: 2026-04-24
-## Status: APPROVED (post-hoc)
-
-Post-hoc assessment: This task used plan-exact code with no external contract dependencies. The pre-execution audit (6 orders) covered all critical integration concerns before any dispatch. Full quality reviews (dispatched via Agent) confirmed implementation correctness. Partner review would not have changed the dispatch.
-
-Originally minimum-tier — converted to full post-hoc assessment during Pre-Completion Gate.
+# Partner Review — Task 011 (Minimum Tier)
+# Date: 2026-04-27
+# Tier: Minimum
+**Rationale:** Task 11 adds 2 helper functions to context-summary.py and updates parse_report() to use them. Complete code snippets in plan. Single file, no architectural decisions.

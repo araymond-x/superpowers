@@ -93,13 +93,13 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `implementer_report.py` defines `ImplementerReport(SchemaVersionedModel)`, `FileChange`, `TestSummary`, `ContractComplianceItem`, `Status`, `TestResult`, `ComplianceStatus`
-- [ ] ImplementerReport has 2 model validators: `test_counts_consistent`, `files_changed_non_empty_for_done`
-- [ ] `checkpoint_result.py` defines `CheckpointResult(SchemaVersionedModel)`, `CheckResult`, `Progress`, `Phase`, `CheckStatus`
-- [ ] CheckpointResult has 3 model validators: `fail_requires_blockers`, `blockers_reference_check_names`, `task_number_required_for_pre_dispatch`
-- [ ] ~27 model unit tests pass
-- [ ] 6 test fixtures exist: 2 valid, 4 invalid
-- [ ] `schema_version` mismatch rejected by both models
+- [x] `implementer_report.py` defines `ImplementerReport(SchemaVersionedModel)`, `FileChange`, `TestSummary`, `ContractComplianceItem`, `Status`, `TestResult`, `ComplianceStatus`
+- [x] ImplementerReport has 2 model validators: `test_counts_consistent`, `files_changed_non_empty_for_done`
+- [x] `checkpoint_result.py` defines `CheckpointResult(SchemaVersionedModel)`, `CheckResult`, `Progress`, `Phase`, `CheckStatus`
+- [x] CheckpointResult has 3 model validators: `fail_requires_blockers`, `blockers_reference_check_names`, `task_number_required_for_pre_dispatch`
+- [x] ~27 model unit tests pass (actual: 59 new tests — 29 ImplementerReport + 24 CheckpointResult + 6 contract)
+- [x] 6 test fixtures exist: 2 valid, 4 invalid
+- [x] `schema_version` mismatch rejected by both models
 
 ---
 
@@ -115,7 +115,7 @@ tasks:
 **Pattern References:**
 - `skills/scripts/models/plan.py` — follow the same pattern for Literal types, nested StrictModels, model_validators
 
-- [ ] **Step 1: Read source contracts**
+- [x] **Step 1: Read source contracts**
 
   Read the distilled spec's Contract Facts section. Extract:
   - ImplementerReport fields: `schema_version: int`, `task_id: int`, `status: Literal[4 values]`, `files_changed: list[FileChange]`, `tests: TestSummary`, `contract_compliance: list[ContractComplianceItem] = []`
@@ -126,7 +126,7 @@ tasks:
 
   Read `plan.py` to study the established pattern: how Literal types are defined, how nested StrictModels are structured, how `@model_validator(mode="after")` is used.
 
-- [ ] **Step 2: Create ground-truth fixtures**
+- [x] **Step 2: Create ground-truth fixtures**
 
   Create `tests/fixtures/reports/contracts/schema_facts.json`:
 
@@ -154,7 +154,7 @@ tasks:
   }
   ```
 
-- [ ] **Step 3: Write contract verification test**
+- [x] **Step 3: Write contract verification test**
 
   Create `tests/unit/test_models/test_phase2_contracts.py`:
 
@@ -213,12 +213,12 @@ tasks:
       assert set(facts["checkpoint_result"]["check_status_values"]) == expected
   ```
 
-- [ ] **Step 4: Run and verify**
+- [x] **Step 4: Run and verify**
 
   Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_phase2_contracts.py -v`
   Expected: PASS — all contract assertions hold.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (2ba91d6)
 
   ```bash
   git add tests/fixtures/reports/contracts/schema_facts.json tests/unit/test_models/test_phase2_contracts.py
@@ -236,7 +236,7 @@ tasks:
 **Pattern References:**
 - `skills/scripts/models/plan.py` — follow the same structure: Literal type aliases at module level, nested StrictModel classes, SchemaVersionedModel for top-level, `@model_validator(mode="after")` for cross-field checks
 
-- [ ] **Step 1: Create implementer_report.py**
+- [x] **Step 1: Create implementer_report.py**
 
   Create `skills/scripts/models/implementer_report.py`:
 
@@ -297,12 +297,12 @@ tasks:
           return self
   ```
 
-- [ ] **Step 2: Verify import works**
+- [x] **Step 2: Verify import works**
 
   Run: `.venv/bin/python3 -c "import sys; sys.path.insert(0, 'skills/scripts/models'); from implementer_report import ImplementerReport; print('OK')"`
   Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (16c6f25)
 
   ```bash
   git add skills/scripts/models/implementer_report.py
@@ -320,7 +320,7 @@ tasks:
 **Pattern References:**
 - `tests/unit/test_models/test_plan_model.py` — follow test structure: golden inputs, per-field missing/wrong-type, validator edge cases
 
-- [ ] **Step 1: Write unit tests**
+- [x] **Step 1: Write unit tests**
 
   Create `tests/unit/test_models/test_implementer_report_model.py`:
 
@@ -481,12 +481,12 @@ tasks:
           assert report.files_changed == []
   ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests** (29 passed)
 
   Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_implementer_report_model.py -v`
   Expected: All ~15 tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (52f1744)
 
   ```bash
   git add tests/unit/test_models/test_implementer_report_model.py
@@ -504,7 +504,7 @@ tasks:
 **Pattern References:**
 - `skills/scripts/models/plan.py` — same pattern as Task 1
 
-- [ ] **Step 1: Create checkpoint_result.py**
+- [x] **Step 1: Create checkpoint_result.py**
 
   Create `skills/scripts/models/checkpoint_result.py`:
 
@@ -571,12 +571,12 @@ tasks:
           return self
   ```
 
-- [ ] **Step 2: Verify import works**
+- [x] **Step 2: Verify import works**
 
   Run: `.venv/bin/python3 -c "import sys; sys.path.insert(0, 'skills/scripts/models'); from checkpoint_result import CheckpointResult; print('OK')"`
   Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (0e82502)
 
   ```bash
   git add skills/scripts/models/checkpoint_result.py
@@ -594,7 +594,7 @@ tasks:
 **Pattern References:**
 - `tests/unit/test_models/test_plan_model.py` — follow test structure
 
-- [ ] **Step 1: Write unit tests**
+- [x] **Step 1: Write unit tests**
 
   Create `tests/unit/test_models/test_checkpoint_result_model.py`:
 
@@ -761,12 +761,12 @@ tasks:
           assert "schema_version" in dumped
   ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests** (24 passed)
 
   Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_checkpoint_result_model.py -v`
   Expected: All ~12 tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (4e597ed)
 
   ```bash
   git add tests/unit/test_models/test_checkpoint_result_model.py
@@ -785,7 +785,7 @@ tasks:
 - Create: `tests/fixtures/reports/invalid/test-counts-inconsistent.md`
 - Create: `tests/fixtures/reports/invalid/no-files-for-done.md`
 
-- [ ] **Step 1: Create valid minimal fixture**
+- [x] **Step 1: Create valid minimal fixture**
 
   Create `tests/fixtures/reports/valid/minimal-report.md`:
 
@@ -820,7 +820,7 @@ tasks:
   No concerns
   ```
 
-- [ ] **Step 2: Create valid full-featured fixture**
+- [x] **Step 2: Create valid full-featured fixture**
 
   Create `tests/fixtures/reports/valid/full-featured-report.md`:
 
@@ -867,7 +867,7 @@ tasks:
   - The sync ORM call for avatar lookup may cause latency under load
   ```
 
-- [ ] **Step 3: Create invalid fixtures**
+- [x] **Step 3: Create invalid fixtures**
 
   Create `tests/fixtures/reports/invalid/missing-status.md`:
 
@@ -950,7 +950,7 @@ tasks:
   Did the thing.
   ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (73d6ffe)
 
   ```bash
   git add tests/fixtures/reports/
