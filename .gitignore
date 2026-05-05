@@ -8,3 +8,6 @@ inspo
 triage/
 __pycache__/
 .allow-main
+
+# Superpowers workspace state
+.active-feature
