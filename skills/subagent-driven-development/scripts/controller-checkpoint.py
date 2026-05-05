@@ -1103,7 +1103,19 @@ def main() -> int:
             "Useful for multi-module plans where checkboxes span multiple files."
         ),
     )
+    parser.add_argument(
+        "--feature-dir",
+        help="Active feature directory. When provided, --reports-dir and --deviations-file "
+             "are resolved relative to this path (if not explicitly set).",
+        default=None,
+    )
     args = parser.parse_args()
+
+    if args.feature_dir:
+        if not args.reports_dir:
+            args.reports_dir = f"{args.feature_dir}/reports/"
+        if not args.deviations_file:
+            args.deviations_file = f"{args.feature_dir}/deviations.md"
 
     # Dispatch to the appropriate phase handler
     try:

@@ -447,19 +447,22 @@ def main() -> int:
     )
     parser.add_argument(
         "--reports-dir",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
         help="Path to the reports/ directory containing implementer report files.",
     )
     parser.add_argument(
         "--deviations-file",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
         help="Path to DEVIATIONS.md.",
     )
     parser.add_argument(
         "--output",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
         help="Path where the context summary markdown file will be written.",
     )
@@ -474,7 +477,32 @@ def main() -> int:
             "If omitted, estimated from the highest task number in report files."
         ),
     )
+    parser.add_argument(
+        "--feature-dir",
+        help="Active feature directory. When provided, --reports-dir, --deviations-file, "
+             "and --output are resolved relative to this path (if not explicitly set).",
+        default=None,
+    )
     args = parser.parse_args()
+
+    if args.feature_dir:
+        if not args.reports_dir:
+            args.reports_dir = f"{args.feature_dir}/reports/"
+        if not args.deviations_file:
+            args.deviations_file = f"{args.feature_dir}/deviations.md"
+        if not args.output:
+            args.output = f"{args.feature_dir}/reports/context-summary.md"
+
+    # Validate that all required paths are set (either explicitly or via --feature-dir)
+    missing = []
+    if not args.reports_dir:
+        missing.append("--reports-dir")
+    if not args.deviations_file:
+        missing.append("--deviations-file")
+    if not args.output:
+        missing.append("--output")
+    if missing:
+        parser.error(f"Missing required arguments (provide explicitly or via --feature-dir): {', '.join(missing)}")
 
     # Validate inputs
     if not os.path.isdir(args.reports_dir):
