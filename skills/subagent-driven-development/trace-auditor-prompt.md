@@ -26,7 +26,7 @@ Agent tool (general-purpose):
     [CONTROLLER: Paste the contents of <feature-dir>/deviations.md here]
     </deviations>
 
-    Before forming any findings, read the entire execution trace and DEVIATIONS.md.
+    Before forming any findings, read the entire execution trace and deviations.md.
     Build a complete picture of what happened across all tasks before evaluating any
     single anomaly. Anomalies that look concerning in isolation may have been addressed
     later in the sequence.
