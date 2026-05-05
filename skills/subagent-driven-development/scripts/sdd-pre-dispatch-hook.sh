@@ -339,11 +339,10 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   # Report files can be self-written by the controller. The dispatch log is written
   # by THIS HOOK when it processes Agent calls with reviewer descriptions.
   # The controller cannot forge dispatch log entries without going through the Agent tool.
-  DISPATCH_LOG_PATH="$DISPATCH_LOG"
-  if [ -f "$DISPATCH_LOG_PATH" ]; then
+  if [ -f "$DISPATCH_LOG" ]; then
     # Check for spec-review dispatch entry for previous task
     SPEC_DISPATCHED=false
-    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG_PATH" 2>/dev/null; then
+    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
       SPEC_DISPATCHED=true
     fi
 
@@ -352,7 +351,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     QUAL_DISPATCHED=false
     QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
     HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
-    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG_PATH" 2>/dev/null; then
+    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
       QUAL_DISPATCHED=true
     elif [ -n "$HAS_MINIMUM_TIER" ]; then
       # Minimum tier allows controller-written quality review (no dispatch needed)
@@ -394,7 +393,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     RESULT=$(check_report_file "$T0_GLOB" "Task 0 report")
     case "$RESULT" in
       MISSING)
-        ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (expected: reports/task-000-implementer-report.md). Task 0 (Contract Verification) must complete first.")
+        ERRORS+=("BLOCKED: Plan has Source Contracts but no Task 0 report found (expected: ${REPORTS_DIR}/task-000-implementer-report.md). Task 0 (Contract Verification) must complete first.")
         ;;
       TOO_SMALL*)
         FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
@@ -488,7 +487,7 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
   else
     # Diagnostic: couldn't find the task in any plan file
     if [ -z "$SEARCHED_DIRS" ]; then
-      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in docs/imp-plans/ or docs/plans/. Create the plan file or ensure it is in the expected location.")
+      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in ${PLAN_SEARCH_GLOB}. Create the plan file or ensure it is in the expected location.")
     else
       ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — task header not found in plan files (searched:${SEARCHED_DIRS}). Verify task numbering matches plan headers (expected: '### Task $TASK_NUMBER').")
     fi
