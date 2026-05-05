@@ -116,13 +116,13 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 122 checks), install (static, 105 checks), unit (pytest, 231 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 4 test layers — regression (static, 138 checks), install (static, 105 checks), unit (pytest, 266 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
 
-- `tests/ARaymond-skill-regression/validate-all-skills.py` — 122-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+- `tests/ARaymond-skill-regression/validate-all-skills.py` — 138-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 105 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 231 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 266 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
@@ -177,8 +177,9 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - **Context summary** (Check 6b): Now BLOCKS (not warns) past the midpoint without `reports/context-summary.md`.
 - **Partner review gate** (Check 5d): Requires `reports/partner-review-NNN.md` (>50 bytes) before dispatching task NNN (Task 0 exempt). The controller must dispatch the partner agent (see `controller-partner-prompt.md`) or write a minimum-tier review. The partner independently verifies dispatch quality -- context completeness, accuracy against plan, prior task awareness, and escalation check.
 - Plan validation gate: `PreToolUse` → `Skill` → `.../skills/writing-plans/scripts/plan-validation-gate-hook.sh`
-- Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any scoped plan file, or `plan-review-report.md` missing/empty (<50 bytes)
-- Plan file scoping: primary = `docs/imp-plans/plan-manifest.txt` (explicit file list from writing-plans skill); fallback = git diff against base branch (files changed on current branch). Old plans from prior features are never validated.
+- Gate blocks `subagent-driven-development` and `executing-plans` invocation if: validate-plan.py FAIL on any scoped plan file, `plan-review-report.md` missing/empty (<50 bytes), or `.active-feature` file absent/invalid
+- Plan file scoping: primary = `<feature-dir>/plan-manifest.txt` (explicit file list from writing-plans skill; resolved via `.active-feature`); fallback = git diff against base branch (files changed on current branch). Old plans from prior features are never validated.
+- `plan-validation-gate-hook.sh` and `sdd-stop-hook.sh` now use `SUPERPOWERS_ROOT` (self-resolved via `BASH_SOURCE`) for portable path resolution.
 - Rollback: remove Agent matcher block and sdd-report-guard.sh entry from PreToolUse in `~/.claude/settings.json`
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
@@ -206,6 +207,15 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - `! cd` changes the prompt CWD but NOT the hook CWD — hooks always run from the original session directory
 - Branch check blocks on main when SDD artifacts exist (agent drifted out of worktree). Override with `.allow-main` file.
 
+## .active-feature File
+- Single-line plaintext file at project root containing relative path to active feature directory
+- Format: `docs/imp-plans/YYYY-MM-DD-<feature-name>`
+- Created by entry-point skills (brainstorming, writing-plans, handoff-acceptance)
+- Read by all hooks for artifact path resolution
+- Cleaned up by `finishing-a-development-branch`
+- Gitignored — workspace state, not project state
+- Conflict detection: entry-point skills check for stale/conflicting `.active-feature` at startup
+
 ## Hook Development Gotchas
 - Hook scripts use `$PYTHON` (resolved to `$SUPERPOWERS_ROOT/.venv/bin/python3`). Scripts called by hooks that import PyYAML or Pydantic MUST use this — system `python3` doesn't have these packages. If adding a new `python3` call to a hook, use `$PYTHON` instead.
 - Stop hooks: use `systemMessage` not `hookSpecificOutput.additionalContext` (not supported for Stop events)
@@ -229,10 +239,14 @@ Four additions to `~/.claude/settings.json`:
 - To find current session file: `ls -t ~/.claude/projects/*/$(pwd | sed 's|/|%|g')/*.jsonl | head -1`
 
 ## Output Path Convention
-- Design specs → `docs/specs/YYYY-MM-DD-<topic>-design.md` (from brainstorming)
-- Distilled specs → `docs/specs/YYYY-MM-DD-<topic>-design-distilled.md` (from brainstorming)
-- Implementation plans → `docs/imp-plans/YYYY-MM-DD-<feature-name>.md` (from writing-plans)
-- Project plans/reviews → `docs/plans/` (existing convention, not changed)
+All feature artifacts are consolidated in a per-feature directory:
+- Feature directory → `docs/imp-plans/YYYY-MM-DD-<feature-name>/`
+- Design specs → `<feature-dir>/spec.md` and `spec-distilled.md`
+- Implementation plans → `<feature-dir>/plan.md` and `module-N-*.md`
+- Plan manifest → `<feature-dir>/plan-manifest.txt`
+- Plan review → `<feature-dir>/plan-review-report.md`
+- Deviations → `<feature-dir>/deviations.md`
+- All execution reports → `<feature-dir>/reports/`
 
 ## Behavioral Test Gotchas
 - Test scripts use `grep -E` (ERE): alternation is `|` not `\|` (BRE). Wrong syntax silently fails to match.
