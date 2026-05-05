@@ -149,6 +149,13 @@ git worktree remove <worktree-path>
 
 **For Option 3:** Keep worktree.
 
+### Step 6: Post-Completion Cleanup
+
+**Applies to all options.** After the chosen option completes:
+
+1. Remove `.active-feature` if it exists
+2. Remove `.allow-main` if it exists (main branch only)
+
 ## Quick Reference
 
 | Option | Merge | Push | Keep Worktree | Cleanup Branch |

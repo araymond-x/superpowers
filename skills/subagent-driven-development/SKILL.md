@@ -57,7 +57,7 @@ digraph process {
         "Has Source Contracts?" [shape=diamond];
         "Read source files referenced in contracts" [shape=box];
         "Extract Write-Scope Partitioning table" [shape=box];
-        "Create DEVIATIONS.md (empty, with header)" [shape=box];
+        "Create <feature-dir>/deviations.md (empty, with header)" [shape=box];
         "Task 0 in plan?" [shape=diamond];
         "Verify Task 0 is first in TodoWrite" [shape=box];
         "Create TodoWrite with all tasks" [shape=box];
@@ -67,8 +67,8 @@ digraph process {
         "Has Source Contracts?" -> "Read source files referenced in contracts" [label="yes"];
         "Has Source Contracts?" -> "Extract Write-Scope Partitioning table" [label="no"];
         "Read source files referenced in contracts" -> "Extract Write-Scope Partitioning table";
-        "Extract Write-Scope Partitioning table" -> "Create DEVIATIONS.md (empty, with header)";
-        "Create DEVIATIONS.md (empty, with header)" -> "Task 0 in plan?";
+        "Extract Write-Scope Partitioning table" -> "Create <feature-dir>/deviations.md (empty, with header)";
+        "Create <feature-dir>/deviations.md (empty, with header)" -> "Task 0 in plan?";
         "Task 0 in plan?" -> "Verify Task 0 is first in TodoWrite" [label="yes"];
         "Task 0 in plan?" -> "Create TodoWrite with all tasks" [label="no"];
         "Verify Task 0 is first in TodoWrite" -> "Create TodoWrite with all tasks";
@@ -95,8 +95,8 @@ digraph process {
         "Implementer subagent asks questions?" [shape=diamond];
         "Answer questions, provide context" [shape=box];
         "Implementer subagent implements, tests, commits, self-reviews" [shape=box];
-        "Log DONE_WITH_CONCERNS to DEVIATIONS.md?" [shape=diamond];
-        "Append concerns to DEVIATIONS.md" [shape=box];
+        "Log DONE_WITH_CONCERNS to <feature-dir>/deviations.md?" [shape=diamond];
+        "Append concerns to <feature-dir>/deviations.md" [shape=box];
         "Declare review tier (full/standard/minimum)" [shape=box];
         "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" [shape=box];
         "Spec reviewer subagent confirms code matches spec?" [shape=diamond];
@@ -112,21 +112,21 @@ digraph process {
         label="Pre-Completion Gate";
         "All TodoWrite tasks complete?" [shape=diamond];
         "All plan checkboxes checked?" [shape=diamond];
-        "DEVIATIONS.md fully dispositioned?" [shape=diamond];
+        "<feature-dir>/deviations.md fully dispositioned?" [shape=diamond];
         "Contract trace passes?" [shape=diamond];
         "Stop: address gaps" [shape=box style=filled fillcolor=red];
-        "Dispatch final code reviewer (with DEVIATIONS.md)" [shape=box];
+        "Dispatch final code reviewer (with <feature-dir>/deviations.md)" [shape=box];
         "Use superpowers:finishing-a-development-branch" [shape=box style=filled fillcolor=lightgreen];
 
         "All TodoWrite tasks complete?" -> "All plan checkboxes checked?" [label="yes"];
         "All TodoWrite tasks complete?" -> "Stop: address gaps" [label="no"];
-        "All plan checkboxes checked?" -> "DEVIATIONS.md fully dispositioned?" [label="yes"];
+        "All plan checkboxes checked?" -> "<feature-dir>/deviations.md fully dispositioned?" [label="yes"];
         "All plan checkboxes checked?" -> "Stop: address gaps" [label="no"];
-        "DEVIATIONS.md fully dispositioned?" -> "Contract trace passes?" [label="yes"];
-        "DEVIATIONS.md fully dispositioned?" -> "Stop: address gaps" [label="no"];
-        "Contract trace passes?" -> "Dispatch final code reviewer (with DEVIATIONS.md)" [label="yes"];
+        "<feature-dir>/deviations.md fully dispositioned?" -> "Contract trace passes?" [label="yes"];
+        "<feature-dir>/deviations.md fully dispositioned?" -> "Stop: address gaps" [label="no"];
+        "Contract trace passes?" -> "Dispatch final code reviewer (with <feature-dir>/deviations.md)" [label="yes"];
         "Contract trace passes?" -> "Stop: address gaps" [label="no"];
-        "Dispatch final code reviewer (with DEVIATIONS.md)" -> "Use superpowers:finishing-a-development-branch";
+        "Dispatch final code reviewer (with <feature-dir>/deviations.md)" -> "Use superpowers:finishing-a-development-branch";
     }
 
     "Create TodoWrite with all tasks" -> "Dispatch Task 0 implementer";
@@ -136,10 +136,10 @@ digraph process {
     "Implementer subagent asks questions?" -> "Answer questions, provide context" [label="yes"];
     "Answer questions, provide context" -> "Dispatch implementer subagent (./implementer-prompt.md)\n+ Contract Constraints passthrough";
     "Implementer subagent asks questions?" -> "Implementer subagent implements, tests, commits, self-reviews" [label="no"];
-    "Implementer subagent implements, tests, commits, self-reviews" -> "Log DONE_WITH_CONCERNS to DEVIATIONS.md?";
-    "Log DONE_WITH_CONCERNS to DEVIATIONS.md?" -> "Append concerns to DEVIATIONS.md" [label="yes"];
-    "Log DONE_WITH_CONCERNS to DEVIATIONS.md?" -> "Declare review tier (full/standard/minimum)" [label="no"];
-    "Append concerns to DEVIATIONS.md" -> "Declare review tier (full/standard/minimum)";
+    "Implementer subagent implements, tests, commits, self-reviews" -> "Log DONE_WITH_CONCERNS to <feature-dir>/deviations.md?";
+    "Log DONE_WITH_CONCERNS to <feature-dir>/deviations.md?" -> "Append concerns to <feature-dir>/deviations.md" [label="yes"];
+    "Log DONE_WITH_CONCERNS to <feature-dir>/deviations.md?" -> "Declare review tier (full/standard/minimum)" [label="no"];
+    "Append concerns to <feature-dir>/deviations.md" -> "Declare review tier (full/standard/minimum)";
     "Declare review tier (full/standard/minimum)" -> "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)";
     "Dispatch spec reviewer subagent (./spec-reviewer-prompt.md)" -> "Spec reviewer subagent confirms code matches spec?";
     "Spec reviewer subagent confirms code matches spec?" -> "Implementer subagent fixes spec gaps" [label="no"];
@@ -181,16 +181,16 @@ If the workspace contains artifacts from a prior SDD session, archive them befor
 
 | Artifact | Archive action |
 |----------|---------------|
-| `DEVIATIONS.md` | Rename to `DEVIATIONS-<prior-feature>.md` (e.g., `DEVIATIONS-reconciliation-v3.md`) |
-| `reports/task-*.md` | Move to `reports/archive-<prior-feature>/` |
-| `reports/pre-execution-audit*.md` | Move with the other reports to archive |
+| `<feature-dir>/deviations.md` | Rename to `<feature-dir>/deviations-<prior-feature>.md` (e.g., `deviations-reconciliation-v3.md`) |
+| `<feature-dir>/reports/task-*.md` | Move to `<feature-dir>/reports/archive-<prior-feature>/` |
+| `<feature-dir>/reports/pre-execution-audit*.md` | Move with the other reports to archive |
 
 After archival, log the action as an FYI in your pre-execution audit self-assessment (Step 1 of Pre-Execution Audit) so the auditor knows the workspace was reused.
 
 If the workspace is clean (fresh worktree, no prior artifacts), skip this step.
 
-**Step 6: Create DEVIATIONS.md at the project root.**
-Use the Write tool to create the file using the template in `references/deviations-template.md`. This file will be appended to throughout execution — never overwritten.
+**Step 6: Create `<feature-dir>/deviations.md`.**
+Read the feature directory from `.active-feature`. Create `<feature-dir>/reports/` directory if it doesn't exist. Use the Write tool to create `<feature-dir>/deviations.md` using the template in `references/deviations-template.md`. This file will be appended to throughout execution — never overwritten.
 
 Plan ingestion is a one-pass activity. Read the plan, read the source contracts if present, extract what you need — then start the task loop. Do not read additional codebase files beyond what the plan's Contract Constraints reference.
 
@@ -199,10 +199,10 @@ If the plan has a Task 0 (Contract Verification), it should be the first item. M
 
 ## Pre-Execution Audit (Mandatory)
 
-Before dispatching any task, complete the self-assessment and audit gate. The SDD enforcement hook blocks all task dispatches until `reports/pre-execution-audit.md` exists with substantive content.
+Before dispatching any task, complete the self-assessment and audit gate. The SDD enforcement hook blocks all task dispatches until `<feature-dir>/reports/pre-execution-audit.md` exists with substantive content.
 
 **Step 1: Write the self-assessment.**
-Save to `reports/pre-execution-audit-self-assessment.md`. Answer every question honestly — the auditor will cross-reference your answers against the actual artifacts.
+Save to `<feature-dir>/reports/pre-execution-audit-self-assessment.md`. Answer every question honestly — the auditor will cross-reference your answers against the actual artifacts.
 
 1. Did you follow every step of each skill used before this point? List any steps you skipped and why.
 2. Did you dispatch all required reviewer subagents? If you batched or skipped any, state which and why.
@@ -217,11 +217,11 @@ Save to `reports/pre-execution-audit-self-assessment.md`. Answer every question 
 See `pre-execution-audit-prompt.md` for the dispatch template. Provide: your self-assessment, all plan file paths, the distilled spec path, and the Contract Constraints.
 
 **Step 3: Address remediation orders.**
-If the auditor issues ORDERS_ISSUED: address every order. For each order, document the resolution in `reports/pre-execution-audit.md` with:
+If the auditor issues ORDERS_ISSUED: address every order. For each order, document the resolution in `<feature-dir>/reports/pre-execution-audit.md` with:
 - Order #, finding, and what you did to fix it
 - RESOLVED status
 
-If the auditor returns CLEAR: write `reports/pre-execution-audit.md` with the audit verdict and proceed.
+If the auditor returns CLEAR: write `<feature-dir>/reports/pre-execution-audit.md` with the audit verdict and proceed.
 
 The pre-execution audit report must exist before any task dispatch. This is enforced by the hook — not optional.
 
@@ -286,19 +286,19 @@ The controller runs a deterministic checkpoint script at three critical moments.
 
 **Before execution begins** (after Plan Ingestion):
 ```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-execution --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/
+python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-execution --plan-file <plan.md> --feature-dir <feature-dir>
 ```
-Verify: plan readable, DEVIATIONS.md exists, reports/ exists, Task 0 present if needed. If FAIL, fix before proceeding.
+Verify: plan readable, `<feature-dir>/deviations.md` exists, `<feature-dir>/reports/` exists, Task 0 present if needed. If FAIL, fix before proceeding.
 
 **Before each task dispatch**:
 ```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number N --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/
+python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number N --plan-file <plan.md> --feature-dir <feature-dir>
 ```
 Verify: previous task complete, report filed, no pending deviations from prior task, context load reasonable. If FAIL, address the blocker before dispatching. If WARNING about context load, run the context summary script to compress state.
 
 **Before declaring completion**:
 ```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-completion --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/
+python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-completion --plan-file <plan.md> --feature-dir <feature-dir>
 ```
 Verify: all checkboxes, all reports, no pending deviations. This is the mechanical equivalent of the Pre-Completion Gate — the script checks what the Gate describes.
 
@@ -344,17 +344,17 @@ Before dispatching each implementer subagent, dispatch the controller partner to
 
 **When to dispatch (risk-tiered):**
 - **Full review**: Tasks with Pattern References, Shared Constants, external contract dependencies, or multi-file changes
-- **Minimum tier**: Simple config changes, single-file internal modifications, test-only tasks. Write `reports/partner-review-NNN-minimum-tier.md` with tier rationale instead of dispatching.
+- **Minimum tier**: Simple config changes, single-file internal modifications, test-only tasks. Write `<feature-dir>/reports/partner-review-NNN-minimum-tier.md` with tier rationale instead of dispatching.
 
 **Dispatch sequence:**
 1. Prepare the implementer dispatch prompt (all context sections filled in)
 2. Dispatch partner (see `./controller-partner-prompt.md`) with: the proposed prompt, plan task description, plan header sections
 3. Partner returns APPROVED or BLOCKED with findings
-4. Save partner output to `reports/partner-review-NNN.md`
+4. Save partner output to `<feature-dir>/reports/partner-review-NNN.md`
 5. If BLOCKED: address findings, re-dispatch partner
 6. If APPROVED: proceed to implementer dispatch
 
-The pre-dispatch hook requires `reports/partner-review-NNN.md` (>50 bytes) before allowing implementer dispatch.
+The pre-dispatch hook requires `<feature-dir>/reports/partner-review-NNN.md` (>50 bytes) before allowing implementer dispatch.
 
 ## Model Selection
 
@@ -366,7 +366,7 @@ Implementer subagents report one of four statuses. Handle each appropriately:
 
 **DONE:** Proceed to spec compliance review.
 
-**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review. Additionally, log ALL concerns to DEVIATIONS.md before proceeding to review. Concerns that are not logged are concerns that are lost.
+**DONE_WITH_CONCERNS:** The implementer completed the work but flagged doubts. Read the concerns before proceeding. If the concerns are about correctness or scope, address them before review. If they're observations (e.g., "this file is getting large"), note them and proceed to review. Additionally, log ALL concerns to `<feature-dir>/deviations.md` before proceeding to review. Concerns that are not logged are concerns that are lost.
 
 **NEEDS_CONTEXT:** The implementer needs information that wasn't provided. Provide the missing context and re-dispatch.
 
@@ -380,9 +380,9 @@ Never ignore an escalation or force the same model to retry without changes. If 
 
 ## Deviation Tracking
 
-After each task completes, the controller scans the implementer's report for signals that require logging. Use the Edit tool to append to DEVIATIONS.md — never overwrite it.
+After each task completes, the controller scans the implementer's report for signals that require logging. Use the Edit tool to append to `<feature-dir>/deviations.md` — never overwrite it.
 
-**Log to DEVIATIONS.md when the report contains:**
+**Log to `<feature-dir>/deviations.md` when the report contains:**
 - DONE_WITH_CONCERNS status → log each concern under the appropriate category
 - Any mention of "skipped", "deferred", "decided to", "instead of", "couldn't find", "assumed" → log as an independent decision
 - Dead code identified but not removed → log as deferred work
@@ -395,9 +395,9 @@ After each task completes, the controller scans the implementer's report for sig
 | Task 3 | IndependentDecision | Implementer used regex fallback instead of plan-specified parser | Pending |
 ```
 
-**Before the final code review:** Read DEVIATIONS.md in full and include its contents in the final reviewer's context. Reviewers cannot evaluate implementation quality without knowing what diverged from plan.
+**Before the final code review:** Read `<feature-dir>/deviations.md` in full and include its contents in the final reviewer's context. Reviewers cannot evaluate implementation quality without knowing what diverged from plan.
 
-**Before declaring implementation complete:** Every entry in DEVIATIONS.md must have a Disposition value. Valid dispositions:
+**Before declaring implementation complete:** Every entry in `<feature-dir>/deviations.md` must have a Disposition value. Valid dispositions:
 - `Accepted` — deviation is correct and intentional, plan was imprecise
 - `Resolved` — deviation was corrected before completion
 - `Escalated` — human reviewed and approved
@@ -413,15 +413,15 @@ See `references/report-naming-convention.md` for the complete naming convention 
 
 ### Saving Reports
 
-1. **After each implementer completes**: Save their report to `reports/task-NNN-implementer-report.md`
-2. **After each reviewer completes**: Save to `reports/task-NNN-spec-review.md` and `reports/task-NNN-quality-review.md`
+1. **After each implementer completes**: Save their report to `<feature-dir>/reports/task-NNN-implementer-report.md`
+2. **After each reviewer completes**: Save to `<feature-dir>/reports/task-NNN-spec-review.md` and `<feature-dir>/reports/task-NNN-quality-review.md`
 3. **Validate report completeness** using the validation script:
-   `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-report.py --report-file reports/task-NNN-implementer-report.md`
+   `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-report.py --report-file <feature-dir>/reports/task-NNN-implementer-report.md`
    If the script returns INCOMPLETE, do not proceed to review.
 
 Do NOT use module-prefixed names (`m2-task-1-*`), do NOT create symlinks between naming conventions. The hook enforces `task-NNN-*` — use it directly.
 
-The `reports/` directory is the controller's flight recorder. If the session crashes, a new session can read these files to understand what happened and resume execution.
+The `<feature-dir>/reports/` directory is the controller's flight recorder. If the session crashes, a new session can read these files to understand what happened and resume execution.
 
 **Report file format**: Implementer report files must begin with YAML frontmatter (between `---` delimiters) containing structured fields (schema_version, task_id, status, files_changed, tests, contract_compliance), followed by prose sections. Reviewer and spec-review reports retain their existing markdown format.
 
@@ -429,31 +429,31 @@ The `reports/` directory is the controller's flight recorder. If the session cra
 
 After marking each task complete in TodoWrite, the controller MUST also update the plan file on disk:
 - Check off completed checkboxes: `- [ ]` becomes `- [x]`
-- If the task was completed with modifications, add a brief inline note: `- [x] Task 3: implemented using regex fallback (see DEVIATIONS.md)`
+- If the task was completed with modifications, add a brief inline note: `- [x] Task 3: implemented using regex fallback (see deviations.md)`
 
 This ensures that anyone reading the plan file — including you, after context loss — can see exactly what was done and what remains. Do not rely on TodoWrite alone; it does not persist beyond the session.
 
 ## Honesty Check (Mandatory before Pre-Completion Gate)
 
-See `references/honesty-check-block.md` for the full prompt. Present it to the user and STOP — do not self-answer. After the user responds, save to `reports/honesty-check-YYYY-MM-DD.md` (gate-required) and add uncertainties from answers 5-9 to DEVIATIONS.md as "Pending." The stop hook copies to the vault automatically.
+See `references/honesty-check-block.md` for the full prompt. Present it to the user and STOP — do not self-answer. After the user responds, save to `<feature-dir>/reports/honesty-check-YYYY-MM-DD.md` (gate-required) and add uncertainties from answers 5-9 to `<feature-dir>/deviations.md` as "Pending." The stop hook copies to the vault automatically.
 
 ## Pre-Completion Gate
 
 Before invoking `superpowers:finishing-a-development-branch`, verify all of the following. If any check fails, stop and address the gap before proceeding.
 
 1. **All TodoWrite tasks are marked complete.** No tasks in pending or in-progress state.
-2. **All plan checkboxes are checked** (or explicitly dispositioned in DEVIATIONS.md with human approval).
-3. **DEVIATIONS.md has no undispositioned entries.** Every row has a Disposition value other than `Pending`.
-4. **The final code reviewer has seen DEVIATIONS.md.** Pass it explicitly in the reviewer's context — do not assume the reviewer found it.
+2. **All plan checkboxes are checked** (or explicitly dispositioned in `<feature-dir>/deviations.md` with human approval).
+3. **`<feature-dir>/deviations.md` has no undispositioned entries.** Every row has a Disposition value other than `Pending`.
+4. **The final code reviewer has seen `<feature-dir>/deviations.md`.** Pass it explicitly in the reviewer's context — do not assume the reviewer found it.
 5. **If the plan had Contract Constraints:** Verify that the final implementation matches the source contracts. This is a final trace, not a re-run of Task 0 — you are confirming that the accumulated changes across all tasks still honor the contracts as a whole.
 6. **Full test suite passes from clean state.** Run the complete test suite (not just individual task tests). All tests must pass. If any test fails, investigate — do not mark as complete with failing tests.
 7. **Cross-task wiring audit.** For every component, hook, or module created by one task and consumed by another: verify it is actually imported, registered, or wired in the consuming code. Check the UI renders the component, the router registers the endpoint, the hook is called. Components that exist but are never wired are incomplete work.
 
 8. **Execution trace audit.** Extract and audit the session trace:
    ```bash
-   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/extract-execution-trace.py --session-file <session.jsonl> --deviations-file DEVIATIONS.md --reports-dir reports/ --output execution-trace.json
+   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/extract-execution-trace.py --session-file <session.jsonl> --feature-dir <feature-dir> --output <feature-dir>/reports/execution-trace.json
    ```
-   Then dispatch the trace auditor subagent (see `trace-auditor-prompt.md`) with the trace JSON and DEVIATIONS.md contents. The auditor reviews for skipped reviews, unlogged concerns, missing reports, and other process anomalies. If the auditor returns ISSUES_FOUND, address the issues before proceeding.
+   Then dispatch the trace auditor subagent (see `trace-auditor-prompt.md`) with the trace JSON and `<feature-dir>/deviations.md` contents. The auditor reviews for skipped reviews, unlogged concerns, missing reports, and other process anomalies. If the auditor returns ISSUES_FOUND, address the issues before proceeding.
 
    To find the current session file: `ls -t ~/.claude/projects/*/$(pwd | sed 's|/|%|g')/*.jsonl | head -1`
 
@@ -461,7 +461,7 @@ These checks are not bureaucratic overhead. They exist because the failure mode 
 
 ## Session Recovery
 
-See `references/session-recovery.md` for how to resume after a session interruption. All execution state is in files (plan checkboxes, DEVIATIONS.md, reports/).
+See `references/session-recovery.md` for how to resume after a session interruption. All execution state is in files (plan checkboxes, `<feature-dir>/deviations.md`, `<feature-dir>/reports/`).
 
 ## Prompt Templates
 
@@ -475,7 +475,7 @@ See `references/session-recovery.md` for how to resume after a session interrupt
 
 ## Example Workflow
 
-See `references/example-workflow.md` for a complete annotated example showing Task 0 catch, DEVIATIONS.md logging, review cycles, and Pre-Completion Gate verification.
+See `references/example-workflow.md` for a complete annotated example showing Task 0 catch, `deviations.md` logging, review cycles, and Pre-Completion Gate verification.
 
 ## Advantages
 
