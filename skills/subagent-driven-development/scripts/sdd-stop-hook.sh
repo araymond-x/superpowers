@@ -11,7 +11,15 @@ set -o pipefail
 # Note: not using -u (strict unset vars) because jq pipe chains can produce
 # empty variables that would cause silent exit with no error message
 
-CHECKPOINT_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/controller-checkpoint.py"
+SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+
+if [ -f "$SUPERPOWERS_ROOT/.venv/bin/python3" ]; then
+  PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
+else
+  PYTHON="python3"
+fi
+
+CHECKPOINT_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/controller-checkpoint.py"
 
 # Read stdin
 INPUT=$(cat)
@@ -27,15 +35,29 @@ if [ -z "$CWD" ] || [ ! -d "$CWD" ]; then
   exit 0
 fi
 
+# ─── Resolve active feature directory ─────────────────────────────────────
+FEAT=""
+if [ -f "${CWD}/.active-feature" ]; then
+  FEAT=$(cat "${CWD}/.active-feature")
+fi
+
 # ─── SDD session detection ────────────────────────────────────────────────────
 # Only proceed if both SDD sentinel artifacts exist in CWD.
-# reports/ + DEVIATIONS.md = this is an active SDD session.
+# reports/ + deviations.md (or DEVIATIONS.md at root) = this is an active SDD session.
 
-if [ ! -d "${CWD}/reports" ]; then
+if [ -n "$FEAT" ]; then
+  REPORTS_DIR="${CWD}/${FEAT}/reports"
+  DEVIATIONS_FILE="${CWD}/${FEAT}/deviations.md"
+else
+  REPORTS_DIR="${CWD}/reports"
+  DEVIATIONS_FILE="${CWD}/DEVIATIONS.md"
+fi
+
+if [ ! -d "$REPORTS_DIR" ]; then
   exit 0
 fi
 
-if [ ! -f "${CWD}/DEVIATIONS.md" ]; then
+if [ ! -f "$DEVIATIONS_FILE" ]; then
   exit 0
 fi
 
@@ -46,14 +68,23 @@ if [ ! -f "$CHECKPOINT_SCRIPT" ]; then
   exit 0
 fi
 
-# Find the plan file — look in docs/imp-plans/ then docs/plans/
+# Find the plan file
 PLAN_FILE=""
-for candidate in "${CWD}/docs/imp-plans/"*.md "${CWD}/docs/plans/"*.md; do
-  if [ -f "$candidate" ]; then
-    PLAN_FILE="$candidate"
-    break
-  fi
-done
+if [ -n "$FEAT" ]; then
+  for candidate in "${CWD}/${FEAT}/"*.md; do
+    if [ -f "$candidate" ]; then
+      PLAN_FILE="$candidate"
+      break
+    fi
+  done
+else
+  for candidate in "${CWD}/docs/imp-plans/"*.md "${CWD}/docs/plans/"*.md; do
+    if [ -f "$candidate" ]; then
+      PLAN_FILE="$candidate"
+      break
+    fi
+  done
+fi
 
 if [ -z "$PLAN_FILE" ]; then
   exit 0
@@ -68,7 +99,7 @@ VAULT_DIR="${VAULT_DIR:-}"
 if [ -n "$VAULT_DIR" ]; then
   # Find the most recent honesty check file (glob for honesty-check-*.md)
   HONESTY_FILE=""
-  for candidate in "${CWD}"/reports/honesty-check-*.md; do
+  for candidate in "${REPORTS_DIR}"/honesty-check-*.md; do
     if [ -f "$candidate" ] && [ "$(wc -c < "$candidate" | tr -d ' ')" -ge 50 ]; then
       HONESTY_FILE="$candidate"
     fi
@@ -106,11 +137,11 @@ fi
 # ─── Run pre-completion checkpoint ────────────────────────────────────────────
 
 CHECKPOINT_OUTPUT=$(
-  python3 "$CHECKPOINT_SCRIPT" \
+  $PYTHON "$CHECKPOINT_SCRIPT" \
     --phase pre-completion \
     --plan-file "$PLAN_FILE" \
-    --deviations-file "${CWD}/DEVIATIONS.md" \
-    --reports-dir "${CWD}/reports/" \
+    --deviations-file "$DEVIATIONS_FILE" \
+    --reports-dir "$REPORTS_DIR/" \
     2>/dev/null
 )
 
