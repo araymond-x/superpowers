@@ -21,7 +21,15 @@ set -o pipefail
 
 MIN_REPORT_BYTES=50
 
-VALIDATE_PLAN_SCRIPT="/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/validate-plan.py"
+SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
+
+if [ -f "$SUPERPOWERS_ROOT/.venv/bin/python3" ]; then
+  PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
+else
+  PYTHON="python3"
+fi
+
+VALIDATE_PLAN_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/validate-plan.py"
 
 INPUT=$(cat)
 
@@ -48,34 +56,45 @@ fi
 
 cd "$CWD" || exit 0
 
+# ─── Resolve active feature directory ─────────────────────────────────────
+FEAT=""
+if [ -f ".active-feature" ]; then
+  FEAT=$(cat .active-feature)
+fi
+
+# Gate: .active-feature must exist for execution skills
+if [ -z "$FEAT" ]; then
+  echo "BLOCKED: No .active-feature file found. Establish a feature name by invoking superpowers:brainstorming or superpowers:writing-plans first. The feature name determines the directory structure for all execution artifacts." >&2
+  exit 2
+fi
+
 # ---- Scope plan files --------------------------------------------------------
 
 PLAN_FILES=()
 SCOPE_METHOD=""
 
-# Primary: read plan-manifest.txt (check top-level, then subdirectories)
-#
-# LIMITATION: Takes the FIRST manifest found (top-level wins, then first
-# subdirectory match via `head -1`). If multiple feature directories each
-# have their own manifest, only one is used — selection is non-deterministic
-# for subdirectory matches. The full per-feature directory migration must
-# resolve this (e.g., active-feature marker, branch-name mapping, or
-# validate-all-manifests strategy). See tests/poc-feature-directory/.
+# Primary: read plan-manifest.txt — use $FEAT for direct discovery
 MANIFEST=""
-for dir in docs/imp-plans docs/plans; do
-  if [ -f "$dir/plan-manifest.txt" ]; then
-    MANIFEST="$dir/plan-manifest.txt"
-    break
+if [ -n "$FEAT" ]; then
+  if [ -f "$FEAT/plan-manifest.txt" ]; then
+    MANIFEST="$FEAT/plan-manifest.txt"
   fi
-  # Search feature subdirectories (per-feature directory convention)
-  if [ -d "$dir" ]; then
-    FOUND=$(find "$dir" -maxdepth 2 -name "plan-manifest.txt" -type f 2>/dev/null | head -1)
-    if [ -n "$FOUND" ]; then
-      MANIFEST="$FOUND"
+else
+  # Legacy fallback: search standard locations
+  for dir in docs/imp-plans docs/plans; do
+    if [ -f "$dir/plan-manifest.txt" ]; then
+      MANIFEST="$dir/plan-manifest.txt"
       break
     fi
-  fi
-done
+    if [ -d "$dir" ]; then
+      FOUND=$(find "$dir" -maxdepth 2 -name "plan-manifest.txt" -type f 2>/dev/null | head -1)
+      if [ -n "$FOUND" ]; then
+        MANIFEST="$FOUND"
+        break
+      fi
+    fi
+  done
+fi
 
 if [ -n "$MANIFEST" ]; then
   SCOPE_METHOD="manifest"
@@ -166,12 +185,12 @@ fi
 
 # ---- Gate 1b: Pydantic validation (Phase 1) ---------------------------------
 
-PYDANTIC_VALIDATOR="$(dirname "$0")/../../scripts/models/validators.py"
+PYDANTIC_VALIDATOR="$SUPERPOWERS_ROOT/skills/scripts/models/validators.py"
 if [ -f "$PYDANTIC_VALIDATOR" ]; then
   for pf in "${PLAN_FILES[@]}"; do
     # Only validate files with YAML frontmatter
     if head -1 "$pf" | grep -q '^---$'; then
-      .venv/bin/python3 "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err
+      $PYTHON "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err
       PYDANTIC_EXIT=$?
       if [ "$PYDANTIC_EXIT" -ne 0 ]; then
         if [ "$PYDANTIC_EXIT" -eq 1 ]; then
@@ -187,11 +206,17 @@ if [ -f "$PYDANTIC_VALIDATOR" ]; then
 fi
 
 # ---- Gate 2: Check for plan-review-report.md --------------------------------
-# Search strategy: first check directories containing scoped plan files (handles
-# per-feature subdirectories), then fall back to top-level docs/imp-plans/ and docs/plans/.
+# Search strategy: first check $FEAT directory directly, then directories
+# containing scoped plan files, then fall back to top-level docs/imp-plans/ and docs/plans/.
 
 REVIEW_REPORT=""
+if [ -n "$FEAT" ]; then
+  if [ -f "$FEAT/plan-review-report.md" ]; then
+    REVIEW_REPORT="$FEAT/plan-review-report.md"
+  fi
+fi
 
+if [ -z "$REVIEW_REPORT" ]; then
 # Build list of directories to search from the scoped plan files
 SEARCH_DIRS=()
 for pf in "${PLAN_FILES[@]}"; do
@@ -234,6 +259,7 @@ for dir in "${SEARCH_DIRS[@]}"; do
     fi
   fi
 done
+fi  # end if [ -z "$REVIEW_REPORT" ] (fallback search)
 
 if [ -z "$REVIEW_REPORT" ]; then
   ERRORS+=("BLOCKED: No plan-review-report.md found near scoped plan files or in docs/imp-plans/. The writing-plans skill requires dispatching the plan-document-reviewer and saving its output before execution. Run the Plan Review Loop (checklist steps 8-11) first.")
