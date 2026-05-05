@@ -226,3 +226,40 @@ fi
             cwd=str(tmp_path), capture_output=True, text=True
         )
         assert result.stdout.strip() == "RESOLVED"
+
+
+class TestFeatureNameValidation:
+    """Test that feature names follow kebab-case convention."""
+
+    @pytest.mark.parametrize("name,expected", [
+        ("pydantic-phase-2", True),
+        ("statement-reconciliation-v3", True),
+        ("fix-login-bug", True),
+        ("a", True),
+        ("2026-feature", True),
+        ("PascalCase", False),
+        ("camelCase", False),
+        ("has spaces", False),
+        ("has_underscores", False),
+        ("ALLCAPS", False),
+        ("has.dots", False),
+        ("has/slashes", False),
+        ("", False),
+        ("has--double-dashes", False),
+        ("-starts-with-dash", False),
+        ("ends-with-dash-", False),
+    ])
+    def test_feature_name_validation(self, name, expected):
+        """Validate kebab-case: lowercase letters, digits, single hyphens, no leading/trailing hyphens."""
+        import re
+        pattern = r'^[a-z0-9]+(-[a-z0-9]+)*$'
+        result = bool(re.match(pattern, name)) if name else False
+        assert result == expected, f"Expected {name!r} to be {'valid' if expected else 'invalid'}"
+
+    def test_feature_dir_path_construction(self):
+        """Verify the complete path format."""
+        import re
+        name = "pydantic-phase-2"
+        date = "2026-05-02"
+        path = f"docs/imp-plans/{date}-{name}"
+        assert re.match(r'^docs/imp-plans/\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$', path)
