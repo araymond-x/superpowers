@@ -411,7 +411,11 @@ def check_cross_references(skills_dir):
             )
 
         # SDD SKILL has hooks frontmatter for process-level enforcement
-        if "hooks:" in sdd_content and "PreToolUse" in sdd_content and 'matcher: "Agent"' in sdd_content:
+        if (
+            "hooks:" in sdd_content
+            and "PreToolUse" in sdd_content
+            and 'matcher: "Agent"' in sdd_content
+        ):
             check_pass(
                 CATEGORY_4,
                 "SDD SKILL: has PreToolUse hook on Agent tool in frontmatter",
@@ -442,9 +446,13 @@ def check_cross_references(skills_dir):
             skills_dir, "subagent-driven-development/scripts/check-safe-branch.sh"
         )
         if os.path.isfile(branch_script) and os.access(branch_script, os.X_OK):
-            check_pass(CATEGORY_4, "SDD SKILL: check-safe-branch.sh exists and is executable")
+            check_pass(
+                CATEGORY_4, "SDD SKILL: check-safe-branch.sh exists and is executable"
+            )
         else:
-            check_fail(CATEGORY_4, "SDD SKILL: check-safe-branch.sh missing or not executable")
+            check_fail(
+                CATEGORY_4, "SDD SKILL: check-safe-branch.sh missing or not executable"
+            )
 
         # Hook scripts: sdd-stop-hook.sh
         stop_hook = os.path.join(
@@ -469,9 +477,15 @@ def check_cross_references(skills_dir):
             skills_dir, "handoff-acceptance/scripts/handoff-gate-hook.sh"
         )
         if os.path.isfile(handoff_gate) and os.access(handoff_gate, os.X_OK):
-            check_pass(CATEGORY_4, "handoff-acceptance: handoff-gate-hook.sh exists and is executable")
+            check_pass(
+                CATEGORY_4,
+                "handoff-acceptance: handoff-gate-hook.sh exists and is executable",
+            )
         else:
-            check_fail(CATEGORY_4, "handoff-acceptance: handoff-gate-hook.sh missing or not executable")
+            check_fail(
+                CATEGORY_4,
+                "handoff-acceptance: handoff-gate-hook.sh missing or not executable",
+            )
 
         # Pre-execution audit prompt template
         audit_prompt = os.path.join(
@@ -480,7 +494,10 @@ def check_cross_references(skills_dir):
         if os.path.isfile(audit_prompt):
             check_pass(CATEGORY_4, "SDD: pre-execution-audit-prompt.md exists")
         else:
-            check_fail(CATEGORY_4, "SDD: pre-execution-audit-prompt.md missing — pre-execution audit gate broken")
+            check_fail(
+                CATEGORY_4,
+                "SDD: pre-execution-audit-prompt.md missing — pre-execution audit gate broken",
+            )
 
         # SDD SKILL references implementer, spec-reviewer, code-quality-reviewer prompt templates
         for prompt_file in [
@@ -718,9 +735,14 @@ def check_required_sections(skills_dir):
     wt_content = read_file(wt_path)
     if wt_content:
         if "NEW SESSION REQUIRED" in wt_content:
-            check_pass(CATEGORY_5, "worktree SKILL: has mandatory session handoff block")
+            check_pass(
+                CATEGORY_5, "worktree SKILL: has mandatory session handoff block"
+            )
         else:
-            check_fail(CATEGORY_5, "worktree SKILL: missing 'NEW SESSION REQUIRED' handoff block")
+            check_fail(
+                CATEGORY_5,
+                "worktree SKILL: missing 'NEW SESSION REQUIRED' handoff block",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -791,7 +813,9 @@ def check_critical_fixes(skills_dir):
     if ru_content is not None:
         # After Phase 2, "Tests" is in YAML frontmatter, not prose sections.
         # The \btests?\b pattern should no longer appear in REQUIRED_SECTIONS.
-        has_tests_in_required = bool(re.search(r'REQUIRED_SECTIONS\s*=\s*\[.*?"Tests"', ru_content, re.DOTALL))
+        has_tests_in_required = bool(
+            re.search(r'REQUIRED_SECTIONS\s*=\s*\[.*?"Tests"', ru_content, re.DOTALL)
+        )
         if not has_tests_in_required:
             check_pass(
                 CATEGORY_6,
@@ -858,7 +882,9 @@ def check_critical_fixes(skills_dir):
             )
 
     # Pre-dispatch hook has audit report check
-    hook_path = os.path.join(skills_dir, "subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh")
+    hook_path = os.path.join(
+        skills_dir, "subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+    )
     hook_content = read_file(hook_path)
     if hook_content:
         if "pre-execution-audit" in hook_content:
@@ -867,28 +893,47 @@ def check_critical_fixes(skills_dir):
             check_fail(CATEGORY_6, "SDD hook: missing pre-execution audit report check")
 
         if "MIN_REPORT_BYTES" in hook_content:
-            check_pass(CATEGORY_6, "SDD hook: has content validation threshold (MIN_REPORT_BYTES)")
+            check_pass(
+                CATEGORY_6,
+                "SDD hook: has content validation threshold (MIN_REPORT_BYTES)",
+            )
         else:
-            check_fail(CATEGORY_6, "SDD hook: missing content validation — empty files would bypass gate")
+            check_fail(
+                CATEGORY_6,
+                "SDD hook: missing content validation — empty files would bypass gate",
+            )
 
-        if "estimate-task-tokens" in hook_content or "estimate_task_tokens" in hook_content:
+        if (
+            "estimate-task-tokens" in hook_content
+            or "estimate_task_tokens" in hook_content
+        ):
             check_pass(CATEGORY_6, "SDD hook: has token budget estimation check")
         else:
-            check_fail(CATEGORY_6, "SDD hook: missing token budget estimation — oversized tasks not blocked")
+            check_fail(
+                CATEGORY_6,
+                "SDD hook: missing token budget estimation — oversized tasks not blocked",
+            )
 
         # Report naming: hook supports zero-padded task-NNN format
         if "task_report_glob" in hook_content or 'printf "%03d"' in hook_content:
             check_pass(CATEGORY_6, "SDD hook: supports task-NNN zero-padded naming")
         else:
-            check_fail(CATEGORY_6, "SDD hook: missing task-NNN zero-padded naming support")
+            check_fail(
+                CATEGORY_6, "SDD hook: missing task-NNN zero-padded naming support"
+            )
 
         # Report naming: zero-padded only (no backward compat with unpadded task-N)
         # Non-padded fallback was removed because it caused stale report files
         # from prior sessions to mask incomplete new reports.
         if "task-${task_num}" not in hook_content:
-            check_pass(CATEGORY_6, "SDD hook: no non-padded fallback (zero-padded only)")
+            check_pass(
+                CATEGORY_6, "SDD hook: no non-padded fallback (zero-padded only)"
+            )
         else:
-            check_fail(CATEGORY_6, "SDD hook: still has non-padded task-N fallback — should use zero-padded only")
+            check_fail(
+                CATEGORY_6,
+                "SDD hook: still has non-padded task-N fallback — should use zero-padded only",
+            )
 
     # SDD SKILL has report naming convention
     sdd_skill_path = os.path.join(skills_dir, "subagent-driven-development/SKILL.md")
@@ -897,21 +942,36 @@ def check_critical_fixes(skills_dir):
         if "task-NNN" in sdd_skill_content or "task-000" in sdd_skill_content:
             check_pass(CATEGORY_6, "SDD SKILL: documents task-NNN naming convention")
         else:
-            check_fail(CATEGORY_6, "SDD SKILL: missing task-NNN naming convention documentation")
+            check_fail(
+                CATEGORY_6,
+                "SDD SKILL: missing task-NNN naming convention documentation",
+            )
 
-        if "Do NOT use module-prefixed" in sdd_skill_content or "do NOT create symlinks" in sdd_skill_content.lower():
-            check_pass(CATEGORY_6, "SDD SKILL: prohibits module-prefixed names and symlinks")
+        if (
+            "Do NOT use module-prefixed" in sdd_skill_content
+            or "do NOT create symlinks" in sdd_skill_content.lower()
+        ):
+            check_pass(
+                CATEGORY_6, "SDD SKILL: prohibits module-prefixed names and symlinks"
+            )
         else:
-            check_fail(CATEGORY_6, "SDD SKILL: missing prohibition on module-prefixed names")
+            check_fail(
+                CATEGORY_6, "SDD SKILL: missing prohibition on module-prefixed names"
+            )
 
     # Skill enforcement hook exists (Write|Edit bypass detection)
     enforcement_hook = os.path.join(
         skills_dir, "subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh"
     )
     if os.path.isfile(enforcement_hook) and os.access(enforcement_hook, os.X_OK):
-        check_pass(CATEGORY_6, "SDD: sdd-skill-enforcement-hook.sh exists and is executable")
+        check_pass(
+            CATEGORY_6, "SDD: sdd-skill-enforcement-hook.sh exists and is executable"
+        )
     else:
-        check_fail(CATEGORY_6, "SDD: sdd-skill-enforcement-hook.sh missing — Write/Edit bypass detection not active")
+        check_fail(
+            CATEGORY_6,
+            "SDD: sdd-skill-enforcement-hook.sh missing — Write/Edit bypass detection not active",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1209,6 +1269,128 @@ def exit_code():
 
 
 # ---------------------------------------------------------------------------
+# Category 9: Per-Feature Directory Support
+# ---------------------------------------------------------------------------
+
+CATEGORY_9 = "Per-Feature Directory Support"
+
+# SKILL.md files that are entry-point skills and must reference .active-feature
+ENTRY_POINT_SKILLS = [
+    ("brainstorming/SKILL.md", "brainstorming SKILL"),
+    ("writing-plans/SKILL.md", "writing-plans SKILL"),
+]
+
+# SKILL.md files where bare DEVIATIONS.md references are considered historical
+# context (historical notes or cross-references to a reference file) and are
+# therefore permitted as WARN rather than FAIL.
+HISTORICAL_DEVIATIONS_SKILLS = {
+    "using-git-worktrees/SKILL.md",  # historical note about pre-feature-dir behavior
+    "writing-plans/SKILL.md",  # references deviations.md in obsolescence section
+}
+
+
+def check_feature_dir_support(skills_dir):
+    """Category 9: Validate .active-feature lifecycle support across skill files."""
+    # Derive repo root: skills_dir is <repo>/skills/, so go up one level
+    repo_root = os.path.normpath(os.path.join(skills_dir, ".."))
+
+    # Check 1: .gitignore contains .active-feature
+    gitignore_path = os.path.join(repo_root, ".gitignore")
+    gitignore_content = read_file(gitignore_path)
+    if gitignore_content is None:
+        check_fail(
+            CATEGORY_9,
+            ".gitignore not found — cannot verify .active-feature is ignored",
+        )
+    elif ".active-feature" in gitignore_content:
+        check_pass(CATEGORY_9, ".gitignore contains .active-feature entry")
+    else:
+        check_fail(
+            CATEGORY_9,
+            ".gitignore does not contain .active-feature — ephemeral workspace marker will be committed accidentally",
+        )
+
+    # Check 2: Entry-point SKILL.md files reference .active-feature
+    for rel_path, label in ENTRY_POINT_SKILLS:
+        path = os.path.join(skills_dir, rel_path)
+        content = read_file(path)
+        if content is None:
+            check_fail(CATEGORY_9, "{}: file not found at {}".format(label, path))
+            continue
+
+        if ".active-feature" in content:
+            check_pass(
+                CATEGORY_9,
+                "{}: references .active-feature (per-feature directory lifecycle)".format(
+                    label
+                ),
+            )
+        elif "feature name" in content.lower() or "feature-dir" in content.lower():
+            check_pass(
+                CATEGORY_9,
+                "{}: references feature name/dir concept (per-feature directory aware)".format(
+                    label
+                ),
+            )
+        else:
+            check_fail(
+                CATEGORY_9,
+                "{}: missing .active-feature or feature-dir reference — not per-feature-directory aware".format(
+                    label
+                ),
+            )
+
+    # Check 3: No SKILL.md file uses bare DEVIATIONS.md (uppercase) outside
+    # historical/archived context. In the per-feature dir layout, all live
+    # references should use <feature-dir>/deviations.md (lowercase).
+    # Files in HISTORICAL_DEVIATIONS_SKILLS are permitted as WARN (not FAIL).
+    for dirpath, _dirnames, filenames in os.walk(skills_dir):
+        for fname in filenames:
+            if fname != "SKILL.md":
+                continue
+            full_path = os.path.join(dirpath, fname)
+            rel = os.path.relpath(full_path, skills_dir)
+            content = read_file(full_path)
+            if content is None:
+                continue
+
+            # Count lines with bare DEVIATIONS.md (not inside <feature-dir>/... context)
+            bare_hits = []
+            for lineno, line in enumerate(content.splitlines(), 1):
+                stripped = line.strip()
+                # Skip comment lines and blockquote lines
+                if stripped.startswith("#") or stripped.startswith(">"):
+                    continue
+                # Skip lines that already use <feature-dir> context
+                if "<feature-dir>" in line or "feature-dir" in line:
+                    continue
+                if "DEVIATIONS.md" in line:
+                    bare_hits.append(lineno)
+
+            if not bare_hits:
+                check_pass(
+                    CATEGORY_9,
+                    "{}: no bare DEVIATIONS.md references (uses <feature-dir>/deviations.md pattern)".format(
+                        rel
+                    ),
+                )
+            elif rel in HISTORICAL_DEVIATIONS_SKILLS:
+                check_warn(
+                    CATEGORY_9,
+                    "{}: {} bare DEVIATIONS.md reference(s) on lines {} — permitted as historical context (update if these become instructional)".format(
+                        rel, len(bare_hits), bare_hits
+                    ),
+                )
+            else:
+                check_fail(
+                    CATEGORY_9,
+                    "{}: {} bare DEVIATIONS.md reference(s) on lines {} — use '<feature-dir>/deviations.md' pattern instead".format(
+                        rel, len(bare_hits), bare_hits
+                    ),
+                )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1230,7 +1412,7 @@ def main():
             "Regression test script for custom superpowers skill files. "
             "Validates frontmatter, size limits, script infrastructure, "
             "cross-references, required sections, critical fixes, prompt templates, "
-            "and Python 3.9 compatibility. "
+            "Python 3.9 compatibility, and per-feature directory support. "
             "Exit code 0=all pass, 1=failures found, 2=warnings only."
         )
     )
@@ -1266,6 +1448,7 @@ def main():
     check_critical_fixes(skills_dir)
     check_prompt_templates(skills_dir)
     check_python39_compat(skills_dir)
+    check_feature_dir_support(skills_dir)
 
     print_results()
     sys.exit(exit_code())
