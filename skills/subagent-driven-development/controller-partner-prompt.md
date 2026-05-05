@@ -125,7 +125,7 @@ Agent tool (haiku model):
     Do not approve with caveats -- either the dispatch is ready or it isn't.
 ```
 
-**Controller saves partner output to:** `reports/partner-review-NNN.md`
+**Controller saves partner output to:** `<feature-dir>/reports/partner-review-NNN.md`
 
 If partner returns BLOCKED: address each finding, update the dispatch prompt, re-dispatch partner.
 If partner returns APPROVED: proceed to implementer dispatch.

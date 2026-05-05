@@ -23,7 +23,7 @@ Agent tool (general-purpose):
     </execution-trace>
 
     <deviations>
-    [CONTROLLER: Paste the contents of DEVIATIONS.md here]
+    [CONTROLLER: Paste the contents of <feature-dir>/deviations.md here]
     </deviations>
 
     Before forming any findings, read the entire execution trace and DEVIATIONS.md.
@@ -65,7 +65,7 @@ Agent tool (general-purpose):
       the same failure.
 
     **5. Completeness**
-    - Do all tasks have report files in `reports/`?
+    - Do all tasks have report files in `<feature-dir>/reports/`?
     - Were plan checkboxes updated for all completed tasks?
     - Is there a mismatch between the task count in the trace and the plan?
 

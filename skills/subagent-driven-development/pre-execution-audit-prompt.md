@@ -19,7 +19,7 @@ Agent tool (general-purpose):
     find those problems now — before they become bugs in code.
 
     <self-assessment>
-    [CONTROLLER: Paste the full contents of reports/pre-execution-audit-self-assessment.md]
+    [CONTROLLER: Paste the full contents of <feature-dir>/reports/pre-execution-audit-self-assessment.md]
     </self-assessment>
 
     <distilled-spec>
@@ -111,7 +111,7 @@ Agent tool (general-purpose):
     [1-2 sentences explaining why the plans are ready or not ready for execution]
 
     If ORDERS_ISSUED: every order must be RESOLVED and documented in
-    reports/pre-execution-audit.md before implementation begins.
+    <feature-dir>/reports/pre-execution-audit.md before implementation begins.
     If CLEAR: proceed to SDD execution.
 ```
 

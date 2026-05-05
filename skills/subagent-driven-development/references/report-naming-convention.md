@@ -5,13 +5,15 @@
 All reports use **three-digit zero-padded sequential numbering** across all modules:
 
 ```
-reports/task-000-implementer-report.md   (first task in the plan)
-reports/task-000-spec-review.md
-reports/task-000-quality-review.md
-reports/task-001-implementer-report.md   (second task)
-reports/task-001-spec-review.md
+<feature-dir>/reports/task-000-implementer-report.md   (first task)
+<feature-dir>/reports/task-000-spec-review.md
+<feature-dir>/reports/task-000-quality-review.md
+<feature-dir>/reports/task-001-implementer-report.md   (second task)
+<feature-dir>/reports/task-001-spec-review.md
 ...
 ```
+
+*`<feature-dir>` is the path from `.active-feature` (e.g., `docs/imp-plans/2026-05-02-my-feature`).*
 
 | Rule | Convention |
 |------|-----------|
