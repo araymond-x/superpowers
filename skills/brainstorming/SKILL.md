@@ -24,11 +24,21 @@ Create a task for each of these items and complete them in order:
 1. **Explore project context** — check files, docs, recent commits. If the user references external handoff packages, schemas, or code from another agent/team, invoke `superpowers:handoff-acceptance` to verify the package before proceeding with design questions.
 2. **Offer visual companion** (if topic will involve visual questions) — this is its own message, not combined with a clarifying question. See the Visual Companion section below.
 3. **Ask clarifying questions** — one at a time, understand purpose/constraints/success criteria
+3.5. **Establish feature name** — after 1-2 clarifying questions, when scope is clear:
+   - Suggest a kebab-case feature name based on the conversation context
+   - Prompt: *"All artifacts for this work will be organized under a feature directory. I suggest: **`<name>`**. Press enter to accept, or type a different name."*
+   - Create `docs/imp-plans/YYYY-MM-DD-<feature-name>/`
+   - Write `docs/imp-plans/YYYY-MM-DD-<feature-name>` to `.active-feature`
+   - **Conflict detection:** If `.active-feature` already exists, check the referenced directory:
+     - Dir doesn't exist → auto-clean `.active-feature`, proceed
+     - Dir exists, all plan tasks completed → auto-clean, proceed
+     - Dir exists, incomplete work → prompt: resume or archive
+     - Dir exists, no plan → prompt: resume or start fresh
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
-6. **Write design doc** — save to `docs/specs/YYYY-MM-DD-<topic>-design.md` and commit
+6. **Write design doc** — save to `<feature-dir>/spec.md` and commit
 7. **Spec review loop** — dispatch spec-document-reviewer subagent with precisely crafted review context (never your session history); fix issues and re-dispatch until approved (max 3 iterations, then surface to human)
-7.5. **Distill spec for implementation** — produce `*-design-distilled.md` alongside the full spec
+7.5. **Distill spec for implementation** — produce `<feature-dir>/spec-distilled.md` alongside the full spec
 8. **User reviews written spec** — ask user to review the spec file before proceeding
 9. **Set up implementation workspace** — invoke `superpowers:using-git-worktrees` to create an isolated worktree for the implementation work
 10. **Transition to implementation** — invoke writing-plans skill to create implementation plan (in the worktree)
@@ -86,7 +96,7 @@ See `references/process-flow.dot` for the complete process flow diagram (Graphvi
 
 **Documentation:**
 
-- Write the validated design (spec) to `docs/specs/YYYY-MM-DD-<topic>-design.md`
+- Write the validated design (spec) to `<feature-dir>/spec.md` (where `<feature-dir>` is from `.active-feature`)
   - (User preferences for spec location override this default)
 - Use elements-of-style:writing-clearly-and-concisely skill if available
 - Commit the design document to git
@@ -101,7 +111,7 @@ After writing the spec document:
 **User Review Gate:**
 After the spec review loop passes, ask the user to review the written spec before proceeding:
 
-> "Spec written and committed to `<path>`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
+> "Spec written and committed to `<feature-dir>/spec.md`. Please review it and let me know if you want to make any changes before we start writing out the implementation plan."
 
 Wait for the user's response. If they request changes, make them and re-run the spec review loop. Only proceed once the user approves.
 
@@ -143,7 +153,7 @@ The plan writer consumes the **distilled spec**, NOT the full design. The full d
 
 ### Distilled Spec Template
 
-Save to: same directory as the full spec, with `-distilled` suffix.
+Save to: `<feature-dir>/spec-distilled.md`
 
 ```markdown
 # [Feature Name] — Distilled Implementation Spec

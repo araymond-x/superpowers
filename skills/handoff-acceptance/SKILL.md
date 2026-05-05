@@ -157,6 +157,8 @@ After running the checklist, produce an acceptance report:
 
 Save this report to the project docs directory. It becomes an input to the brainstorming skill's context exploration phase.
 
+**After an ACCEPTED or ACCEPTED_WITH_REMEDIATION verdict:** If `.active-feature` does not already exist, prompt the user for a kebab-case feature name, create `docs/imp-plans/YYYY-MM-DD-<feature-name>/`, and write the relative path to `.active-feature`. This establishes the feature directory before brainstorming begins.
+
 ## Integration
 
 - **brainstorming/SKILL.md**: When the user references external handoff packages, invoke handoff-acceptance before proceeding with design questions

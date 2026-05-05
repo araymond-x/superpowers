@@ -18,13 +18,15 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 - Path to any handoff packages (verify they passed `superpowers:handoff-acceptance` first)
 - The working directory for the plan output
 
-**Save plans to:** `docs/imp-plans/YYYY-MM-DD-<feature-name>.md`
+**Save plans to:** `<feature-dir>/plan.md` (where `<feature-dir>` is from `.active-feature`)
+- If `.active-feature` doesn't exist: prompt the user for a kebab-case feature name, create `docs/imp-plans/YYYY-MM-DD-<feature-name>/`, and write the path to `.active-feature` before proceeding
 - (User preferences for plan location override this default)
 
 ## Checklist
 
 Create a task for each of these items and complete them in order:
 
+0.5. **Resolve feature directory** — if `.active-feature` exists, read it and confirm the directory is present; if not, prompt for a feature name, create the directory, and write `.active-feature`
 1. **Read spec / requirements** — understand what to build, identify source contracts
 2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure. **Pattern Discovery**: search for existing implementations of similar functionality (see below).
 3. **Scope check** — if spec covers multiple independent subsystems, decompose into separate plans
@@ -34,8 +36,8 @@ Create a task for each of these items and complete them in order:
 7. **If modular plan (>800 lines):** write parent plan first, then ALL module files
 8. **Run validate-plan.py** on every plan/module file — fix all FAIL and WARNING issues
 9. **Dispatch plan-document-reviewer** — fix issues, re-dispatch until approved (max 3 iterations)
-10. **Save plan review report** — write reviewer output to `docs/imp-plans/plan-review-report.md`
-11. **Write plan manifest** — write `docs/imp-plans/plan-manifest.txt` listing all validated plan files (one path per line, relative to project root). The hook uses this to scope validation to the current plan set.
+10. **Save plan review report** — write reviewer output to `<feature-dir>/plan-review-report.md`
+11. **Write plan manifest** — write `<feature-dir>/plan-manifest.txt` listing all validated plan files (one path per line, relative to project root). The hook uses this to scope validation to the current plan set.
 12. **Execution handoff** — offer SDD vs inline execution
 
 Steps 8-11 are the **Plan Completion Gate** — see below. You are NOT done writing the plan until all four pass.
@@ -47,8 +49,8 @@ The plan is NOT ready for execution until all four conditions are met:
 
 1. **validate-plan.py PASS** on every plan/module file (no FAIL results)
 2. **Plan-document-reviewer APPROVED** (semantic review passed)
-3. **Review report saved** to `docs/imp-plans/plan-review-report.md` (>50 bytes)
-4. **Plan manifest written** to `docs/imp-plans/plan-manifest.txt` (one plan file path per line)
+3. **Review report saved** to `<feature-dir>/plan-review-report.md` (>50 bytes)
+4. **Plan manifest written** to `<feature-dir>/plan-manifest.txt` (one plan file path per line)
 
 A hook enforces conditions 1, 3, and 4 — invoking `superpowers:subagent-driven-development` or `superpowers:executing-plans` will be BLOCKED if validation fails, the review report is missing, or the manifest is absent. Without a manifest, the hook falls back to git diff scoping (files changed on the current branch), which may include unrelated plans.
 
@@ -68,9 +70,9 @@ A single massive plan file exhausts subagent context windows, makes parallelism 
 ### Module File Naming
 
 ```
-docs/imp-plans/YYYY-MM-DD-<feature>-plan.md          ← parent plan
-docs/imp-plans/YYYY-MM-DD-<feature>-module-1-<name>.md
-docs/imp-plans/YYYY-MM-DD-<feature>-module-2-<name>.md
+<feature-dir>/plan.md                ← parent plan
+<feature-dir>/module-1-<name>.md
+<feature-dir>/module-2-<name>.md
 ```
 
 ### Module Decomposition Criteria
@@ -110,8 +112,8 @@ For modular plans, the validation sequence is:
 2. Write ALL module files — do not validate between modules
 3. After ALL modules are written, run `validate-plan.py` on EACH file (parent + every module)
 4. Dispatch the plan-document-reviewer for the COMPLETE set (provide paths to all files)
-5. Save the review report to `docs/imp-plans/plan-review-report.md`
-6. Write `docs/imp-plans/plan-manifest.txt` listing the parent plan and all module files
+5. Save the review report to `<feature-dir>/plan-review-report.md`
+6. Write `<feature-dir>/plan-manifest.txt` listing the parent plan and all module files
 
 Do not start writing the next module mid-validation. Do not skip modules to start implementing early. The complete plan set must be validated as a unit.
 
@@ -416,7 +418,7 @@ Agent tool (general-purpose):
 ```
 
 2. If Issues Found: fix the issues, re-dispatch reviewer for the whole plan
-3. If Approved: save the reviewer's output to `docs/imp-plans/plan-review-report.md` and proceed to execution handoff
+3. If Approved: save the reviewer's output to `<feature-dir>/plan-review-report.md` and proceed to execution handoff
 
 **The plan-review-report.md file is required.** The plan-validation-gate hook checks for this file before allowing execution skills to proceed. Save the complete reviewer output, not a summary.
 
@@ -453,7 +455,7 @@ Approve unless there are serious gaps — missing requirements from the spec, co
 
 After saving the plan, offer execution choice:
 
-**"Plan complete and saved to `docs/imp-plans/<filename>.md`. Two execution options:**
+**"Plan complete and saved to `<feature-dir>/plan.md`. Two execution options:**
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
