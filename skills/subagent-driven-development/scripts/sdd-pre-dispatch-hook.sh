@@ -60,6 +60,35 @@ fi
 
 cd "$CWD" || exit 0
 
+# ─── Resolve active feature directory ─────────────────────────────────────
+FEAT=""
+if [ -f ".active-feature" ]; then
+  FEAT=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
+fi
+
+# Helper: resolve artifact path with feature-dir prefix (falls back to root)
+feat_path() {
+  if [ -n "$FEAT" ]; then
+    echo "$FEAT/$1"
+  else
+    echo "$1"
+  fi
+}
+
+# Resolved artifact locations
+DEVIATIONS_FILE=$(feat_path "deviations.md")
+REPORTS_DIR=$(feat_path "reports")
+DISPATCH_LOG=$(feat_path "reports/.dispatch-log")
+# Note: when FEAT is empty, DEVIATIONS_FILE="deviations.md" which doesn't exist
+# in old layout (was "DEVIATIONS.md"). The fallback handles this:
+if [ -z "$FEAT" ] && [ ! -f "$DEVIATIONS_FILE" ] && [ -f "DEVIATIONS.md" ]; then
+  DEVIATIONS_FILE="DEVIATIONS.md"
+fi
+if [ -z "$FEAT" ] && [ ! -d "$REPORTS_DIR" ] && [ -d "reports" ]; then
+  REPORTS_DIR="reports"
+  DISPATCH_LOG="reports/.dispatch-log"
+fi
+
 # ─── Determine dispatch type ──────────────────────────────────────────────
 
 # Is this an implementer task dispatch?
@@ -82,10 +111,9 @@ fi
 # If this is a reviewer dispatch, log it and allow
 if [ "$IS_REVIEWER" = true ]; then
   # ─── Dispatch provenance logging ──────────────────────────────────────
-  # Log reviewer dispatches to reports/.dispatch-log so the next implementer
+  # Log reviewer dispatches to the dispatch log so the next implementer
   # dispatch can verify reviews were actually dispatched (not self-written).
-  DISPATCH_LOG="reports/.dispatch-log"
-  if [ -d "reports" ]; then
+  if [ -d "$REPORTS_DIR" ]; then
     # Extract task number from description (e.g., "Review task 3 spec compliance")
     REVIEW_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
     # Determine review type from description
@@ -120,7 +148,7 @@ task_report_glob() {
   local report_type="$2"
   local padded
   padded=$(printf "%03d" "$task_num" 2>/dev/null || echo "$task_num")
-  echo "reports/task-${padded}-${report_type}*"
+  echo "${REPORTS_DIR}/task-${padded}-${report_type}*"
 }
 
 # ─── Helper: check report file exists AND has meaningful content ──────────
@@ -162,7 +190,7 @@ ERRORS=()
 CURRENT_BRANCH=$(git branch --show-current 2>/dev/null || echo "unknown")
 if [ "$CURRENT_BRANCH" = "main" ] || [ "$CURRENT_BRANCH" = "master" ]; then
   SDD_ARTIFACTS_EXIST=false
-  if [ -d "reports" ] && [ -f "DEVIATIONS.md" ]; then
+  if [ -d "$REPORTS_DIR" ] && [ -f "$DEVIATIONS_FILE" ]; then
     SDD_ARTIFACTS_EXIST=true
   fi
 
@@ -194,10 +222,10 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
 fi
 
 # Check 2: Pre-execution audit report must exist with substantive content
-AUDIT_RESULT=$(check_report_file "reports/pre-execution-audit*" "pre-execution audit")
+AUDIT_RESULT=$(check_report_file "${REPORTS_DIR}/pre-execution-audit*" "pre-execution audit")
 case "$AUDIT_RESULT" in
   MISSING)
-    ERRORS+=("BLOCKED: No pre-execution audit report found (reports/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to reports/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to reports/pre-execution-audit.md.")
+    ERRORS+=("BLOCKED: No pre-execution audit report found (${REPORTS_DIR}/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to ${REPORTS_DIR}/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to ${REPORTS_DIR}/pre-execution-audit.md.")
     ;;
   TOO_SMALL*)
     FILE_SIZE=$(echo "$AUDIT_RESULT" | cut -d: -f2)
@@ -206,21 +234,21 @@ case "$AUDIT_RESULT" in
 esac
 
 # Check 3: DEVIATIONS.md must exist
-if [ ! -f "DEVIATIONS.md" ]; then
-  ERRORS+=("BLOCKED: DEVIATIONS.md does not exist. Create it with the SDD template before dispatching tasks. The SDD skill's Plan Ingestion step 5 requires this.")
+if [ ! -f "$DEVIATIONS_FILE" ]; then
+  ERRORS+=("BLOCKED: ${DEVIATIONS_FILE} does not exist. Create it with the SDD template before dispatching tasks. The SDD skill's Plan Ingestion step 5 requires this.")
 fi
 
 # Check 3: reports/ directory must exist
-if [ ! -d "reports" ]; then
-  ERRORS+=("BLOCKED: reports/ directory does not exist. Create it before dispatching tasks. Reports from each task are saved here for persistence and audit.")
+if [ ! -d "$REPORTS_DIR" ]; then
+  ERRORS+=("BLOCKED: ${REPORTS_DIR}/ directory does not exist. Create it before dispatching tasks. Reports from each task are saved here for persistence and audit.")
 fi
 
 # Check 3b: Report naming convention
 # Catches non-standard naming (m2-task-N, m3-feature-N, module1-task-N, etc.)
 # BEFORE the per-task checks, so the error message explains the root cause.
-if [ -d "reports" ]; then
+if [ -d "$REPORTS_DIR" ]; then
   NON_STANDARD_FILES=()
-  for rf in reports/*.md; do
+  for rf in "${REPORTS_DIR}"/*.md; do
     if [ -f "$rf" ]; then
       BASENAME=$(basename "$rf")
       # Allow: task-NNN-*, pre-execution-audit*, context-summary*
@@ -250,7 +278,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   RESULT=$(check_report_file "$IMPL_GLOB" "implementer report")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (expected: reports/task-${PREV_PADDED}-implementer-report.md). Save the implementer's report using the task-NNN naming convention.")
+      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-implementer-report.md). Save the implementer's report using the task-NNN naming convention.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
@@ -284,7 +312,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: reports/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
+      ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
@@ -298,7 +326,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
   case "$RESULT" in
     MISSING)
-      ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: reports/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save reports/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
+      ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
       ;;
     TOO_SMALL*)
       FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
@@ -311,11 +339,11 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   # Report files can be self-written by the controller. The dispatch log is written
   # by THIS HOOK when it processes Agent calls with reviewer descriptions.
   # The controller cannot forge dispatch log entries without going through the Agent tool.
-  DISPATCH_LOG="reports/.dispatch-log"
-  if [ -f "$DISPATCH_LOG" ]; then
+  DISPATCH_LOG_PATH="$DISPATCH_LOG"
+  if [ -f "$DISPATCH_LOG_PATH" ]; then
     # Check for spec-review dispatch entry for previous task
     SPEC_DISPATCHED=false
-    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
+    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG_PATH" 2>/dev/null; then
       SPEC_DISPATCHED=true
     fi
 
@@ -324,7 +352,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     QUAL_DISPATCHED=false
     QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
     HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
-    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
+    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG_PATH" 2>/dev/null; then
       QUAL_DISPATCHED=true
     elif [ -n "$HAS_MINIMUM_TIER" ]; then
       # Minimum tier allows controller-written quality review (no dispatch needed)
@@ -332,7 +360,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     fi
 
     if [ "$SPEC_DISPATCHED" = false ]; then
-      ERRORS+=("BLOCKED: No spec-review dispatch recorded for Task $PREV. The dispatch log (reports/.dispatch-log) has no entry for a spec reviewer being dispatched via the Agent tool. Spec reviews must be dispatched subagents, not self-written by the controller. Dispatch the spec reviewer now.")
+      ERRORS+=("BLOCKED: No spec-review dispatch recorded for Task $PREV. The dispatch log ($DISPATCH_LOG) has no entry for a spec reviewer being dispatched via the Agent tool. Spec reviews must be dispatched subagents, not self-written by the controller. Dispatch the spec reviewer now.")
     fi
 
     if [ "$QUAL_DISPATCHED" = false ]; then
@@ -340,14 +368,19 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     fi
   else
     # No dispatch log exists at all — log was deleted or no reviewers were ever dispatched
-    ERRORS+=("BLOCKED: No dispatch log found (reports/.dispatch-log). This file is created automatically by the SDD hook when reviewers are dispatched. Its absence means no reviewers were dispatched via the Agent tool for any task. Start by dispatching the spec reviewer for Task $PREV.")
+    ERRORS+=("BLOCKED: No dispatch log found ($DISPATCH_LOG). This file is created automatically by the SDD hook when reviewers are dispatched. Its absence means no reviewers were dispatched via the Agent tool for any task. Start by dispatching the spec reviewer for Task $PREV.")
   fi
 fi
 
 # Check 5: If Task N > 0 and plan has Source Contracts, verify Task 0 completed
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   HAS_SOURCE_CONTRACTS=false
-  for plan_file in docs/imp-plans/*.md docs/plans/*.md; do
+  if [ -n "$FEAT" ]; then
+    PLAN_SEARCH_GLOB="$FEAT/*.md"
+  else
+    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+  fi
+  for plan_file in $PLAN_SEARCH_GLOB; do
     if [ -f "$plan_file" ]; then
       if grep -q "Source Contracts" "$plan_file" && ! grep -qiE "Source Contracts.*:.*None" "$plan_file"; then
         HAS_SOURCE_CONTRACTS=true
@@ -375,10 +408,10 @@ fi
 # All deviations must be dispositioned (Accepted/Rejected/Deferred) before
 # dispatching the next task. Pending entries indicate unresolved decisions.
 
-if [ -f "DEVIATIONS.md" ]; then
-  PENDING_COUNT=$(grep -ciE '\|\s*Pending\s*\|' DEVIATIONS.md 2>/dev/null || echo "0")
+if [ -f "$DEVIATIONS_FILE" ]; then
+  PENDING_COUNT=$(grep -ciE '\|\s*Pending\s*\|' "$DEVIATIONS_FILE" 2>/dev/null || echo "0")
   if [ "$PENDING_COUNT" -gt 0 ] 2>/dev/null; then
-    ERRORS+=("BLOCKED: DEVIATIONS.md has $PENDING_COUNT pending deviation(s). Disposition all entries (Accepted/Rejected/Deferred) before dispatching the next task.")
+    ERRORS+=("BLOCKED: $DEVIATIONS_FILE has $PENDING_COUNT pending deviation(s). Disposition all entries (Accepted/Rejected/Deferred) before dispatching the next task.")
   fi
 fi
 
@@ -388,9 +421,9 @@ fi
 # a mechanical gate.
 if [ -n "$TASK_NUMBER" ]; then
   TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
-  CHECKPOINT_FILE="reports/checkpoint-pre-dispatch-${TASK_PADDED}.json"
+  CHECKPOINT_FILE="${REPORTS_DIR}/checkpoint-pre-dispatch-${TASK_PADDED}.json"
   if [ ! -f "$CHECKPOINT_FILE" ]; then
-    ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file DEVIATIONS.md --reports-dir reports/ > $CHECKPOINT_FILE")
+    ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file $DEVIATIONS_FILE --reports-dir $REPORTS_DIR > $CHECKPOINT_FILE")
   elif [ "$(wc -c < "$CHECKPOINT_FILE" 2>/dev/null | tr -d ' ')" -lt "$MIN_REPORT_BYTES" ]; then
     ERRORS+=("BLOCKED: Checkpoint file $CHECKPOINT_FILE is too small (< $MIN_REPORT_BYTES bytes). Run the full controller-checkpoint.py command and redirect its JSON output to this file.")
   fi
@@ -402,8 +435,8 @@ fi
 # verification with no prior implementer context to cross-reference.
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
-  PARTNER_FILE="reports/partner-review-${TASK_PADDED}.md"
-  PARTNER_FILE_MIN="reports/partner-review-${TASK_PADDED}-minimum-tier.md"
+  PARTNER_FILE="${REPORTS_DIR}/partner-review-${TASK_PADDED}.md"
+  PARTNER_FILE_MIN="${REPORTS_DIR}/partner-review-${TASK_PADDED}-minimum-tier.md"
   if [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
     : # Full partner review exists
   elif [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
@@ -422,7 +455,12 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
   # Find a plan file to extract the task from
   PLAN_FILE=""
   SEARCHED_DIRS=""
-  for pf in docs/imp-plans/*.md docs/plans/*.md; do
+  if [ -n "$FEAT" ]; then
+    PLAN_SEARCH_GLOB="$FEAT/*.md"
+  else
+    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+  fi
+  for pf in $PLAN_SEARCH_GLOB; do
     if [ -f "$pf" ]; then
       SEARCHED_DIRS="${SEARCHED_DIRS} $(basename "$pf")"
       if grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
@@ -479,7 +517,12 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
   # appending a second "0" on a new line — see the 2026-04-10 commit for
   # the multi-line arithmetic crash that idiom caused.
   TOTAL_TASKS=0
-  for pf in docs/imp-plans/*.md docs/plans/*.md; do
+  if [ -n "$FEAT" ]; then
+    PLAN_SEARCH_GLOB="$FEAT/*.md"
+  else
+    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+  fi
+  for pf in $PLAN_SEARCH_GLOB; do
     if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
       TOTAL_TASKS=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
       TOTAL_TASKS=${TOTAL_TASKS:-0}
@@ -490,8 +533,8 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
   if [ "$TOTAL_TASKS" -gt 0 ]; then
     MIDPOINT=$(( (TOTAL_TASKS + 1) / 2 ))
     if [ "$TASK_NUMBER" -ge "$MIDPOINT" ]; then
-      if [ ! -f "reports/context-summary.md" ]; then
-        ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md")
+      if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
+        ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
       fi
     fi
   fi
@@ -514,25 +557,30 @@ fi
 # If above threshold, inject a compression warning into additionalContext.
 
 CONTEXT_LOAD_WARNING=""
-if [ -d "reports" ]; then
+if [ -d "$REPORTS_DIR" ]; then
   TOTAL_BYTES=0
 
   # Sum plan files
-  for pf in docs/imp-plans/*.md docs/plans/*.md; do
+  if [ -n "$FEAT" ]; then
+    PLAN_SEARCH_GLOB="$FEAT/*.md"
+  else
+    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+  fi
+  for pf in $PLAN_SEARCH_GLOB; do
     if [ -f "$pf" ]; then
       PF_SIZE=$(wc -c < "$pf" 2>/dev/null | tr -d ' ')
       TOTAL_BYTES=$((TOTAL_BYTES + PF_SIZE))
     fi
   done
 
-  # Sum DEVIATIONS.md
-  if [ -f "DEVIATIONS.md" ]; then
-    DEV_SIZE=$(wc -c < "DEVIATIONS.md" 2>/dev/null | tr -d ' ')
+  # Sum DEVIATIONS file
+  if [ -f "$DEVIATIONS_FILE" ]; then
+    DEV_SIZE=$(wc -c < "$DEVIATIONS_FILE" 2>/dev/null | tr -d ' ')
     TOTAL_BYTES=$((TOTAL_BYTES + DEV_SIZE))
   fi
 
   # Sum all report files
-  for rf in reports/*.md; do
+  for rf in "${REPORTS_DIR}"/*.md; do
     if [ -f "$rf" ]; then
       RF_SIZE=$(wc -c < "$rf" 2>/dev/null | tr -d ' ')
       TOTAL_BYTES=$((TOTAL_BYTES + RF_SIZE))
@@ -549,7 +597,7 @@ fi
 # ─── All checks passed — inject reminder context and allow ────────────────
 
 # Build additionalContext with SDD reminder + optional token warning
-CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to reports/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to reports/task-N-spec-review.md, (3) Dispatch code quality review and save to reports/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to DEVIATIONS.md, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to ${REPORTS_DIR}/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to ${REPORTS_DIR}/task-N-spec-review.md, (3) Dispatch code quality review and save to ${REPORTS_DIR}/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to ${DEVIATIONS_FILE}, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
