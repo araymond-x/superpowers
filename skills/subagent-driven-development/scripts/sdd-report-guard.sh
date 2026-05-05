@@ -43,7 +43,7 @@ fi
 
 # Detect suspicious patterns: creating empty or trivially small report files
 # touch, empty echo/cat, or redirecting minimal content
-if echo "$COMMAND" | grep -qiE '(touch\s+reports/|>\s*reports/task-|echo\s+["'"'"']?\s*["'"'"']?\s*>\s*reports/|cat\s*/dev/null\s*>\s*reports/)'; then
+if echo "$COMMAND" | grep -qiE '(touch\s+\S*reports/|>\s*\S*reports/task-|echo\s+["'"'"']?\s*["'"'"']?\s*>\s*\S*reports/|cat\s*/dev/null\s*>\s*\S*reports/)'; then
   echo "" >&2
   echo "WARNING: Direct creation of report files detected." >&2
   echo "Command: $COMMAND" >&2
