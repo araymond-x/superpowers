@@ -21,13 +21,7 @@ After each production-deployable update to the fork, review:
 ## Installation Architecture
 - Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, loads into context for auto-invocation)
 - Commands: `~/.claude/commands/superpowers/*.md` — stubs with `!`bash strip-frontmatter.sh`` preprocessing that dynamically include the full SKILL.md content (minus frontmatter) at invocation time. These provide the `superpowers:` namespace in the `/skills` picker (personal skills don't support nested directory namespacing; commands do via `commands/<group>/<name>.md`). **These files live outside the repo** — regenerate on new machines (see below)
-- Agent: `~/.claude/agents/superpowers-code-reviewer.md` → `./agents/code-reviewer.md`
 - Hook: SessionStart in `~/.claude/settings.json` calls `./hooks/session-start` with `CLAUDE_PLUGIN_ROOT` set
-
-## Fork Customizations (preserve during upstream merge)
-- `agents/code-reviewer.md` — `name:` changed to `superpowers-code-reviewer`
-- `skills/requesting-code-review/SKILL.md` — agent refs changed to `superpowers-code-reviewer`
-- `skills/subagent-driven-development/code-quality-reviewer-prompt.md` — agent ref changed to `superpowers-code-reviewer`
 
 ## Subagent Context Improvements (2026-04-08)
 Three additions to prevent architectural violations that persist despite the SDD review process:
@@ -67,7 +61,7 @@ git fetch upstream && git merge upstream/main
 ```
 **All 15 SKILL.md files have diverged from upstream.** Any upstream change to a SKILL.md will conflict. Before merging, run a three-way comparison (merge-base vs ours vs upstream) for each conflicted file — do NOT rely on this documentation alone. See `docs/ARaymond-customization-manifest.md` "Upstream Conflict Files" for the full list and resolution guide.
 
-Known conflict files (always): `CLAUDE.md`, `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.md`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md`
+Known conflict files (always): `CLAUDE.md` (other historical conflict files were resolved by the 2026-05-07 general-purpose migration; see `docs/ARaymond-customization-manifest.md` Upstream Conflict Files for current state)
 Likely conflict files (when upstream touches these): `brainstorming/SKILL.md`, `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `using-superpowers/SKILL.md`, `writing-skills/SKILL.md`
 
 Last sync: `80fc5c5` on 2026-05-07
@@ -92,8 +86,10 @@ find -L ~/.claude/skills/superpowers -name "SKILL.md" | wc -l
 # Commands: expect 15 (powers /skills picker) — create handoff-acceptance stub if missing
 ls ~/.claude/commands/superpowers/*.md | wc -l
 # Skill/command count should match
-# Agent symlink intact
-ls -la ~/.claude/agents/superpowers-code-reviewer.md
+# Agent symlink must be ABSENT (post-2026-05-07 general-purpose migration)
+[ ! -e ~/.claude/agents/superpowers-code-reviewer.md ] \
+  && echo "OK — agent symlink absent (correct post-migration state)" \
+  || echo "STALE — agent symlink still present; run: rm ~/.claude/agents/superpowers-code-reviewer.md"
 # Hook present in settings
 grep -c "session-start" ~/.claude/settings.json
 ```
@@ -116,7 +112,7 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 139 checks), install (static, 105 checks), unit (pytest, 273 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 4 test layers — regression (static, 143 checks), install (static, 102 checks), unit (pytest, 273 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
 
 - `tests/ARaymond-skill-regression/validate-all-skills.py` — 139-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
@@ -278,7 +274,7 @@ All feature artifacts are consolidated in a per-feature directory:
 
 ## Key Architecture Notes
 - Skills use inline prompt templates (`./implementer-prompt.md`) for subagent dispatch, NOT formal agent files
-- Only 1 formal agent exists (`code-reviewer.md`) — used for final whole-implementation review
+- No formal agents are defined in this fork. Code review is dispatched as a `general-purpose` Task carrying the inline `skills/requesting-code-review/code-reviewer.md` template (migrated 2026-05-07 — see `docs/ARaymond-customization-manifest.md` Upstream Sync Log).
 - Personal skills (`~/.claude/skills/`) only support one level of nesting for the `/skills` picker. The `superpowers:` namespace in the picker comes from command stubs at `~/.claude/commands/superpowers/`, NOT from the skills directory structure
 - Agents do NOT support nested directory namespacing — must use flat files with unique names
 - Brainstorm visual companion server: `skills/brainstorming/scripts/start-server.sh` (NOT repo root `scripts/`)
