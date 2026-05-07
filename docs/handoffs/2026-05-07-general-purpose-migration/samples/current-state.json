@@ -1,0 +1,85 @@
+{
+  "snapshot_date": "2026-05-07",
+  "migration": "superpowers-code-reviewer → general-purpose",
+  "references_to_change": [
+    {
+      "file": "skills/requesting-code-review/SKILL.md",
+      "line": 8,
+      "current": "Dispatch superpowers-code-reviewer subagent to catch issues before they cascade.",
+      "target": "Dispatch a code reviewer subagent to catch issues before they cascade."
+    },
+    {
+      "file": "skills/requesting-code-review/SKILL.md",
+      "line": 34,
+      "current": "Use Task tool with superpowers-code-reviewer type, fill template at `code-reviewer.md`",
+      "target": "Use Task tool with general-purpose type, fill template at `code-reviewer.md`"
+    },
+    {
+      "file": "skills/requesting-code-review/SKILL.md",
+      "line": 58,
+      "current": "[Dispatch superpowers-code-reviewer subagent]",
+      "target": "[Dispatch code reviewer subagent]"
+    },
+    {
+      "file": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
+      "line": 10,
+      "current": "Task tool (superpowers-code-reviewer):",
+      "target": "Task tool (general-purpose):"
+    }
+  ],
+  "behaviors_to_add_to_code_reviewer_template": [
+    {
+      "source_file": "agents/code-reviewer.md",
+      "source_line": 39,
+      "behavior": "needs_context_category",
+      "verbatim": "**Needs Context** (finding may be valid but requires additional information to confirm — describe what context would resolve the uncertainty)",
+      "target_file": "skills/requesting-code-review/code-reviewer.md",
+      "target_section": "Calibration",
+      "already_present": false
+    },
+    {
+      "source_file": "agents/code-reviewer.md",
+      "source_line": 49,
+      "behavior": "reflection_step",
+      "verbatim": "Before writing findings, reflect on whether your assessment accounts for the full context of the change.",
+      "target_file": "skills/requesting-code-review/code-reviewer.md",
+      "target_section": "before Output Format",
+      "already_present": false
+    }
+  ],
+  "behaviors_already_in_sdd_prompt": [
+    {
+      "file": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
+      "behavior": "dead_code_blocking",
+      "note": "Dead code findings are BLOCKING — must be resolved or justified in DEVIATIONS.md. Do not reclassify as Minor."
+    },
+    {
+      "file": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
+      "behavior": "needs_context_label",
+      "note": "[NEEDS_CONTEXT] label for uncertain findings — consistent with Needs Context category in code-reviewer.md"
+    },
+    {
+      "file": "skills/subagent-driven-development/code-quality-reviewer-prompt.md",
+      "behavior": "implementer_report_passthrough",
+      "note": "IMPLEMENTER_REPORT field passes full implementer report so reviewer has deviation/concern context"
+    }
+  ],
+  "files_to_delete": [
+    {
+      "path": "agents/code-reviewer.md",
+      "action": "git rm",
+      "note": "Behaviors migrated to code-reviewer.md template before deletion"
+    },
+    {
+      "path": "~/.claude/agents/superpowers-code-reviewer.md",
+      "action": "rm (symlink, outside repo)",
+      "note": "Symlink target agents/code-reviewer.md will be gone"
+    }
+  ],
+  "verification": {
+    "grep_check": "grep -r 'superpowers-code-reviewer' skills/ agents/ CLAUDE.md — expected: no output",
+    "behavior_check": "grep -c 'Needs Context|reflect on whether' skills/requesting-code-review/code-reviewer.md — expected: 2",
+    "regression_test": "python3 tests/ARaymond-skill-regression/validate-all-skills.py — expected: 139 PASS 0 FAIL",
+    "install_test": "bash tests/ARaymond-installation/verify-symlink-install.sh — expected: PASS (agent count will drop by 1)"
+  }
+}
