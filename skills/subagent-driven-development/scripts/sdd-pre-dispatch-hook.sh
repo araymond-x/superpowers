@@ -124,6 +124,8 @@ if [ "$IS_REVIEWER" = true ]; then
       REVIEW_TYPE="quality-review"
     elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then
       REVIEW_TYPE="trace-audit"
+    elif echo "$DESCRIPTION" | grep -qiE '(partner.review|controller.partner)'; then
+      REVIEW_TYPE="partner-review"
     fi
 
     if [ -n "$REVIEW_TASK" ]; then
@@ -428,18 +430,28 @@ if [ -n "$TASK_NUMBER" ]; then
   fi
 fi
 
-# ─── Check 5d: Partner review evidence ──────────────────────────────────────
+# ─── Check 5d: Partner review evidence + dispatch provenance ─────────────────
 # The controller must dispatch the partner agent (or declare minimum tier)
 # before dispatching the implementer. Task 0 is exempt — it's contract
 # verification with no prior implementer context to cross-reference.
+#
+# Minimum-tier reviews are controller-written (no dispatch needed).
+# Full-tier reviews must come from an actual agent dispatch — verified by
+# checking the dispatch log for type=partner-review task=N, written by this
+# hook when the partner Agent call passed through it.
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
   PARTNER_FILE="${REPORTS_DIR}/partner-review-${TASK_PADDED}.md"
   PARTNER_FILE_MIN="${REPORTS_DIR}/partner-review-${TASK_PADDED}-minimum-tier.md"
-  if [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
-    : # Full partner review exists
-  elif [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
-    : # Minimum tier partner review exists
+  if [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+    : # Minimum tier — controller-written, no dispatch provenance needed
+  elif [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+    # Full-tier review exists — verify it came from an actual agent dispatch
+    if [ -f "$DISPATCH_LOG" ] && grep -q "task=$TASK_NUMBER type=partner-review" "$DISPATCH_LOG" 2>/dev/null; then
+      : # Dispatch provenance confirmed
+    else
+      ERRORS+=("BLOCKED: partner-review-${TASK_PADDED}.md exists but no dispatch log entry found for type=partner-review task=$TASK_NUMBER. The partner review appears to be controller-written. Dispatch the partner agent (description must contain 'partner review') via the Agent tool so the hook can record provenance, then save the output to $PARTNER_FILE.")
+    fi
   else
     ERRORS+=("BLOCKED: No partner review found for Task $TASK_NUMBER (expected: $PARTNER_FILE or $PARTNER_FILE_MIN). Dispatch the controller partner (see controller-partner-prompt.md) and save the output, or write a minimum-tier review with rationale (>$MIN_REPORT_BYTES bytes).")
   fi

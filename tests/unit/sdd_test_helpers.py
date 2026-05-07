@@ -267,6 +267,8 @@ def setup_full_sdd_workspace(
     setup_sdd_workspace(tmpdir, total_tasks)
 
     reports_dir = os.path.join(tmpdir, "reports")
+    log_path = os.path.join(reports_dir, ".dispatch-log")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     for i in range(completed_tasks):
         create_task_reports(tmpdir, i, include_dispatch_log=True)
         # Create checkpoint for the NEXT task (which was checked before dispatching task i)
@@ -280,6 +282,8 @@ def setup_full_sdd_workspace(
                 f.write(
                     f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
                 )
+            with open(log_path, "a") as f:
+                f.write(f"{now} DISPATCH reviewer task={i} type=partner-review\n")
 
     # Create checkpoint and partner review for the next task to be dispatched
     if completed_tasks < total_tasks:
@@ -291,3 +295,5 @@ def setup_full_sdd_workspace(
                 f.write(
                     f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
                 )
+            with open(log_path, "a") as f:
+                f.write(f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n")

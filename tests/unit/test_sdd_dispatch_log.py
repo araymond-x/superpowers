@@ -164,9 +164,12 @@ class TestDispatchProvenanceVerification:
         # Create task 0 reports WITH dispatch log
         create_task_reports(tmpdir, task_number=0, include_dispatch_log=True)
         create_checkpoint_file(tmpdir, task_number=1)
-        # Partner review for task 1 (required by Check 5d)
-        with open(os.path.join(tmpdir, "reports", "partner-review-001.md"), "w") as f:
+        # Partner review for task 1 (required by Check 5d) + dispatch provenance entry
+        reports_dir = os.path.join(tmpdir, "reports")
+        with open(os.path.join(reports_dir, "partner-review-001.md"), "w") as f:
             f.write("# Partner Review Task 001\n**Status:** APPROVED\n" + "x" * 60)
+        with open(os.path.join(reports_dir, ".dispatch-log"), "a") as f:
+            f.write("2026-05-07T00:00:00Z DISPATCH reviewer task=1 type=partner-review\n")
 
         hook_input = make_hook_input(
             description="Implement task 1",
@@ -200,9 +203,11 @@ class TestDispatchProvenanceVerification:
             os.rename(qual_standard, qual_minimum)
 
         create_checkpoint_file(tmpdir, task_number=1)
-        # Partner review for task 1 (required by Check 5d)
-        with open(os.path.join(tmpdir, "reports", "partner-review-001.md"), "w") as f:
+        # Partner review for task 1 (required by Check 5d) + dispatch provenance entry
+        with open(os.path.join(reports_dir, "partner-review-001.md"), "w") as f:
             f.write("# Partner Review Task 001\n**Status:** APPROVED\n" + "x" * 60)
+        with open(log_path, "a") as f:
+            f.write("2026-05-07T00:00:00Z DISPATCH reviewer task=1 type=partner-review\n")
 
         hook_input = make_hook_input(
             description="Implement task 1",

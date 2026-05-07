@@ -154,3 +154,87 @@ class TestPartnerReviewGate:
         result = run_hook(hook_input)
 
         assert result.returncode == 0, f"Task 0 should be exempt. stderr: {result.stderr}"
+
+
+class TestPartnerReviewDispatchProvenance:
+    """Tests for dispatch provenance added to Check 5d.
+
+    Full-tier partner reviews require a dispatch log entry (type=partner-review task=N)
+    written by the hook when the Agent call passed through it. Minimum-tier reviews
+    are controller-written and exempt from provenance checks — consistent with the
+    quality-review minimum-tier exemption in Check 4c.
+    """
+
+    def _remove_partner_dispatch_entries(self, tmpdir: str) -> None:
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        if not os.path.exists(log_path):
+            return
+        with open(log_path) as f:
+            lines = f.readlines()
+        with open(log_path, "w") as f:
+            f.writelines(l for l in lines if "type=partner-review" not in l)
+
+    def test_full_tier_without_dispatch_entry_blocks(self, tmp_path):
+        """Full-tier partner review file with no dispatch log entry should be blocked.
+
+        This is the exact gap the wells-fargo run exploited: controller self-wrote
+        partner-review files without dispatching the partner agent.
+        """
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=1)
+        # Surgically remove the partner-review dispatch log entry to simulate self-writing
+        self._remove_partner_dispatch_entries(tmpdir)
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1",
+            cwd=tmpdir,
+        )
+
+        result = run_hook(hook_input)
+
+        assert result.returncode == 2, f"Should block self-written partner review. stderr: {result.stderr}"
+        assert "partner" in result.stderr.lower(), (
+            f"Error should mention partner review. stderr: {result.stderr}"
+        )
+        assert "dispatch" in result.stderr.lower(), (
+            f"Error should mention dispatch. stderr: {result.stderr}"
+        )
+
+    def test_full_tier_with_dispatch_entry_passes(self, tmp_path):
+        """Full-tier partner review with matching dispatch log entry should be allowed."""
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=1)
+        # setup_full_sdd_workspace now writes partner-review dispatch log entries
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1",
+            cwd=tmpdir,
+        )
+
+        result = run_hook(hook_input)
+
+        assert result.returncode == 0, f"Should allow with dispatch provenance. stderr: {result.stderr}"
+
+    def test_minimum_tier_exempt_from_dispatch_requirement(self, tmp_path):
+        """Minimum-tier partner review does not require a dispatch log entry."""
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=1)
+        # Remove the full-tier file and its dispatch log entry
+        partner_file = os.path.join(tmpdir, "reports", "partner-review-001.md")
+        if os.path.exists(partner_file):
+            os.remove(partner_file)
+        self._remove_partner_dispatch_entries(tmpdir)
+        # Create minimum-tier only — no dispatch log entry
+        create_partner_review(tmpdir, task_number=1, minimum_tier=True, size=100)
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1",
+            cwd=tmpdir,
+        )
+
+        result = run_hook(hook_input)
+
+        assert result.returncode == 0, f"Minimum-tier should not require dispatch entry. stderr: {result.stderr}"

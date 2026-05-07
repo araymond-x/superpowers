@@ -435,6 +435,8 @@ def _setup_feature_dir_sdd_workspace(
             (reports_dir / f"partner-review-{padded}.md").write_text(
                 f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
             )
+            with open(str(log_path), "a") as lf:
+                lf.write(f"{now} DISPATCH reviewer task={i} type=partner-review\n")
 
     # Checkpoint and partner review for the next task to be dispatched
     if completed_tasks < total_tasks:
@@ -444,6 +446,9 @@ def _setup_feature_dir_sdd_workspace(
             (reports_dir / f"partner-review-{padded}.md").write_text(
                 f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
             )
+            log_path = reports_dir / ".dispatch-log"
+            with open(str(log_path), "a") as lf:
+                lf.write(f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n")
 
 
 def _write_feature_checkpoint(reports_dir: object, task_number: int) -> None:
