@@ -973,6 +973,34 @@ def check_critical_fixes(skills_dir):
             "SDD: sdd-skill-enforcement-hook.sh missing — Write/Edit bypass detection not active",
         )
 
+    # Migration invariants (2026-05-07): post-migration the agent file is
+    # gone, so the template must carry the two fork behaviors AND no skill
+    # file may still reference the named agent.
+    template_path = os.path.join(skills_dir, "requesting-code-review/code-reviewer.md")
+    template = read_file(template_path)
+    if template is not None:
+        # Note: needles are substrings short enough to survive line-wrap in the
+        # template form (the reflection paragraph is wrapped at "accounts for\n
+        # the full context" — a single-line needle would never match).
+        for needle, label in [
+            ("**Needs Context**", "Needs Context severity category"),
+            ("reflect on whether your assessment accounts for", "pre-writing reflection step"),
+        ]:
+            if needle in template:
+                check_pass(CATEGORY_6, "code-reviewer.md template: contains {}".format(label))
+            else:
+                check_fail(CATEGORY_6, "code-reviewer.md template: missing {} — fork behavior dropped".format(label))
+
+    for rel in ["requesting-code-review/SKILL.md",
+                "subagent-driven-development/code-quality-reviewer-prompt.md"]:
+        content = read_file(os.path.join(skills_dir, rel))
+        if content is None:
+            continue
+        if "superpowers-code-reviewer" in content:
+            check_fail(CATEGORY_6, "{}: still references 'superpowers-code-reviewer' — agent migration incomplete".format(rel))
+        else:
+            check_pass(CATEGORY_6, "{}: general-purpose migration complete (no named-agent reference)".format(rel))
+
 
 # ---------------------------------------------------------------------------
 # Category 7: Prompt Template Checks

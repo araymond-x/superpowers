@@ -183,30 +183,28 @@ for skill_dir in "$SKILLS_DIR"/*/; do
   fi
 done
 
-# ─── 3. Agent Symlink ─────────────────────────────────────────────────────────
+# ─── 3. Agent Symlink (must be ABSENT post-migration) ─────────────────────────
 
-section "Agent"
+section "Agent (post-migration: must be absent)"
 
-if [[ -L "$AGENT_FILE" ]]; then
-  pass "Agent file is a symlink"
-  target=$(readlink "$AGENT_FILE")
-  if [[ -r "$AGENT_FILE" ]]; then
-    pass "Agent symlink resolves"
-    # Check name field
-    if grep -q "^name: superpowers-code-reviewer" "$AGENT_FILE"; then
-      pass "Agent name is 'superpowers-code-reviewer'"
-    else
-      fail "Agent name field incorrect (expected 'superpowers-code-reviewer')"
-    fi
+# After the general-purpose migration the named agent symlink should be gone.
+# If it reappears, a regression has re-introduced the fork's old named-agent
+# pattern — fail loudly so it's caught immediately.
+if [[ -e "$AGENT_FILE" ]]; then
+  if [[ -L "$AGENT_FILE" ]]; then
+    fail "Agent symlink still present at $AGENT_FILE — migration regression: the fork moved to general-purpose dispatch on 2026-05-07. Run: rm $AGENT_FILE"
   else
-    fail "Agent symlink broken: $target"
+    fail "Agent file still present at $AGENT_FILE (not a symlink) — unexpected regression: investigate before deleting"
   fi
 else
-  if [[ -f "$AGENT_FILE" ]]; then
-    warn "Agent file exists but is not a symlink"
-  else
-    fail "Agent file missing: $AGENT_FILE"
-  fi
+  pass "Agent symlink correctly absent (post-general-purpose-migration state)"
+fi
+
+# Repo-side agents/code-reviewer.md should also be gone.
+if [[ -e "$REPO_ROOT/agents/code-reviewer.md" ]]; then
+  fail "agents/code-reviewer.md still present in repo — should have been git rm'd during migration"
+else
+  pass "agents/code-reviewer.md correctly absent from repo"
 fi
 
 # ─── 4. SessionStart Hook ─────────────────────────────────────────────────────
@@ -329,18 +327,19 @@ else
   fail "SDD references code-quality-reviewer-prompt.md but file missing"
 fi
 
-# requesting-code-review → should reference superpowers-code-reviewer agent
+# requesting-code-review → must NOT reference superpowers-code-reviewer
+# (post-migration: dispatch type is general-purpose, agent file deleted)
 if grep -q "superpowers-code-reviewer" "$SKILLS_DIR/requesting-code-review/SKILL.md" 2>/dev/null; then
-  pass "requesting-code-review references superpowers-code-reviewer agent"
+  fail "requesting-code-review still references 'superpowers-code-reviewer' — migration regression"
 else
-  fail "requesting-code-review should reference superpowers-code-reviewer (fork customization)"
+  pass "requesting-code-review correctly uses general-purpose (no named-agent reference)"
 fi
 
-# SDD code-quality-reviewer-prompt → should reference superpowers-code-reviewer agent
+# SDD code-quality-reviewer-prompt → must NOT reference superpowers-code-reviewer
 if grep -q "superpowers-code-reviewer" "$SKILLS_DIR/subagent-driven-development/code-quality-reviewer-prompt.md" 2>/dev/null; then
-  pass "SDD code-quality-reviewer-prompt references superpowers-code-reviewer agent"
+  fail "SDD code-quality-reviewer-prompt still references 'superpowers-code-reviewer' — migration regression"
 else
-  fail "SDD code-quality-reviewer-prompt should reference superpowers-code-reviewer (fork customization)"
+  pass "SDD code-quality-reviewer-prompt correctly uses general-purpose (no named-agent reference)"
 fi
 
 # handoff-acceptance → SKILL.md exists
