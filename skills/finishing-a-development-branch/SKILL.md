@@ -48,11 +48,11 @@ GIT_COMMON=$(cd "$(git rev-parse --git-common-dir)" 2>/dev/null && pwd -P)
 
 This determines which menu to show and how cleanup works:
 
-| State | Menu | Cleanup |
-|-------|------|---------|
-| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 4 options | No worktree to clean up |
-| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 6) |
-| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No cleanup (externally managed) |
+| State | Menu | Worktree Cleanup | Post-Completion |
+|-------|------|-----------------|-----------------|
+| `GIT_DIR == GIT_COMMON` (normal repo) | Standard 4 options | No worktree to clean up | Step 7 |
+| `GIT_DIR != GIT_COMMON`, named branch | Standard 4 options | Provenance-based (see Step 6) | Step 7 |
+| `GIT_DIR != GIT_COMMON`, detached HEAD | Reduced 3 options (no merge) | No cleanup (externally managed) | Step 7 |
 
 ### Step 3: Determine Base Branch
 
@@ -191,7 +191,7 @@ git worktree prune  # Self-healing: clean up any stale registrations
 
 **Otherwise:** The host environment (harness) owns this workspace. Do NOT remove it. If your platform provides a workspace-exit tool, use it. Otherwise, leave the workspace in place.
 
-### Step 6: Post-Completion Cleanup
+### Step 7: Post-Completion Cleanup
 
 **Applies to all options.** After the chosen option completes:
 
