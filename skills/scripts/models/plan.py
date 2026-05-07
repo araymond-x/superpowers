@@ -46,6 +46,8 @@ class Plan(SchemaVersionedModel):
     @model_validator(mode="after")
     def tasks_have_unique_sequential_ids(self) -> "Plan":
         ids = [t.id for t in self.tasks]
+        if not ids:
+            return self  # parent modular plan — tasks live in module files
         if len(ids) != len(set(ids)):
             dupes = [i for i in ids if ids.count(i) > 1]
             raise ValueError(f"Duplicate task IDs: {sorted(set(dupes))}")
@@ -96,6 +98,8 @@ class Plan(SchemaVersionedModel):
     def module_task_ids_are_consistent(self) -> "Plan":
         if self.modules is None:
             return self
+        if not self.tasks:
+            return self  # parent modular plan — task IDs are module-local, no global check
         seen: dict[int, int] = {}
         for mod in self.modules:
             for tid in mod.task_ids:

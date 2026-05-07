@@ -72,6 +72,7 @@ class TestPlanFieldValidation:
 
 class TestTaskUniqueSequentialIds:
     def test_non_sequential_fails(self):
+        # Gap at 1 — catches accidentally skipped or omitted tasks
         data = {**MINIMAL_PLAN, "tasks": [{"id": 0, "title": "a"}, {"id": 5, "title": "b"}]}
         with pytest.raises(ValidationError, match="sequential ascending"):
             Plan.model_validate(data)
@@ -83,6 +84,12 @@ class TestTaskUniqueSequentialIds:
 
     def test_sequential_ids_pass(self):
         data = {**MINIMAL_PLAN, "tasks": [{"id": 0, "title": "a"}, {"id": 1, "title": "b"}, {"id": 2, "title": "c"}]}
+        plan = Plan.model_validate(data)
+        assert len(plan.tasks) == 3
+
+    def test_sequential_from_nonzero_start_passes(self):
+        # Module 2 renumbered globally (M1 was 0–5): [6,7,8] is sequential from 6
+        data = {**MINIMAL_PLAN, "tasks": [{"id": 6, "title": "a"}, {"id": 7, "title": "b"}, {"id": 8, "title": "c"}]}
         plan = Plan.model_validate(data)
         assert len(plan.tasks) == 3
 

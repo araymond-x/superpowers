@@ -121,6 +121,43 @@ class TestPlanValidatorInfrastructure:
         assert "BYPASS" in result.stderr
 
 
+class TestParentModularPlan:
+    """Parent plans have tasks: [] and delegate task details to module files."""
+
+    PARENT_PLAN = """\
+---
+schema_version: 1
+feature_archetype: extension
+tasks: []
+modules:
+  - id: 1
+    title: "Backend"
+    task_ids: [0, 1, 2]
+  - id: 2
+    title: "Frontend"
+    task_ids: [0, 1]
+---
+
+# Parent Plan
+
+Delegates all tasks to module files.
+"""
+
+    def test_parent_plan_with_empty_tasks_exits_zero(self):
+        """tasks: [] is valid for parent modular plans (was IndexError crash before fix)."""
+        result = _run_validator(self.PARENT_PLAN)
+        assert result.returncode == 0, f"Expected pass, got stderr: {result.stderr}"
+
+    def test_parent_plan_no_crash_message(self):
+        """Validator must not emit VALIDATOR CRASHED for empty task list."""
+        result = _run_validator(self.PARENT_PLAN)
+        assert "VALIDATOR CRASHED" not in result.stderr
+
+    def test_parent_plan_no_stderr(self):
+        result = _run_validator(self.PARENT_PLAN)
+        assert result.stderr.strip() == ""
+
+
 class TestSchemaVersionFlag:
     def test_forensic_flag_stub_accepted(self):
         """Forensic --schema-version flag is a CLI stub -- accepted but does not alter validation."""
