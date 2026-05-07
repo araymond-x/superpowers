@@ -10,11 +10,10 @@ Use this template when dispatching a code quality reviewer subagent.
 Task tool (superpowers-code-reviewer):
   Use template at requesting-code-review/code-reviewer.md
 
-  WHAT_WAS_IMPLEMENTED: [from implementer's report]
+  DESCRIPTION: [task summary, from implementer's report]
   PLAN_OR_REQUIREMENTS: Task N from [plan-file]
   BASE_SHA: [commit before task]
   HEAD_SHA: [current commit]
-  DESCRIPTION: [task summary]
   IMPLEMENTER_REPORT: [CONTROLLER: Paste the implementer's full report here — the additional checks below reference its Deviations and Concerns sections]
 ```
 

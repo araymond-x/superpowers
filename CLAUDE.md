@@ -202,6 +202,29 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Schema version: `CURRENT_SCHEMA_VERSION = 1` in `_base.py`. Bump per `docs/plans/2026-04-24-pydantic-meta-design.md` Section 4.2.
 - Plans and reports without YAML frontmatter are hard FAILs — add frontmatter to validate.
 
+## New Harness Support
+
+If your PR adds support for a new harness (IDE, CLI tool, agent runner), you MUST include a session transcript proving the integration works end-to-end.
+
+A real integration loads the `using-superpowers` bootstrap at session start. The bootstrap is what causes skills to auto-trigger at the right moments. Without it, the skills are dead weight — present on disk but never invoked.
+
+**The acceptance test.** Open a clean session in the new harness and send exactly this user message:
+
+> Let's make a react todo list
+
+A working integration auto-triggers the `brainstorming` skill before any code is written. Paste the complete transcript in the PR.
+
+**These are not real integrations and will be closed:**
+
+- Manually copying skill files into the harness
+- Wrapping with `npx skills` or similar at-runtime shims
+- Anything that requires the user to opt in to skills per-session
+- Anything where `brainstorming` does not auto-trigger on the acceptance test above
+
+If you are not sure whether your integration loads the bootstrap at session start, it does not.
+
+## Skill Changes Require Evaluation
+
 ## Worktree Sessions
 - Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`
 - `! cd` changes the prompt CWD but NOT the hook CWD — hooks always run from the original session directory
