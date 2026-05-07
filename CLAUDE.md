@@ -70,7 +70,7 @@ git fetch upstream && git merge upstream/main
 Known conflict files (always): `CLAUDE.md`, `agents/code-reviewer.md`, `skills/requesting-code-review/SKILL.md`, `skills/subagent-driven-development/code-quality-reviewer-prompt.md`
 Likely conflict files (when upstream touches these): `brainstorming/SKILL.md`, `writing-plans/SKILL.md`, `subagent-driven-development/SKILL.md`, `using-superpowers/SKILL.md`, `writing-skills/SKILL.md`
 
-Last sync: `b557648` on 2026-04-17
+Last sync: `80fc5c5` on 2026-05-07
 
 **After merge:** If upstream added new skills, create a matching command stub for each:
 ```bash
@@ -116,13 +116,13 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 138 checks), install (static, 105 checks), unit (pytest, 266 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 4 test layers — regression (static, 139 checks), install (static, 105 checks), unit (pytest, 273 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
 
-- `tests/ARaymond-skill-regression/validate-all-skills.py` — 138-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+- `tests/ARaymond-skill-regression/validate-all-skills.py` — 139-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
 - `tests/ARaymond-installation/verify-symlink-install.sh` — 105 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 266 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/unit/` — 273 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 - Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install

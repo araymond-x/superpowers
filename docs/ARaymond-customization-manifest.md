@@ -1,11 +1,11 @@
 # Superpowers Customization Manifest
 
 **Author**: Aaron Raymond
-**Last Updated**: 2026-03-31
+**Last Updated**: 2026-05-07
 **Fork**: `~/projects/claude-custom/superpowers` (from `obra/superpowers`)
 **Upstream**: `https://github.com/obra/superpowers`
 **Baseline snapshot**: `snapshot-pre-sdd-improvements-v1` at commit `f352ea9`
-**Last upstream sync**: v5.0.7 (`dd23728`) merged 2026-03-31
+**Last upstream sync**: v5.1.0 (`f2cbfbe`) merged 2026-05-07 (fork commit `80fc5c5`)
 
 ---
 
@@ -388,7 +388,7 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 | `handoff-acceptance/references/acceptance-flow.dot` | handoff-acceptance | Graphviz flowchart of the acceptance decision process |
 | `handoff-acceptance/references/handoff-package-spec.md` | handoff-acceptance | Canonical spec for handoff package structure. Surfaced automatically in failure reports and producer mode. |
 | `brainstorming/references/process-flow.dot` | brainstorming | Graphviz flowchart of the brainstorming process |
-| `using-superpowers/references/codex-tools.md` | using-superpowers | Reference for Codex tool use patterns (upstream; includes named agent dispatch, env detection) |
+| `using-superpowers/references/codex-tools.md` | using-superpowers | Reference for Codex tool use patterns (upstream; includes named agent dispatch, env detection; updated v5.1.0 with environment detection section) |
 | `using-superpowers/references/copilot-tools.md` | using-superpowers | Reference for Copilot CLI tool use patterns (upstream; added v5.0.7) |
 | `using-superpowers/references/gemini-tools.md` | using-superpowers | Reference for Gemini tool use patterns |
 
@@ -398,9 +398,11 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 | Suite | Location | Checks | Runtime | What It Tests |
 |-------|----------|--------|---------|---------------|
-| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 122 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence |
-| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 101 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
-| Unit tests (pytest) | `tests/unit/` | 20 | ~1s | validate-plan.py (task numbering collisions), controller-checkpoint.py (stale artifact detection) |
+| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 139 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence |
+| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 105 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
+| Skill invocation | `tests/ARaymond-installation/verify-skill-invocation.sh` | ~4 | ~5 min | Actual Claude behavior: symlink-installed skills load and trigger correctly via `claude -p` |
+| Skill chain | `tests/ARaymond-installation/verify-skill-chain.sh` | ~10 | ~10 min | Brainstorming → writing-plans skill handoff chain works end-to-end via symlink install |
+| Unit tests (pytest) | `tests/unit/` | 273 | ~5s | Pydantic models (implementer report, checkpoint, plan, schema), validators CLI, controller-checkpoint.py, sdd-pre-dispatch-hook.sh, sdd-report-guard.sh, sdd-stop-hook.sh |
 | Behavioral API | `tests/ARaymond-skill-behavior/run-all.sh` | 21+ | ~15 min | Actual Claude behavior: skill loading, content recall, invocation triggers. Requires `claude -p` with `--verbose --max-turns 5`. |
 
 **Run schedule**:
@@ -476,7 +478,7 @@ Use `**` (not `*`) — subdirectory paths must match.
 
 | File | Conflict Type | Resolution |
 |------|--------------|------------|
-| `CLAUDE.md` | Fork docs vs upstream contributor guidelines | Keep fork version (upstream's is for public PR contributors) |
+| `CLAUDE.md` | Fork docs vs upstream contributor guidelines | Merged both sides: kept fork docs + integrated upstream's Worktree Sessions section and Skill Changes Require Evaluation notes (v5.1.0) |
 | `agents/code-reviewer.md` | `name:` field in frontmatter | Preserve `superpowers-code-reviewer` |
 | `skills/requesting-code-review/SKILL.md` | Agent ref string (3 places) | Preserve `superpowers-code-reviewer` |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref string (1 place) | Preserve `superpowers-code-reviewer` |
@@ -487,7 +489,7 @@ Use `**` (not `*`) — subdirectory paths must match.
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref + prompt body | Preserve `superpowers-code-reviewer` + keep fork improvements |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
-| `skills/using-git-worktrees/SKILL.md` | Worktree location convention (`.worktrees/` only) | Keep fork version; remove any sibling or global alternatives |
+| `skills/using-git-worktrees/SKILL.md` | Full philosophy rewrite (v5.1.0: env detection, native tool preference, Codex App) | Accepted upstream full rewrite wholesale; re-added NEW SESSION REQUIRED handoff block to Step 4 (hook CWD gotcha) |
 | `skills/using-superpowers/SKILL.md` | Prompt optimization changes | Keep fork version; cherry-pick new platform additions |
 | `skills/writing-skills/SKILL.md` | Prompt optimization changes | Keep fork version; cherry-pick factual corrections |
 | All other `skills/*/SKILL.md` | Prompt optimization (de-escalation, positive framing) | Keep fork version; may auto-merge if upstream changes are on different lines |
@@ -506,6 +508,7 @@ Files with no expected conflicts (fork-only additions):
 | Date | Upstream Version | Commits | Conflicts | Cherry-picks |
 |------|-----------------|---------|-----------|-------------|
 | 2026-03-31 | v5.0.7 (`dd23728`) | 27 | 4 files (CLAUDE.md, brainstorming, writing-plans, codex-tools.md) + writing-skills/using-superpowers auto-merged | "No Placeholders" section from writing-plans; Copilot CLI lines auto-merged into using-superpowers; "two required fields" fix auto-merged into writing-skills |
+| 2026-05-07 | v5.1.0 (`f2cbfbe`) | 3 | 8 files (CLAUDE.md, agents/code-reviewer.md, using-git-worktrees, finishing-a-development-branch, requesting-code-review, subagent-driven-development + code-quality-reviewer-prompt, executing-plans) | Accepted upstream's using-git-worktrees full rewrite + re-added NEW SESSION REQUIRED block; accepted finishing-a-development-branch env detection + kept Step 7 post-completion cleanup; rejected agent deletion (kept superpowers-code-reviewer); absorbed "continuous execution" paragraph in SDD |
 
 ---
 
