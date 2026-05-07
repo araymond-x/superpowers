@@ -120,7 +120,7 @@ if [ "$IS_REVIEWER" = true ]; then
     REVIEW_TYPE="unknown"
     if echo "$DESCRIPTION" | grep -qiE '(spec.compliance|spec.review)'; then
       REVIEW_TYPE="spec-review"
-    elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review|superpowers-code-reviewer)'; then
+    elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review)'; then
       REVIEW_TYPE="quality-review"
     elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then
       REVIEW_TYPE="trace-audit"
