@@ -22,7 +22,6 @@ EXPECTED_SKILL_COUNT=15
 EXPECTED_CMD_COUNT=15
 SKILLS_DIR="${HOME}/.claude/skills/superpowers"
 COMMANDS_DIR="${HOME}/.claude/commands/superpowers"
-AGENT_LINK="${HOME}/.claude/agents/superpowers-code-reviewer.md"
 integrity_failures=""
 
 actual_skill_count=$(find -L "$SKILLS_DIR" -name "SKILL.md" 2>/dev/null | wc -l | tr -d ' ') || actual_skill_count=0
@@ -35,8 +34,11 @@ if [ "$actual_cmd_count" -ne "$EXPECTED_CMD_COUNT" ]; then
     integrity_failures="${integrity_failures}\n- Commands: expected ${EXPECTED_CMD_COUNT} stubs under ~/.claude/commands/superpowers/, found ${actual_cmd_count}. Command stubs may be missing or the directory may not exist."
 fi
 
-if [ ! -e "$AGENT_LINK" ]; then
-    integrity_failures="${integrity_failures}\n- Agent: ~/.claude/agents/superpowers-code-reviewer.md does not resolve. The symlink may be broken or the target file deleted."
+# Post general-purpose migration (2026-05-07): the named agent symlink should be ABSENT.
+# If it reappears, a regression has re-introduced the old named-agent pattern.
+AGENT_LINK="${HOME}/.claude/agents/superpowers-code-reviewer.md"
+if [ -e "$AGENT_LINK" ]; then
+    integrity_failures="${integrity_failures}\n- Agent: ~/.claude/agents/superpowers-code-reviewer.md still exists — this was removed during the general-purpose migration. Run: rm ~/.claude/agents/superpowers-code-reviewer.md"
 fi
 
 if [ -n "$integrity_failures" ]; then
