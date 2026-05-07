@@ -193,12 +193,12 @@ if [ -f "$PYDANTIC_VALIDATOR" ]; then
       $PYTHON "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err
       PYDANTIC_EXIT=$?
       if [ "$PYDANTIC_EXIT" -ne 0 ]; then
+        PYDANTIC_ERR=$(cat /tmp/pydantic-validator-err 2>/dev/null || echo "  (error details unavailable)")
         if [ "$PYDANTIC_EXIT" -eq 1 ]; then
-          ERRORS+=("Pydantic validation failed for $pf")
-          PYDANTIC_ERR=$(jq -Rs . < /tmp/pydantic-validator-err 2>/dev/null || cat /tmp/pydantic-validator-err)
+          ERRORS+=("Pydantic validation failed for $pf\n$PYDANTIC_ERR")
           echo -e "  [FAIL] Pydantic: $pf" >&2
         elif [ "$PYDANTIC_EXIT" -eq 2 ]; then
-          echo -e "  [WARN] Pydantic validator infrastructure error for $pf" >&2
+          echo -e "  [WARN] Pydantic validator infrastructure error for $pf\n$PYDANTIC_ERR" >&2
         fi
       fi
     fi
