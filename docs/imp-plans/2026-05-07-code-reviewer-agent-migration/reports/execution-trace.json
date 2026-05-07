@@ -1,0 +1,42 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers/589d8425-e863-4e32-bfae-ffe91255c718.jsonl",
+  "extracted_at": "2026-05-07T22:08:06.675018+00:00",
+  "total_messages": 669,
+  "skills_invoked": [
+    "superpowers:subagent-driven-development"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 10,
+      "phase": "pre-execution"
+    },
+    {
+      "script": "estimate-task-tokens",
+      "count": 2
+    },
+    {
+      "script": "extract-execution-trace",
+      "count": 2
+    },
+    {
+      "script": "validate-plan",
+      "count": 1
+    },
+    {
+      "script": "validate-report",
+      "count": 7
+    }
+  ],
+  "tasks": [],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}
