@@ -76,7 +76,7 @@ tasks:
 - Read: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (lines 27-34 for SUPERPOWERS_ROOT pattern)
 - Read: `.gitignore`
 
-- [ ] **Step 1: Read the distilled spec**
+- [x] **Step 1: Read the distilled spec**
 
 Read `docs/specs/2026-05-02-per-feature-directory-design-distilled.md` in full. Verify the Contract Facts section specifies:
 - `.active-feature` format: single-line plaintext, relative path
@@ -84,7 +84,7 @@ Read `docs/specs/2026-05-02-per-feature-directory-design-distilled.md` in full. 
 - `deviations.md` lowercase
 - Hooks fall back to root-level paths when `$FEAT` is empty
 
-- [ ] **Step 2: Read the SUPERPOWERS_ROOT pattern**
+- [x] **Step 2: Read the SUPERPOWERS_ROOT pattern**
 
 Read `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` lines 27-34. Confirm the preamble pattern:
 
@@ -99,11 +99,11 @@ fi
 
 This pattern will be replicated in `plan-validation-gate-hook.sh` and `sdd-stop-hook.sh` in Module 2.
 
-- [ ] **Step 3: Verify .gitignore exists and check current contents**
+- [x] **Step 3: Verify .gitignore exists and check current contents**
 
 Read `.gitignore`. Confirm `.active-feature` is NOT already listed. Note where to add it (near `.allow-main` if present, or at the end).
 
-- [ ] **Step 4: Confirm contract facts**
+- [x] **Step 4: Confirm contract facts**
 
 Log confirmation that all contract facts verified against source files. No discrepancies.
 
@@ -114,7 +114,7 @@ Log confirmation that all contract facts verified against source files. No discr
 **Files:**
 - Modify: `.gitignore`
 
-- [ ] **Step 1: Add .active-feature to .gitignore**
+- [x] **Step 1: Add .active-feature to .gitignore**
 
 Add `.active-feature` to `.gitignore`. Place it near other dot-files or at the end of the file:
 
@@ -123,14 +123,14 @@ Add `.active-feature` to `.gitignore`. Place it near other dot-files or at the e
 .active-feature
 ```
 
-- [ ] **Step 2: Verify git will ignore the file**
+- [x] **Step 2: Verify git will ignore the file**
 
 Run: `touch .active-feature && git status`
 Expected: `.active-feature` does NOT appear in untracked files.
 
 Run: `rm .active-feature`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add .gitignore
@@ -144,7 +144,7 @@ git commit -m "chore: add .active-feature to .gitignore"
 **Files:**
 - Create: `tests/unit/test_active_feature.py`
 
-- [ ] **Step 1: Write tests for .active-feature reading**
+- [x] **Step 1: Write tests for .active-feature reading**
 
 Create `tests/unit/test_active_feature.py`:
 
@@ -379,12 +379,12 @@ fi
         assert result.stdout.strip() == "RESOLVED"
 ```
 
-- [ ] **Step 2: Run tests to verify they all pass**
+- [x] **Step 2: Run tests to verify they all pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_active_feature.py -v`
 Expected: All tests pass (they test bash snippets against temp directories, no production code yet).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_active_feature.py
@@ -398,7 +398,7 @@ git commit -m "test: add unit tests for .active-feature resolution and conflict 
 **Files:**
 - Modify: `tests/unit/test_active_feature.py` (append)
 
-- [ ] **Step 1: Add feature name validation tests**
+- [x] **Step 1: Add feature name validation tests**
 
 Append to `tests/unit/test_active_feature.py`:
 
@@ -440,12 +440,12 @@ class TestFeatureNameValidation:
         assert re.match(r'^docs/imp-plans/\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$', path)
 ```
 
-- [ ] **Step 2: Run all tests**
+- [x] **Step 2: Run all tests**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_active_feature.py -v`
 Expected: All tests pass.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_active_feature.py

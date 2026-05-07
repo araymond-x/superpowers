@@ -1,1 +1,45 @@
-{"phase":"pre-dispatch","status":"PASS","task_number":14}
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "PASS",
+  "task_number": 14,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "OK",
+      "detail": "Task 13: no checkboxes found in task section"
+    },
+    "previous_task_report": {
+      "status": "PASS",
+      "detail": "reports/task-013-implementer-report.md exists"
+    },
+    "previous_report_complete": {
+      "status": "PASS",
+      "detail": "5/5 sections present"
+    },
+    "previous_spec_review": {
+      "status": "PASS",
+      "detail": "reports/task-013-spec-review exists"
+    },
+    "previous_quality_review": {
+      "status": "PASS",
+      "detail": "reports/task-013-quality-review exists"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~29.2KB (~7,488 tokens, 16 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 0,
+    "tasks_completed": 13,
+    "checkboxes_total": 0,
+    "checkboxes_checked": 0,
+    "percentage": 0
+  }
+}

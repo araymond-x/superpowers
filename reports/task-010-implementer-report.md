@@ -1,49 +1,41 @@
 ---
 schema_version: 1
 task_id: 10
-status: DONE_WITH_CONCERNS
+status: DONE
 files_changed:
-  - path: "skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
-    description: "Updated Check 4b to capture validate-report.py exit code and block on Pydantic failures"
+  - path: "skills/brainstorming/SKILL.md"
+    description: "Added step 3.5 feature name prompt with conflict detection, updated spec output paths to <feature-dir>/"
+  - path: "skills/writing-plans/SKILL.md"
+    description: "Added step 0.5 feature name prompt, updated plan/manifest/review/module paths to <feature-dir>/"
+  - path: "skills/handoff-acceptance/SKILL.md"
+    description: "Added feature name prompt on ACCEPTED verdict"
 tests:
   written: 0
   passing: 0
-  command: "bash script — no unit tests for this task"
+  command: "N/A — SKILL.md prose changes"
   result: PASS
+contract_compliance:
+  - constraint: "Feature name is kebab-case, user-confirmed at entry-point skill prompt"
+    status: compliant
+    detail: "All 3 entry-point skills now prompt for feature name"
+  - constraint: "Conflict detection at entry: stale → auto-clean, completed → auto-clean, incomplete → prompt"
+    status: compliant
+    detail: "Full conflict detection matrix added to brainstorming, referenced from writing-plans"
 ---
 
-# Task 010 Report — sdd-pre-dispatch-hook.sh Updates
-# Date: 2026-04-27
-# Status: DONE_WITH_CONCERNS
-
-**Status:** DONE_WITH_CONCERNS
-
 **Implementation Summary:**
-Updated Check 4b in sdd-pre-dispatch-hook.sh: changed stderr redirect from 2>/dev/null to 2>&1, added VALIDATE_EXIT=$? check, added BLOCKED error for nonzero exits, updated both error messages from "9 required sections" to "5 required prose sections".
-
-**Files Changed:**
-- `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
+Updated all 3 entry-point skills with feature name prompt, conflict detection, and output path changes. brainstorming gets step 3.5 with full conflict detection. writing-plans gets step 0.5 and all 7 path references updated. handoff-acceptance gets ACCEPTED verdict prompt. Committed at `b73dfd0`.
 
 **Source Files Read:**
-- sdd-pre-dispatch-hook.sh, validate-report.py, test_sdd_hard_gates.py, sdd_test_helpers.py
-
-**CLAUDE.md Files Read:**
-- Project root CLAUDE.md
-
-**Tests:**
-- 4 tests in test_sdd_hard_gates.py now fail — expected intermediate breakage (parent plan documents this)
-- Old test reports lack YAML frontmatter, new hook correctly blocks them
-- Task 13 (Module 3) updates IMPLEMENTER_REPORT_TEMPLATE to fix
-
-**Contract Compliance:**
-- Captures exit code and blocks on nonzero: YES
-- Error messages say "5 required prose sections": YES
+- `skills/brainstorming/SKILL.md` — full read
+- `skills/writing-plans/SKILL.md` — full read
+- `skills/handoff-acceptance/SKILL.md` — full read
 
 **Deviations from Plan:**
-- None
+None — implemented exactly as specified.
 
 **Self-Review Findings:**
-- No issues with the hook change itself
+No issues found.
 
 **Concerns:**
-- 4 test_sdd_hard_gates.py tests fail due to old-format test reports lacking YAML frontmatter. This is the expected intermediate breakage documented in the parent plan. Task 13 fixes it.
+No concerns.

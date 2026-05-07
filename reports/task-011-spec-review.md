@@ -1,5 +1,7 @@
-# Task 011 Spec Review — context-summary.py Frontmatter Parsing
-# Date: 2026-04-27
-# Verdict: PASS
+# Task 11 Spec Compliance Review
 
-Verified: yaml import added (conditional), extract_files_from_frontmatter() and extract_status_from_frontmatter() present with correct logic, parse_report() updated to use them. End-to-end test processes 11 reports with 0 parse errors. Contract satisfied: files_changed parsed from YAML frontmatter.
+**Verdict:** PASS
+
+- SDD SKILL.md: all path refs use <feature-dir>/, checkpoint commands use --feature-dir, deviations.md lowercase ✓
+- finishing-a-development-branch: Step 6 post-completion cleanup removes .active-feature and .allow-main ✓
+- Word count: 4813 (under 5000 limit) ✓

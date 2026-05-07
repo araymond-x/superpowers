@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "phase": "pre-completion",
+  "status": "FAIL",
+  "checks": {
+    "all_checkboxes_checked": {
+      "status": "OK",
+      "detail": "No checkboxes found in plan"
+    },
+    "no_pending_deviations": {
+      "status": "PASS",
+      "detail": "All DEVIATIONS.md entries are dispositioned"
+    },
+    "all_tasks_have_reports": {
+      "status": "PASS",
+      "detail": "All 0 task(s) have report files in reports/"
+    },
+    "all_reports_complete": {
+      "status": "PASS",
+      "detail": "All 15 report(s) have required sections"
+    },
+    "honesty_check_missing": {
+      "status": "FAIL",
+      "detail": "Missing or empty reports/honesty-check-YYYY-MM-DD.md \u2014 the honesty check must be completed before the Pre-Completion Gate. Present the honesty check prompt to the user, save their response, then re-run this checkpoint."
+    },
+    "trace_audit_missing": {
+      "status": "FAIL",
+      "detail": "Missing or empty reports/execution-trace-audit.md \u2014 run extract-execution-trace.py and dispatch the trace auditor subagent before declaring completion."
+    },
+    "excessive_minimum_tier_quality": {
+      "status": "FAIL",
+      "detail": "14/15 quality reviews are minimum-tier (93%). Tasks touching shared files, multi-file changes, or Pattern References should use full dispatched reviews."
+    },
+    "excessive_minimum_tier_partner": {
+      "status": "FAIL",
+      "detail": "14/15 partner reviews are minimum-tier (93%). Tasks with Pattern References, Shared Constants, or multi-file changes should have full partner dispatches."
+    }
+  },
+  "warnings": [],
+  "blockers": [
+    "honesty_check_missing",
+    "trace_audit_missing",
+    "excessive_minimum_tier_quality",
+    "excessive_minimum_tier_partner"
+  ],
+  "progress": {
+    "tasks_total": 0,
+    "tasks_completed": 0,
+    "checkboxes_total": 0,
+    "checkboxes_checked": 0,
+    "percentage": 0
+  }
+}

@@ -98,7 +98,7 @@ tasks:
 **Pattern References:**
 - `tests/poc-feature-directory/sdd-pre-dispatch-hook-patched.sh` — POC feature-dir prefix pattern
 
-- [ ] **Step 1: Add `.active-feature` preamble after CWD resolution**
+- [x] **Step 1: Add `.active-feature` preamble after CWD resolution**
 
 After line 61 (`cd "$CWD" || exit 0`), add:
 
@@ -133,7 +133,7 @@ if [ -z "$FEAT" ] && [ ! -d "$REPORTS_DIR" ] && [ -d "reports" ]; then
 fi
 ```
 
-- [ ] **Step 2: Update `task_report_glob()` to use `$REPORTS_DIR`**
+- [x] **Step 2: Update `task_report_glob()` to use `$REPORTS_DIR`**
 
 Change the `task_report_glob()` function (around line 118-124):
 
@@ -147,7 +147,7 @@ task_report_glob() {
 }
 ```
 
-- [ ] **Step 3: Update Check 1 (branch safety) to use resolved paths**
+- [x] **Step 3: Update Check 1 (branch safety) to use resolved paths**
 
 Replace the `SDD_ARTIFACTS_EXIST` check (around line 164-166):
 
@@ -157,7 +157,7 @@ Replace the `SDD_ARTIFACTS_EXIST` check (around line 164-166):
   fi
 ```
 
-- [ ] **Step 4: Update Check 2 (pre-execution audit) to use `$REPORTS_DIR`**
+- [x] **Step 4: Update Check 2 (pre-execution audit) to use `$REPORTS_DIR`**
 
 Replace line ~197:
 
@@ -171,7 +171,7 @@ Update the BLOCKED error message to use `$REPORTS_DIR`:
     ERRORS+=("BLOCKED: No pre-execution audit report found (${REPORTS_DIR}/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to ${REPORTS_DIR}/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to ${REPORTS_DIR}/pre-execution-audit.md.")
 ```
 
-- [ ] **Step 5: Update Check 3 (DEVIATIONS.md and reports/) to use resolved paths**
+- [x] **Step 5: Update Check 3 (DEVIATIONS.md and reports/) to use resolved paths**
 
 Replace lines ~208-216:
 
@@ -185,7 +185,7 @@ if [ ! -d "$REPORTS_DIR" ]; then
 fi
 ```
 
-- [ ] **Step 6: Update Check 3b (report naming) to use `$REPORTS_DIR`**
+- [x] **Step 6: Update Check 3b (report naming) to use `$REPORTS_DIR`**
 
 Replace the glob at line ~223:
 
@@ -195,11 +195,11 @@ Replace the glob at line ~223:
 
 And the BLOCKED message at line ~238 to reference `$REPORTS_DIR`.
 
-- [ ] **Step 7: Update Check 4 (previous task reports) error messages**
+- [x] **Step 7: Update Check 4 (previous task reports) error messages**
 
 All error messages in Check 4 (lines ~252-308) that reference `reports/task-NNN-*` should use `${REPORTS_DIR}/task-NNN-*`. The `task_report_glob()` change in Step 2 handles the glob patterns; only the error message strings need updating.
 
-- [ ] **Step 8: Update Check 4c (dispatch provenance) to use `$DISPATCH_LOG`**
+- [x] **Step 8: Update Check 4c (dispatch provenance) to use `$DISPATCH_LOG`**
 
 Replace line ~314:
 
@@ -210,15 +210,9 @@ Replace line ~314:
 
 Update all references to `"reports/.dispatch-log"` in error messages to `"$DISPATCH_LOG"`.
 
-- [ ] **Step 9: Update Check 5 (Source Contracts / plan search) to use `$FEAT`**
+- [x] **Step 9: Update Check 5 (Source Contracts / plan search) to use `$FEAT`**
 
-Replace the plan file search loop (lines ~350-357):
-
-```bash
-  for plan_file in $(feat_path "*.md") $(feat_path "../*.md"); do
-```
-
-Wait — this needs to be smarter. When `$FEAT` is set, search only `$FEAT/*.md`. When empty, search `docs/imp-plans/*.md docs/plans/*.md`:
+Replace the plan file search loop (lines ~350-357). When `$FEAT` is set, search only `$FEAT/*.md`. When empty, search `docs/imp-plans/*.md docs/plans/*.md`:
 
 ```bash
   if [ -n "$FEAT" ]; then
@@ -229,7 +223,7 @@ Wait — this needs to be smarter. When `$FEAT` is set, search only `$FEAT/*.md`
   for plan_file in $PLAN_SEARCH_GLOB; do
 ```
 
-- [ ] **Step 10: Update Check 5b (pending deviations) to use `$DEVIATIONS_FILE`**
+- [x] **Step 10: Update Check 5b (pending deviations) to use `$DEVIATIONS_FILE`**
 
 Replace line ~378:
 
@@ -238,7 +232,7 @@ if [ -f "$DEVIATIONS_FILE" ]; then
   PENDING_COUNT=$(grep -ciE '\|\s*Pending\s*\|' "$DEVIATIONS_FILE" 2>/dev/null || echo "0")
 ```
 
-- [ ] **Step 11: Update Check 5c (checkpoint file) to use `$REPORTS_DIR`**
+- [x] **Step 11: Update Check 5c (checkpoint file) to use `$REPORTS_DIR`**
 
 Replace line ~391:
 
@@ -246,9 +240,9 @@ Replace line ~391:
   CHECKPOINT_FILE="${REPORTS_DIR}/checkpoint-pre-dispatch-${TASK_PADDED}.json"
 ```
 
-Update the BLOCKED error message to reference `$REPORTS_DIR`.
+Update the BLOCKED error message to reference `$REPORTS_DIR`. **Note:** The error message at line ~393 contains an embedded command string with `--deviations-file DEVIATIONS.md --reports-dir reports/` — update both path arguments in the command to use `$DEVIATIONS_FILE` and `$REPORTS_DIR`.
 
-- [ ] **Step 12: Update Check 5d (partner review) to use `$REPORTS_DIR`**
+- [x] **Step 12: Update Check 5d (partner review) to use `$REPORTS_DIR`**
 
 Replace lines ~405-406:
 
@@ -257,11 +251,11 @@ Replace lines ~405-406:
   PARTNER_FILE_MIN="${REPORTS_DIR}/partner-review-${TASK_PADDED}-minimum-tier.md"
 ```
 
-- [ ] **Step 13: Update Check 6 (token estimation plan search) to use `$FEAT`**
+- [x] **Step 13: Update Check 6 (token estimation plan search) to use `$FEAT`**
 
 Replace the plan search loop (lines ~425-433) with the same `PLAN_SEARCH_GLOB` pattern from Step 9.
 
-- [ ] **Step 14: Update Check 6b (context summary) to use `$REPORTS_DIR`**
+- [x] **Step 14: Update Check 6b (context summary) to use `$REPORTS_DIR`**
 
 Replace the plan search (lines ~482-488) and the context-summary check (line ~493):
 
@@ -269,9 +263,9 @@ Replace the plan search (lines ~482-488) and the context-summary check (line ~49
       if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
 ```
 
-Update the BLOCKED error message to use `$REPORTS_DIR` and `$DEVIATIONS_FILE`.
+Update the BLOCKED error message to use `$REPORTS_DIR` and `$DEVIATIONS_FILE`. **Note:** The error message at line ~494 contains an embedded command string with `--reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md` — update all three path arguments to use `$REPORTS_DIR`, `$DEVIATIONS_FILE`, and `${REPORTS_DIR}/context-summary.md`.
 
-- [ ] **Step 15: Update Check 7 (context load) to use resolved paths**
+- [x] **Step 15: Update Check 7 (context load) to use resolved paths**
 
 Replace the file size summation (lines ~521-540):
 
@@ -297,7 +291,7 @@ And the reports glob:
   for rf in "${REPORTS_DIR}"/*.md; do
 ```
 
-- [ ] **Step 16: Update reviewer dispatch logging to use `$DISPATCH_LOG`**
+- [x] **Step 16: Update reviewer dispatch logging to use `$DISPATCH_LOG`**
 
 Replace line ~87-102 (reviewer logging section):
 
@@ -310,11 +304,17 @@ Replace line ~87-102 (reviewer logging section):
   fi
 ```
 
-- [ ] **Step 17: Update the SDD REMINDER additionalContext**
+- [x] **Step 17: Update the SDD REMINDER additionalContext**
 
-Find the `additionalContext` JSON output near the end of the file. Update any hardcoded path references in the reminder string to use `$REPORTS_DIR` and `$DEVIATIONS_FILE`.
+Find the `CONTEXT=` string near the end of the file (line ~552). Replace the hardcoded paths with resolved variables:
 
-- [ ] **Step 18: Verify the hook runs without errors**
+```bash
+CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to ${REPORTS_DIR}/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to ${REPORTS_DIR}/task-N-spec-review.md, (3) Dispatch code quality review and save to ${REPORTS_DIR}/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to ${DEVIATIONS_FILE}, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+```
+
+Also update the context-summary warning (line ~545) to reference `$REPORTS_DIR` if it contains hardcoded paths.
+
+- [x] **Step 18: Verify the hook runs without errors**
 
 Run the hook with mock JSON input against a temp directory with `.active-feature`:
 
@@ -324,7 +324,7 @@ echo '{"tool_input":{"description":"test dispatch","prompt":"test"},"cwd":"/tmp/
 
 Expected: exits 0 (allows — non-SDD dispatch).
 
-- [ ] **Step 19: Commit**
+- [x] **Step 19: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -341,7 +341,7 @@ git commit -m "feat: migrate sdd-pre-dispatch-hook to .active-feature path resol
 **Pattern References:**
 - `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` lines 27-34 — `SUPERPOWERS_ROOT` self-resolution preamble
 
-- [ ] **Step 1: Add SUPERPOWERS_ROOT self-resolution and PYTHON derivation**
+- [x] **Step 1: Add SUPERPOWERS_ROOT self-resolution and PYTHON derivation**
 
 Replace the hardcoded `VALIDATE_PLAN_SCRIPT` line (line 24) with:
 
@@ -357,7 +357,7 @@ fi
 VALIDATE_PLAN_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/validate-plan.py"
 ```
 
-- [ ] **Step 2: Add `.active-feature` preamble and gate**
+- [x] **Step 2: Add `.active-feature` preamble and gate**
 
 After `cd "$CWD" || exit 0` (line 49), add:
 
@@ -375,7 +375,7 @@ if [ -z "$FEAT" ]; then
 fi
 ```
 
-- [ ] **Step 3: Update manifest discovery to use `$FEAT` directly**
+- [x] **Step 3: Update manifest discovery to use `$FEAT` directly**
 
 Replace the manifest discovery block (lines ~56-78):
 
@@ -403,15 +403,21 @@ else
 fi
 ```
 
-- [ ] **Step 4: Update Pydantic validator to use `$PYTHON`**
+- [x] **Step 4: Update Pydantic validator path and Python invocation**
 
-Replace line ~174 (`.venv/bin/python3`):
+Replace the `PYDANTIC_VALIDATOR` path (line ~169) to use `$SUPERPOWERS_ROOT` for consistency with the `VALIDATE_PLAN_SCRIPT` path:
+
+```bash
+PYDANTIC_VALIDATOR="$SUPERPOWERS_ROOT/skills/scripts/models/validators.py"
+```
+
+Replace line ~174 (`.venv/bin/python3`) with `$PYTHON`:
 
 ```bash
       $PYTHON "$PYDANTIC_VALIDATOR" plan "$pf" 2>/tmp/pydantic-validator-err
 ```
 
-- [ ] **Step 5: Update review report search to check `$FEAT` first**
+- [x] **Step 5: Update review report search to check `$FEAT` first**
 
 Replace the review report search (lines ~193-236):
 
@@ -447,7 +453,7 @@ if [ -z "$REVIEW_REPORT" ]; then
 fi
 ```
 
-- [ ] **Step 6: Verify the hook runs**
+- [x] **Step 6: Verify the hook runs**
 
 Test with mock input:
 
@@ -457,7 +463,7 @@ echo '{"tool_input":{"skill":"superpowers:subagent-driven-development"},"cwd":"/
 
 Expected: exits 2 (BLOCKED — no `.active-feature`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/writing-plans/scripts/plan-validation-gate-hook.sh
@@ -474,7 +480,7 @@ git commit -m "feat: migrate plan-validation-gate to .active-feature with SUPERP
 **Pattern References:**
 - `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` lines 27-34 — `SUPERPOWERS_ROOT` preamble
 
-- [ ] **Step 1: Add SUPERPOWERS_ROOT resolution**
+- [x] **Step 1: Add SUPERPOWERS_ROOT resolution**
 
 Replace the hardcoded `CHECKPOINT_SCRIPT` (line 14):
 
@@ -490,7 +496,7 @@ fi
 CHECKPOINT_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/controller-checkpoint.py"
 ```
 
-- [ ] **Step 2: Add `.active-feature` preamble after CWD extraction**
+- [x] **Step 2: Add `.active-feature` preamble after CWD extraction**
 
 After line 28 (`fi`), add:
 
@@ -502,7 +508,7 @@ if [ -f "${CWD}/.active-feature" ]; then
 fi
 ```
 
-- [ ] **Step 3: Update SDD detection to use `$FEAT`**
+- [x] **Step 3: Update SDD detection to use `$FEAT`**
 
 Replace the detection block (lines ~34-39):
 
@@ -524,7 +530,7 @@ if [ ! -f "$DEVIATIONS_FILE" ]; then
 fi
 ```
 
-- [ ] **Step 4: Update plan discovery to use `$FEAT`**
+- [x] **Step 4: Update plan discovery to use `$FEAT`**
 
 Replace the plan file search (lines ~50-56):
 
@@ -547,7 +553,7 @@ else
 fi
 ```
 
-- [ ] **Step 5: Update honesty check archival to use `$REPORTS_DIR`**
+- [x] **Step 5: Update honesty check archival to use `$REPORTS_DIR`**
 
 Replace the honesty file search (lines ~70-75):
 
@@ -555,7 +561,7 @@ Replace the honesty file search (lines ~70-75):
   for candidate in "${REPORTS_DIR}"/honesty-check-*.md; do
 ```
 
-- [ ] **Step 6: Update checkpoint invocation to use resolved paths**
+- [x] **Step 6: Update checkpoint invocation to use resolved paths**
 
 Replace lines ~108-114:
 
@@ -570,7 +576,9 @@ CHECKPOINT_OUTPUT=$(
 )
 ```
 
-- [ ] **Step 7: Commit**
+**Note:** Line ~149 uses bare `python3` (not `$PYTHON`) for a stdlib-only JSON encoding call. This is intentional — consistent with the pattern in `sdd-pre-dispatch-hook.sh` (lines 273/275/563) where `$PYTHON` is reserved for scripts that need the venv (PyYAML, Pydantic). Do not change this to `$PYTHON`.
+
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-stop-hook.sh
@@ -584,7 +592,7 @@ git commit -m "feat: migrate sdd-stop-hook to .active-feature with SUPERPOWERS_R
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-report-guard.sh`
 
-- [ ] **Step 1: Update suspicious-pattern regexes**
+- [x] **Step 1: Update suspicious-pattern regexes**
 
 Replace the regex on line ~46:
 
@@ -596,7 +604,7 @@ The `\S*` before `reports/` matches zero-or-more non-whitespace characters, hand
 - Old: `touch reports/task-001-...`
 - New: `touch docs/imp-plans/2026-05-02-feature/reports/task-001-...`
 
-- [ ] **Step 2: Verify the regex matches both old and new paths**
+- [x] **Step 2: Verify the regex matches both old and new paths**
 
 ```bash
 echo "touch reports/task-001-implementer-report.md" | grep -qiE '(touch\s+\S*reports/)' && echo "OLD MATCH"
@@ -605,7 +613,7 @@ echo "touch docs/imp-plans/2026-05-02-feature/reports/task-001-implementer-repor
 
 Expected: Both print their respective MATCH messages.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-report-guard.sh
@@ -620,11 +628,11 @@ git commit -m "fix: update report-guard regexes to match feature-dir paths"
 - Modify: `skills/subagent-driven-development/scripts/controller-checkpoint.py`
 - Modify: `skills/subagent-driven-development/scripts/context-summary.py`
 
-- [ ] **Step 1: Read controller-checkpoint.py argument parsing**
+- [x] **Step 1: Read controller-checkpoint.py argument parsing**
 
 Read `skills/subagent-driven-development/scripts/controller-checkpoint.py` and find the `argparse` section. Note the existing `--reports-dir` and `--deviations-file` arguments.
 
-- [ ] **Step 2: Add --feature-dir argument to controller-checkpoint.py**
+- [x] **Step 2: Add --feature-dir argument to controller-checkpoint.py**
 
 In the argparse section, add:
 
@@ -641,21 +649,42 @@ After parsing args, add resolution logic:
 
 ```python
 if args.feature_dir:
-    if not args.reports_dir or args.reports_dir == "reports/":
+    if not args.reports_dir:
         args.reports_dir = f"{args.feature_dir}/reports/"
-    if not args.deviations_file or args.deviations_file == "DEVIATIONS.md":
+    if not args.deviations_file:
         args.deviations_file = f"{args.feature_dir}/deviations.md"
 ```
 
-- [ ] **Step 3: Read context-summary.py argument parsing**
+- [x] **Step 3: Read context-summary.py argument parsing**
 
-Read `skills/subagent-driven-development/scripts/context-summary.py` and find the argparse section.
+Read `skills/subagent-driven-development/scripts/context-summary.py` and find the argparse section. Note that `--reports-dir`, `--deviations-file`, and `--output` are all `required=True`.
 
-- [ ] **Step 4: Add --feature-dir argument to context-summary.py**
+- [x] **Step 4: Add --feature-dir argument to context-summary.py**
 
-Same pattern as controller-checkpoint.py. Add the argument and resolution logic.
+**Important:** `context-summary.py` has `--reports-dir`, `--deviations-file`, and `--output` as `required=True`. Change all three to `required=False, default=None`. Add `--feature-dir` argument. After parsing, add resolution logic that fills in defaults from `--feature-dir`:
 
-- [ ] **Step 5: Verify both scripts accept the new argument**
+```python
+if args.feature_dir:
+    if not args.reports_dir:
+        args.reports_dir = f"{args.feature_dir}/reports/"
+    if not args.deviations_file:
+        args.deviations_file = f"{args.feature_dir}/deviations.md"
+    if not args.output:
+        args.output = f"{args.feature_dir}/reports/context-summary.md"
+
+# Validate that all required paths are set (either explicitly or via --feature-dir)
+missing = []
+if not args.reports_dir:
+    missing.append("--reports-dir")
+if not args.deviations_file:
+    missing.append("--deviations-file")
+if not args.output:
+    missing.append("--output")
+if missing:
+    parser.error(f"Missing required arguments (provide explicitly or via --feature-dir): {', '.join(missing)}")
+```
+
+- [x] **Step 5: Verify both scripts accept the new argument**
 
 ```bash
 .venv/bin/python3 skills/subagent-driven-development/scripts/controller-checkpoint.py --help | grep feature-dir
@@ -664,7 +693,7 @@ Same pattern as controller-checkpoint.py. Add the argument and resolution logic.
 
 Expected: Both show the `--feature-dir` argument.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py skills/subagent-driven-development/scripts/context-summary.py
@@ -678,11 +707,11 @@ git commit -m "feat: add --feature-dir argument to checkpoint and context-summar
 **Files:**
 - Modify: `tests/unit/test_sdd_hard_gates.py`
 
-- [ ] **Step 1: Read current test file**
+- [x] **Step 1: Read current test file**
 
 Read `tests/unit/test_sdd_hard_gates.py` in full. Note the fixture setup — it creates temp directories with `reports/` and `DEVIATIONS.md` at root. These need to support both root-level (backwards compat) and feature-dir layouts.
 
-- [ ] **Step 2: Add feature-dir fixture**
+- [x] **Step 2: Add feature-dir fixture**
 
 Add a pytest fixture that creates a feature-dir layout with `.active-feature`:
 
@@ -704,7 +733,7 @@ def feature_dir_workspace(tmp_path):
     return tmp_path, feat_path, feat_dir, reports_dir
 ```
 
-- [ ] **Step 3: Update existing tests that create root-level fixtures**
+- [x] **Step 3: Update existing tests that create root-level fixtures**
 
 For each test that creates `reports/` and `DEVIATIONS.md` at `tmp_path` root, add a parallel test (or parameterize) that uses the `feature_dir_workspace` fixture instead. The hook should produce the same behavior with both layouts.
 
@@ -715,7 +744,7 @@ Key tests to update/duplicate:
 - Checkpoint file check (Check 5c)
 - Partner review check (Check 5d)
 
-- [ ] **Step 4: Add test for `.active-feature` missing gate (plan-validation-gate)**
+- [x] **Step 4: Add test for `.active-feature` missing gate (plan-validation-gate)**
 
 ```python
 def test_plan_validation_gate_blocks_without_active_feature(tmp_path):
@@ -732,7 +761,7 @@ def test_plan_validation_gate_blocks_without_active_feature(tmp_path):
     assert ".active-feature" in result.stderr
 ```
 
-- [ ] **Step 5: Add test for backwards-compat fallback**
+- [x] **Step 5: Add test for backwards-compat fallback**
 
 ```python
 def test_pre_dispatch_falls_back_to_root_without_active_feature(tmp_path):
@@ -757,12 +786,12 @@ def test_pre_dispatch_falls_back_to_root_without_active_feature(tmp_path):
     assert ".active-feature" not in result.stderr
 ```
 
-- [ ] **Step 6: Run all tests**
+- [x] **Step 6: Run all tests**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py -v`
 Expected: All tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add tests/unit/test_sdd_hard_gates.py

@@ -1,46 +1,30 @@
 # Pre-Execution Audit Report
 
-**Plan:** Pydantic Phase 2 — Module 1: Models + Unit Tests
-**Date:** 2026-04-27
-**Audit Verdict:** ORDERS_ISSUED → ALL RESOLVED
+**Plan:** Per-Feature Directory Migration (3 modules, 15 tasks)
+**Date:** 2026-05-05
+**Auditor verdict:** ORDERS_ISSUED (7 orders)
+**Resolution status:** ALL RESOLVED
 
-## Remediation Orders — Resolution Log
+## Remediation Orders
 
-### Order #1 (IMPORTANT) — Task 7/Task 8 interaction note
-**Finding:** Task 7 uses `validate_report_sections()` return dict, Task 8 modifies that dict. Cross-task dependency not documented.
-**Module:** 2
-**Resolution:** DEFERRED TO MODULE 2. Will add explicit note to Task 7 implementer dispatch about `validate_report_sections()` return dict interaction with Task 8 changes.
-**Status:** RESOLVED (deferred with tracking)
+| # | Finding | Severity | Resolution |
+|---|---------|----------|-----------|
+| 1 | `context-summary.py` has `required=True` on `--reports-dir`, `--deviations-file`, `--output` — `--feature-dir` resolution logic assumes they can be omitted | BLOCKING | Updated Task 8 Step 4: change all three to `required=False, default=None`, add post-parse validation that at least one of `--feature-dir` or explicit paths is provided. RESOLVED |
+| 2 | Pydantic validator path uses `dirname`-relative while `VALIDATE_PLAN_SCRIPT` uses `$SUPERPOWERS_ROOT` — inconsistent patterns | IMPORTANT | Added step to Task 5 Step 4: update `PYDANTIC_VALIDATOR` to `$SUPERPOWERS_ROOT/skills/scripts/models/validators.py`. RESOLVED |
+| 3 | Task 4 Step 9 contains contradictory code snippet (broken `feat_path` approach + "Wait —" comment before correct approach) | IMPORTANT | Removed incorrect snippet. Only the correct `if [ -n "$FEAT" ]` version remains. RESOLVED |
+| 4 | Task 8 resolution logic has dead `== "reports/"` and `== "DEVIATIONS.md"` comparisons (defaults are None) | IMPORTANT | Removed dead comparisons from plan snippet. Resolution logic now checks `if not args.reports_dir:` only. RESOLVED |
+| 5 | Task 6: bare `python3` at line 149 not documented as intentional | IMPORTANT | Added explicit note to Task 6 explaining this is intentional for stdlib-only JSON encoding, consistent with sdd-pre-dispatch-hook.sh pattern. RESOLVED |
+| 6 | Task 4 Step 17 references SDD REMINDER paths but provides no replacement snippet | IMPORTANT | Added full replacement `CONTEXT=` string with `${REPORTS_DIR}` and `${DEVIATIONS_FILE}` interpolated. RESOLVED |
+| 7 | Task 4 Steps 11 and 14 error messages contain embedded command strings with hardcoded paths | IMPORTANT | Added explicit notes to both steps identifying the embedded command paths and their replacements. RESOLVED |
 
-### Order #2 (IMPORTANT) — yaml import fragility in Task 7
-**Finding:** `done_with_concerns_check` calls `yaml.safe_load()` but yaml import is conditional; could be None.
-**Module:** 2
-**Resolution:** DEFERRED TO MODULE 2. Will instruct Task 7 implementer to use unconditional `import yaml` since the script already hard-depends on PyYAML via validators.py.
-**Status:** RESOLVED (deferred with tracking)
+## Cross-Reference Findings (auditor noted, not orders)
 
-### Order #3 (IMPORTANT) — conftest.py vs explicit sys.path in Tasks 2/4
-**Finding:** Plan's Task 2 and Task 4 code snippets include `sys.path.insert(0, ...)` but `tests/unit/conftest.py` already adds the models directory to sys.path. Existing pattern (`test_plan_model.py`) does NOT include explicit sys.path manipulation.
-**Module:** 1
-**Resolution:** RESOLVED NOW. Will instruct Task 2 and Task 4 implementers to follow the established `test_plan_model.py` pattern — no `sys.path.insert` calls. The conftest.py handles this. The plan code snippets diverge from the pattern reference; the pattern reference takes precedence.
-**Status:** RESOLVED
+- Task 12 covers 3 of 6 prompt templates listed in distilled spec. Missing: `implementer-prompt.md`, `spec-compliance-reviewer-prompt.md`, `code-quality-reviewer-prompt.md`. Auditor did not issue an order (expects spec reviewer to catch during execution). Controller will ensure these are addressed.
+- `estimate-task-tokens.py` at line 436 uses bare `python3` (pre-existing, not introduced by this migration). Documented, not changed.
 
-### Order #4 (IMPORTANT) — Progress strict model vs existing dict shapes in Task 9
-**Finding:** `Progress` has `extra="forbid"` (inherited from StrictModel). Existing `controller-checkpoint.py` progress dicts may have unexpected keys that would cause ValidationError.
-**Module:** 2
-**Resolution:** DEFERRED TO MODULE 2. Will add explicit verification step in Task 9 implementer dispatch to grep all progress dict constructions and verify field compatibility.
-**Status:** RESOLVED (deferred with tracking)
+## Stale Artifact Archival (FYI)
 
-### Order #5 (IMPORTANT) — extract-execution-trace.py VALID_STATUSES import cascade
-**Finding:** After Task 8 removes `STATUS_VALUE_PATTERN`, `extract-execution-trace.py`'s try block fails, cascading to hardcoded fallbacks for BOTH `STATUS_VALUE_PATTERN` AND `VALID_STATUSES`. Re-exported `VALID_STATUSES` is never reached.
-**Module:** 2
-**Resolution:** DEFERRED TO MODULE 2. Will log as accepted deviation — fallback values match current status enum. If status enum ever changes, `extract-execution-trace.py` would need updating. Spec explicitly states "has its own local fallback regex — unaffected by removal."
-**Status:** RESOLVED (deferred with tracking — logged in DEVIATIONS.md)
-
-## Summary
-
-- 1 order resolved immediately (Order #3 — Module 1 pattern inconsistency)
-- 4 orders deferred to Module 2 pre-dispatch with explicit tracking
-- All orders have clear resolution paths
-- No BLOCKING orders
-
-Proceeding to Module 1 SDD execution.
+Pydantic Phase 2 artifacts archived before creating fresh workspace:
+- `DEVIATIONS.md` → `DEVIATIONS-pydantic-phase-2.md`
+- 80+ report files → `reports/archive-pydantic-phase-2/`
+- Three prior archives already existed: `archive-prior-sdd/`, `archive-pydantic-phase-1/`, `archive-sdd-enforcement-hardening/`

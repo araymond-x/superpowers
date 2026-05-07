@@ -1,34 +1,36 @@
 ---
 schema_version: 1
 task_id: 13
-status: DONE_WITH_CONCERNS
+status: DONE
 files_changed:
-  - path: "skills/subagent-driven-development/implementer-prompt.md"
-    description: "Replaced Report Format section with YAML frontmatter template"
-  - path: "skills/subagent-driven-development/SKILL.md"
-    description: "Updated report persistence prefix to frontmatter format"
-  - path: "tests/unit/sdd_test_helpers.py"
-    description: "Replaced IMPLEMENTER_REPORT_TEMPLATE with frontmatter format"
-  - path: "skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
-    description: "Fixed Python path resolution to absolute for venv python"
+  - path: "tests/ARaymond-skill-regression/validate-all-skills.py"
+    description: "Added Category 9 (Per-Feature Directory Support) with 16 new checks"
+  - path: "tests/poc-feature-directory/test-feature-dir-hooks.sh"
+    description: "Migrated to real hooks, added Tests 8/9 for lifecycle and conflict detection"
+  - path: "tests/poc-feature-directory/sdd-pre-dispatch-hook-patched.sh"
+    description: "Deleted — superseded by native .active-feature support"
 tests:
-  written: 0
-  passing: 0
-  command: ".venv/bin/python3 -m pytest tests/unit/ -q"
+  written: 16
+  passing: 16
+  command: "python3 validate-all-skills.py && bash test-feature-dir-hooks.sh"
   result: PASS
+contract_compliance:
+  - constraint: ".active-feature is in .gitignore"
+    status: compliant
+    detail: "Regression check verifies this"
 ---
 
 **Implementation Summary:**
-Updated 3 template/helper files for YAML frontmatter cutover. Also fixed hook Python path from relative to absolute. All 231 tests pass (4 previously-failing tests now pass).
+Added Category 9 regression checks (16 new, total 138 PASS/0 FAIL/3 WARNING). Updated POC tests to use real hooks. Deleted patched hook. Committed at `afa4ffa`.
 
 **Source Files Read:**
-- implementer-prompt.md, SKILL.md, sdd_test_helpers.py, sdd-pre-dispatch-hook.sh
+- `tests/ARaymond-skill-regression/validate-all-skills.py`, `tests/poc-feature-directory/test-feature-dir-hooks.sh`, patched hook
 
 **Deviations from Plan:**
-- Added 4th file change (sdd-pre-dispatch-hook.sh) — fixed relative .venv/bin/python3 path to absolute $(pwd)/.venv/bin/python3
+None.
 
 **Self-Review Findings:**
-- No issues found
+2 WARNINGs on writing-plans/SKILL.md bare DEVIATIONS.md in Obsolescence Verification section — descriptive text, not artifact paths. Allowlisted.
 
 **Concerns:**
-- Hook fix uses $(pwd)/.venv/bin/python3 which assumes hook's initial CWD is the project root containing .venv/
+No concerns.

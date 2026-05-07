@@ -1,42 +1,56 @@
-# Task 000 Report — Contract Verification
-# Date: 2026-04-27
-# Status: DONE
+---
+schema_version: 1
+task_id: 0
+status: DONE
+files_changed:
+  - path: "docs/imp-plans/2026-05-02-per-feature-directory-module-1-infrastructure.md"
+    description: "Checked off Task 0 verification steps"
+tests:
+  written: 0
+  passing: 0
+  command: "N/A"
+  result: PASS
+contract_compliance:
+  - constraint: ".active-feature format is single-line plaintext relative path"
+    status: compliant
+    detail: "Verified in distilled spec Contract Facts section"
+  - constraint: "Feature dir format is docs/imp-plans/YYYY-MM-DD-<feature-name>/"
+    status: compliant
+    detail: "Verified in distilled spec Contract Facts section"
+  - constraint: "deviations.md is lowercase"
+    status: compliant
+    detail: "Verified in distilled spec — was DEVIATIONS.md"
+  - constraint: "Hooks fall back to root-level paths when FEAT is empty"
+    status: compliant
+    detail: "Verified in distilled spec Hook Changes section"
+  - constraint: "SUPERPOWERS_ROOT self-resolution preamble pattern"
+    status: compliant
+    detail: "Verified in sdd-pre-dispatch-hook.sh lines 27-34"
+---
+
+# Task 0: Contract Verification
 
 **Status:** DONE
 
 **Implementation Summary:**
-Created ground-truth fixture file and contract verification tests for Pydantic Phase 2. The fixture captures all schema facts from the distilled spec (field names, Literal values, validator names/counts, schema version). The test file verifies the fixture exists with correct structure, that Phase 1 base classes are importable with expected attributes, that CURRENT_SCHEMA_VERSION matches between code and fixture, and that enum/Literal value sets are complete.
+Verified all 5 contract facts from the distilled spec against source files. SUPERPOWERS_ROOT pattern confirmed at lines 27-34 of sdd-pre-dispatch-hook.sh. .gitignore confirmed to not yet contain .active-feature. No discrepancies found.
 
 **Files Changed:**
-- `tests/fixtures/reports/contracts/schema_facts.json` — ground-truth fixture with ImplementerReport and CheckpointResult schema facts extracted from the distilled spec
-- `tests/unit/test_models/test_phase2_contracts.py` — 6 contract verification tests anchoring Phase 2 implementation to spec facts
-
-**Source Files Read:**
-- `skills/scripts/models/_base.py` — confirmed CURRENT_SCHEMA_VERSION = 1, StrictModel with extra="forbid", SchemaVersionedModel with schema_version field and field_validator
-- `skills/scripts/models/plan.py` — studied pattern: Literal type aliases, nested StrictModel classes, @model_validator(mode="after") with -> "Plan" return annotation, Field(default_factory=list) for optional lists
-- `docs/specs/2026-04-25-pydantic-phase-2-design-distilled.md` — extracted all Contract Facts
-- `tests/unit/conftest.py` — confirmed it already handles sys.path.insert for the models directory
-
-**CLAUDE.md Files Read:**
-- `/Users/araymond/projects/claude-custom/superpowers/CLAUDE.md` — test commands, file structure, commit style
-- None found in tests/unit/test_models/ or tests/fixtures/ directories
+- `docs/imp-plans/2026-05-02-per-feature-directory-module-1-infrastructure.md` — checked off Task 0 steps
 
 **Tests:**
-- Tests written: 6 (test_schema_facts_file_exists, test_schema_facts_has_required_structure, test_base_classes_importable, test_schema_version_matches_base, test_implementer_report_status_values_complete, test_checkpoint_result_check_status_values_complete)
-- Tests passing: 6
-- Test command: .venv/bin/python3 -m pytest tests/unit/test_models/test_phase2_contracts.py -v
-- Test output summary: PASS — all 6 passed in 0.07s
+N/A — verification-only task, no tests written.
 
-**Contract Compliance:**
-- All contract facts verified against distilled spec and base class source code
-- CURRENT_SCHEMA_VERSION = 1 confirmed in both code and fixture
-- All Literal value sets match spec exactly
-
-**Deviations from Plan:**
-- None — implemented exactly as specified
+**Source Files Read:**
+- `docs/specs/2026-05-02-per-feature-directory-design-distilled.md` — contract facts
+- `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (lines 27-34) — SUPERPOWERS_ROOT pattern
+- `.gitignore` — verified .active-feature not present
 
 **Self-Review Findings:**
-- No issues found
+No issues. All contract facts match source files exactly.
 
 **Concerns:**
-- No concerns
+None.
+
+**Deviations from Plan:**
+None.

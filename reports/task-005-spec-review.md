@@ -1,5 +1,13 @@
-# Task 005 Spec Review — Test Fixtures
-# Date: 2026-04-27
-# Verdict: PASS
+# Task 5 Spec Compliance Review
 
-All 6 fixtures verified: 2 valid (minimal-report.md, full-featured-report.md), 4 invalid (missing-status.md, bad-status-enum.md, test-counts-inconsistent.md, no-files-for-done.md). All use YAML frontmatter. Valid fixtures have correct field values. Invalid fixtures each target one specific validation error. File paths match plan. No extra files created.
+**Verdict:** PASS
+
+All 7 steps implemented correctly:
+1. SUPERPOWERS_ROOT preamble at line 24 ✓
+2. PYTHON derivation lines 26-30 ✓
+3. VALIDATE_PLAN_SCRIPT uses $SUPERPOWERS_ROOT ✓
+4. .active-feature gate exits 2 when missing ✓
+5. Manifest discovery checks $FEAT first ✓
+6. PYDANTIC_VALIDATOR uses $SUPERPOWERS_ROOT ✓
+7. $PYTHON used for Pydantic validation ✓
+8. Review report search checks $FEAT first ✓

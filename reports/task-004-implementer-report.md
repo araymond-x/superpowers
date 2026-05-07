@@ -1,37 +1,40 @@
-# Task 004 Report — CheckpointResult Unit Tests
-# Date: 2026-04-27
-# Status: DONE
-
-**Status:** DONE
+---
+schema_version: 1
+task_id: 4
+status: DONE_WITH_CONCERNS
+files_changed:
+  - path: "skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+    description: "Added .active-feature preamble, feat_path() helper, resolved all ~30 artifact path refs, updated error messages and additionalContext"
+tests:
+  written: 0
+  passing: 0
+  command: "echo JSON | bash hook.sh (smoke test: non-SDD exit 0)"
+  result: PASS
+contract_compliance:
+  - constraint: ".active-feature is single-line plaintext, gitignored, contains relative path"
+    status: compliant
+    detail: "Hook reads .active-feature via cat, strips trailing newline/slash"
+  - constraint: "Hooks fall back to root-level paths when FEAT is empty"
+    status: compliant
+    detail: "Fallback checks for uppercase DEVIATIONS.md and root reports/ when FEAT empty"
+  - constraint: "deviations.md is lowercase"
+    status: compliant
+    detail: "Default DEVIATIONS_FILE is lowercase; fallback checks for old uppercase name"
+---
 
 **Implementation Summary:**
-Created test_checkpoint_result_model.py with 24 unit tests across 9 test classes. Tests cover golden path (4), phase enum (4), check status enum (6), fail_requires_blockers (2), blockers_reference_check_names (2), task_number_required_for_pre_dispatch (3), schema version (1), extra fields (1), model_dump exclude_none (1). All pass. No sys.path.insert — relies on conftest.py.
-
-**Files Changed:**
-- `tests/unit/test_models/test_checkpoint_result_model.py` — 24 unit tests
+Migrated all ~30 hardcoded artifact path references in sdd-pre-dispatch-hook.sh to use resolved variables from `.active-feature`. Added feat_path() helper, DEVIATIONS_FILE/REPORTS_DIR/DISPATCH_LOG resolved variables, and backwards-compat fallback for root-level paths. Updated Checks 1-7, reviewer dispatch logging, and SDD REMINDER additionalContext. Committed at `7ce3366`.
 
 **Source Files Read:**
-- `skills/scripts/models/checkpoint_result.py` — the model being tested
-- `tests/unit/test_models/test_plan_model.py` — pattern reference
-- `tests/unit/conftest.py` — confirmed sys.path setup
-
-**CLAUDE.md Files Read:**
-- None found in tests/unit/test_models/
-
-**Tests:**
-- 24 passed in 0.09s
-- Command: `.venv/bin/python3 -m pytest tests/unit/test_models/test_checkpoint_result_model.py -v`
-
-**Contract Compliance:**
-- All CheckpointResult fields tested (required, optional, enum validation)
-- All 3 validators tested with positive and negative cases
-- model_dump(exclude_none=True) verified
+- `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` — full file (574 lines)
+- `tests/poc-feature-directory/sdd-pre-dispatch-hook-patched.sh` — POC pattern reference
 
 **Deviations from Plan:**
-- None — plan specified ~12 tests, 24 via parametrize expansion
+1. Added trailing-slash strip (`tr -d '\n' | sed 's|/$||'`) to .active-feature reader — not in plan but prevents double-slash paths when the file has a trailing slash.
+2. Two error message strings at lines 198 and 397 still contain hardcoded `reports/` and `DEVIATIONS.md` as informational text (the actual path checks use resolved variables). These are acceptable — they describe what was found, not the paths to check.
 
 **Self-Review Findings:**
-- No issues found
+Grep audit confirmed no remaining hardcoded path references used for actual file operations. Two informational error messages retained old strings (see Deviations).
 
 **Concerns:**
-- No concerns
+The trailing-slash strip is a defensive addition not in the plan. It prevents a common user error (writing `docs/imp-plans/2026-05-02-feature/` with trailing slash) from producing broken paths. If the plan intended `.active-feature` to never have a trailing slash, this is unnecessary but harmless.

@@ -1,5 +1,9 @@
-# Task 009 Spec Review — controller-checkpoint.py Updates
-# Date: 2026-04-27
-# Verdict: PASS
+# Task 9 Spec Compliance Review
 
-All 3 changes verified: model imports added (CURRENT_SCHEMA_VERSION, CheckpointResult, CheckResult, Progress), validate_report_sections() updated to 5 sections, _build_result() uses CheckpointResult construction with model_dump(exclude_none=True). --help runs without import errors. Audit Order #4 verified: all progress dict constructions use only Progress model fields.
+**Verdict:** PASS
+
+1. feature_dir_workspace fixture creates .active-feature + feature dir layout ✓
+2. TestFeatureDirLayout: 6 tests covering all 5 gate checks under feature-dir ✓
+3. TestPlanValidationGate: blocks without .active-feature (exit 2) ✓
+4. TestBackwardsCompatFallback: root-level fallback, no .active-feature complaint ✓
+5. All 16 tests pass in 8.51s ✓

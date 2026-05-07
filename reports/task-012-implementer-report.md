@@ -3,27 +3,38 @@ schema_version: 1
 task_id: 12
 status: DONE
 files_changed:
-  - path: "tests/unit/test_validators/test_validate_report_pydantic.py"
-    description: "Created 9 CLI entry-point tests for validators.py report subcommand"
+  - path: "skills/subagent-driven-development/controller-partner-prompt.md"
+    description: "Updated partner save path to <feature-dir>/reports/"
+  - path: "skills/subagent-driven-development/pre-execution-audit-prompt.md"
+    description: "Updated audit paths to <feature-dir>/reports/"
+  - path: "skills/subagent-driven-development/trace-auditor-prompt.md"
+    description: "Updated DEVIATIONS.md → <feature-dir>/deviations.md, reports/ → <feature-dir>/reports/"
+  - path: "skills/subagent-driven-development/references/report-naming-convention.md"
+    description: "Updated example paths with <feature-dir>/ prefix and explanatory note"
+  - path: "skills/writing-plans/references/module-template.md"
+    description: "Updated parent plan path to <feature-dir>/plan.md"
 tests:
-  written: 9
-  passing: 9
-  command: ".venv/bin/python3 -m pytest tests/unit/test_validators/test_validate_report_pydantic.py -v"
+  written: 0
+  passing: 0
+  command: "N/A — markdown template changes"
   result: PASS
+contract_compliance:
+  - constraint: "deviations.md is lowercase"
+    status: compliant
+    detail: "trace-auditor-prompt uses <feature-dir>/deviations.md"
 ---
 
 **Implementation Summary:**
-Created test_validate_report_pydantic.py with 9 subprocess tests covering valid reports (2), invalid reports (4), infrastructure errors (2), and bypass mode (1). All pass.
+Updated 5 prompt template/reference files with <feature-dir>/ path prefix. Checked implementer/spec-reviewer/code-quality-reviewer prompts — none had save paths to update. Committed at `25d0174`.
 
 **Source Files Read:**
-- tests/unit/test_validators/test_validate_plan_pydantic.py — pattern reference
-- skills/scripts/models/validators.py — implementation under test
+All 8 files read. 5 modified, 3 unchanged (implementer/reviewer prompts don't contain save paths).
 
 **Deviations from Plan:**
-- None — plan expected ~10, got 9 (the provided code snippet had 9)
+None.
 
 **Self-Review Findings:**
-- No issues found
+No issues found.
 
 **Concerns:**
-- No concerns
+No concerns.

@@ -1,5 +1,9 @@
-# Task 012 Spec Review — CLI + Consumer Tests
-# Date: 2026-04-27
-# Verdict: PASS
+# Task 12 Spec Compliance Review
 
-All 9 tests pass: 2 valid reports (exit 0), 4 invalid reports (exit 1 with VALIDATION FAILED), 1 missing file (exit 2), 1 no-frontmatter (exit 1 with Phase 2 message), 1 bypass (exit 0 with BYPASS). Pattern follows test_validate_plan_pydantic.py.
+**Verdict:** PASS (after fix)
+
+- controller-partner-prompt: <feature-dir>/reports/partner-review-NNN.md ✓
+- pre-execution-audit-prompt: both audit paths use <feature-dir>/reports/ ✓
+- trace-auditor-prompt: deviations.md lowercase, <feature-dir>/reports/ ✓ (line 29 fixed in 997bb9b)
+- report-naming-convention: example paths with <feature-dir>/ and explanatory note ✓
+- module-template: parent plan path <feature-dir>/plan.md ✓
