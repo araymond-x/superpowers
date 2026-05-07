@@ -15,7 +15,6 @@ This fork is installed via symlinks, NOT as a marketplace plugin. The symlink ap
 
 ```
 ~/.claude/skills/superpowers/       → ~/projects/claude-custom/superpowers/skills/
-~/.claude/agents/superpowers-code-reviewer.md  → .../agents/code-reviewer.md
 ~/.claude/commands/superpowers/*.md  (standalone files — NOT in repo, regenerate per machine)
 ~/.claude/settings.json             (hooks + permissions — NOT in repo)
 ```
@@ -47,22 +46,6 @@ All 15 skills are available immediately (14 upstream + 1 new: `handoff-acceptanc
 ```bash
 find -L ~/.claude/skills/superpowers -name "SKILL.md" | wc -l
 # Expected: 15
-```
-
----
-
-## Step 2: Symlink Agent
-
-The fork renames the agent to avoid collision with any existing `~/.claude/agents/code-reviewer.md`.
-
-```bash
-ln -s ~/projects/claude-custom/superpowers/agents/code-reviewer.md \
-      ~/.claude/agents/superpowers-code-reviewer.md
-```
-
-**Verify:**
-```bash
-ls -la ~/.claude/agents/superpowers-code-reviewer.md
 ```
 
 ---
@@ -233,9 +216,6 @@ find -L ~/.claude/skills/superpowers -name "SKILL.md" | wc -l
 # Commands: expect 15 (must match skills)
 ls ~/.claude/commands/superpowers/*.md | wc -l
 
-# Agent symlink
-ls -la ~/.claude/agents/superpowers-code-reviewer.md
-
 # Session-start hook
 grep -c "session-start" ~/.claude/settings.json
 
@@ -264,15 +244,12 @@ After merge, resolve conflicts in these files (all contain fork customizations):
 
 | File | What to Preserve |
 |------|-----------------|
-| `agents/code-reviewer.md` | `name: superpowers-code-reviewer` in frontmatter |
-| `skills/requesting-code-review/SKILL.md` | `superpowers-code-reviewer` (3 occurrences) |
-| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | `superpowers-code-reviewer` (1 occurrence) |
 | `skills/brainstorming/SKILL.md` | All v0.1 improvements (spec distillation, feature archetypes, worktree step, mandatory handoff) |
 | `skills/writing-plans/SKILL.md` | All v0.1 improvements (plan modules, Task 0, Contract Constraints, Feature Footprint, 15-category reviewer) |
 | `skills/subagent-driven-development/SKILL.md` | All v0.1 improvements (controller discipline, review enforcement, DEVIATIONS.md, file-based reports, pre-completion gate) |
 | `skills/subagent-driven-development/implementer-prompt.md` | 10-section structured report, Contract Constraints passthrough, Source Files mandate |
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Contract verification, severity gradation, BASE_SHA placeholder |
-| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Dead code blocking, implementer report placeholder, agent ref |
+| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | All v0.1 fork improvements (dead code BLOCKING, [NEEDS_CONTEXT] label, IMPLEMENTER_REPORT placeholder, per-file SRP check, contract-constraint tracing) |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | 15-category mechanical checklist, cross-doc audit |
 | `skills/using-git-worktrees/SKILL.md` | Worktree location convention: `.worktrees/` only; sibling/global alternatives removed |
 
@@ -326,7 +303,7 @@ Key changes applied across all skills:
 |------|-------|---------|-------------------|
 | `subagent-driven-development/implementer-prompt.md` | SDD | Dispatched per task to implementing subagent | 10-section structured report format, Contract Constraints passthrough, Source Files mandate (`[CONTROLLER: paste list]`), role statement, CLAUDE.md enforcement reminder |
 | `subagent-driven-development/spec-reviewer-prompt.md` | SDD | Dispatched after each task for spec compliance review | Contract verification, BLOCKING vs ADVISORY severity gradation, BASE_SHA/HEAD_SHA placeholder, role statement |
-| `subagent-driven-development/code-quality-reviewer-prompt.md` | SDD | Dispatched after spec review for code quality review | Dead code = BLOCKING (not Minor), implementer report placeholder `[CONTROLLER: paste full report]`, agent ref `superpowers-code-reviewer`, role statement |
+| `subagent-driven-development/code-quality-reviewer-prompt.md` | SDD | Dispatched after spec review for code quality review | Dead code = BLOCKING (not Minor), implementer report placeholder `[CONTROLLER: paste full report]`, dispatch type `general-purpose` (post-2026-05-07 migration), role statement |
 | `subagent-driven-development/pre-execution-audit-prompt.md` | SDD | NEW: authoritative auditor before Task 1 dispatch | 7 honesty questions, binding remediation orders, role as "authoritative auditor" |
 | `subagent-driven-development/honesty-check-prompt.md` | SDD | User-facing compliance verification prompt. Mandatory before Pre-Completion Gate. | Controller outputs 7 questions for the user to paste back; controller then answers honestly. Has caught 3 major violations. |
 | `subagent-driven-development/trace-auditor-prompt.md` | SDD | NEW: execution trace review at pre-completion gate | Parses `.jsonl` session file via `extract-execution-trace.py`, checks for skipped reviews, unlogged concerns, missing reports |
@@ -479,15 +456,12 @@ Use `**` (not `*`) — subdirectory paths must match.
 | File | Conflict Type | Resolution |
 |------|--------------|------------|
 | `CLAUDE.md` | Fork docs vs upstream contributor guidelines | Merged both sides: kept fork docs + integrated upstream's Worktree Sessions section and Skill Changes Require Evaluation notes (v5.1.0) |
-| `agents/code-reviewer.md` | `name:` field in frontmatter | Preserve `superpowers-code-reviewer` |
-| `skills/requesting-code-review/SKILL.md` | Agent ref string (3 places) | Preserve `superpowers-code-reviewer` |
-| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref string (1 place) | Preserve `superpowers-code-reviewer` |
 | `skills/brainstorming/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
 | `skills/writing-plans/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
 | `skills/subagent-driven-development/SKILL.md` | Entire skill body (v0.1 promoted) | Keep fork version; cherry-pick upstream additions manually |
 | `skills/subagent-driven-development/implementer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
-| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Agent ref + prompt body | Preserve `superpowers-code-reviewer` + keep fork improvements |
+| `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | Prompt body | Keep fork v0.1 improvements (dead code BLOCKING, [NEEDS_CONTEXT], IMPLEMENTER_REPORT) |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | Entire prompt body | Keep fork version; review upstream changes |
 | `skills/using-git-worktrees/SKILL.md` | Full philosophy rewrite (v5.1.0: env detection, native tool preference, Codex App) | Accepted upstream full rewrite wholesale; re-added NEW SESSION REQUIRED handoff block to Step 4 (hook CWD gotcha) |
 | `skills/using-superpowers/SKILL.md` | Prompt optimization changes | Keep fork version; cherry-pick new platform additions |
@@ -508,7 +482,7 @@ Files with no expected conflicts (fork-only additions):
 | Date | Upstream Version | Commits | Conflicts | Cherry-picks |
 |------|-----------------|---------|-----------|-------------|
 | 2026-03-31 | v5.0.7 (`dd23728`) | 27 | 4 files (CLAUDE.md, brainstorming, writing-plans, codex-tools.md) + writing-skills/using-superpowers auto-merged | "No Placeholders" section from writing-plans; Copilot CLI lines auto-merged into using-superpowers; "two required fields" fix auto-merged into writing-skills |
-| 2026-05-07 | v5.1.0 (`f2cbfbe`) | 3 | 8 files (CLAUDE.md, agents/code-reviewer.md, using-git-worktrees, finishing-a-development-branch, requesting-code-review, subagent-driven-development + code-quality-reviewer-prompt, executing-plans) | Accepted upstream's using-git-worktrees full rewrite + re-added NEW SESSION REQUIRED block; accepted finishing-a-development-branch env detection + kept Step 7 post-completion cleanup; rejected agent deletion (kept superpowers-code-reviewer); absorbed "continuous execution" paragraph in SDD |
+| 2026-05-07 | v5.1.0 (`f2cbfbe`) | 3 | 8 files (CLAUDE.md, agents/code-reviewer.md, using-git-worktrees, finishing-a-development-branch, requesting-code-review, subagent-driven-development + code-quality-reviewer-prompt, executing-plans) | Accepted upstream's using-git-worktrees full rewrite + re-added NEW SESSION REQUIRED block; accepted finishing-a-development-branch env detection + kept Step 7 post-completion cleanup; deferred agent deletion at merge time, then completed it on 2026-05-07 via `code-reviewer-agent-migration` (Needs Context + reflection step promoted to template); absorbed "continuous execution" paragraph in SDD |
 
 ---
 
