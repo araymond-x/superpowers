@@ -68,6 +68,16 @@ Task tool (general-purpose):
     Acknowledge what was done well before listing issues — accurate praise
     helps the implementer trust the rest of the feedback.
 
+    Issue severity categories:
+    - **Critical** — bugs, security issues, data loss risks, broken functionality
+    - **Important** — architecture problems, missing features, poor error handling
+    - **Minor** — code style, optimization, documentation polish
+    - **Needs Context** — finding may be valid but requires additional information
+      to confirm severity; describe what context would resolve the uncertainty
+
+    Before writing findings, reflect on whether your assessment accounts for
+    the full context of the change.
+
     If you find significant deviations from the plan, flag them specifically
     so the implementer can confirm whether the deviation was intentional.
     If you find issues with the plan itself rather than the implementation,
