@@ -3,13 +3,14 @@
 > Part of the subagent-driven-development skill. Referenced from SKILL.md.
 > Also available as `./honesty-check-prompt.md` for dispatch.
 
-Before running the Pre-Completion Gate, present this prompt to the user and STOP. Wait for the user to copy it back to you. Do not self-answer these questions — the user must deliver them.
+Before running the Pre-Completion Gate, output this block exactly and STOP. Wait for the user to paste the questions back to you in a new message. When the user pastes them back, answer each question honestly based on what actually happened in this session. Do not answer the questions preemptively — wait for the user to deliver them.
 
 Output this block exactly:
 
 ```
 ════════════════════════════════════════════════════════════════
- HONESTY CHECK — Please paste this back to me:
+ HONESTY CHECK — Copy the questions below and paste them back
+ to me in your next message. I will answer them honestly.
 
  Be completely honest about the work in this session:
 
