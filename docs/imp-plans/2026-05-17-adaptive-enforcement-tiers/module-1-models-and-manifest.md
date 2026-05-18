@@ -87,13 +87,13 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `SddSession` model validates correctly for both tier profiles
-- [ ] `SddSession` rejects invalid tiers, overlapping task ranges, and extra fields
-- [ ] `Plan` model accepts `enforcement_tier` (optional, defaults to None)
-- [ ] `Module` class accepts `file` (optional, defaults to None)
-- [ ] Existing `Plan` model tests still pass (backward compatible)
-- [ ] `materialize-manifest.py` produces correct JSON for single-module and multi-module plans
-- [ ] Manifest writer is idempotent (no-op when manifest matches plan)
+- [x] `SddSession` model validates correctly for both tier profiles
+- [x] `SddSession` rejects invalid tiers, overlapping task ranges, and extra fields
+- [x] `Plan` model accepts `enforcement_tier` (optional, defaults to None)
+- [x] `Module` class accepts `file` (optional, defaults to None)
+- [x] Existing `Plan` model tests still pass (backward compatible)
+- [x] `materialize-manifest.py` produces correct JSON for single-module and multi-module plans
+- [x] Manifest writer is idempotent (no-op when manifest matches plan)
 
 ---
 
