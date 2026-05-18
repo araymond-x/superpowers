@@ -157,7 +157,7 @@ git commit -m "test: add contract facts fixtures for SddSession model"
 **Pattern References:**
 - `skills/scripts/models/checkpoint_result.py` — follow `SchemaVersionedModel`, `Literal`, `model_validator` pattern
 
-- [ ] **Step 1: Write the model file**
+- [x] **Step 1: Write the model file**
 
 Create `skills/scripts/models/sdd_session.py`:
 
@@ -298,7 +298,7 @@ class SddSession(SchemaVersionedModel):
         return self
 ```
 
-- [ ] **Step 2: Verify import works**
+- [x] **Step 2: Verify import works**
 
 ```bash
 cd skills/scripts/models && ../.venv/bin/python3 -c "from sdd_session import SddSession, TIER_PROFILES; print('OK')"
@@ -306,7 +306,7 @@ cd skills/scripts/models && ../.venv/bin/python3 -c "from sdd_session import Sdd
 
 Expected: `OK`
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/scripts/models/sdd_session.py
@@ -323,7 +323,7 @@ git commit -m "feat: add SddSession Pydantic model for session manifest"
 **Pattern References:**
 - `tests/unit/test_models/test_plan_model.py` — `MINIMAL_PLAN` fixture pattern, `ValidationError` assertions
 
-- [ ] **Step 1: Write the test file**
+- [x] **Step 1: Write the test file**
 
 ```python
 """Tests for SddSession Pydantic model."""
@@ -466,7 +466,7 @@ class TestTierProfiles:
         assert pr.quality_review_mode == "dispatched"
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_models/test_sdd_session_model.py -v
@@ -474,7 +474,7 @@ class TestTierProfiles:
 
 Expected: All tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_models/test_sdd_session_model.py
@@ -491,7 +491,7 @@ git commit -m "test: add SddSession model unit tests"
 **Pattern References:**
 - `skills/scripts/models/plan.py` — existing `Module` and `Plan` classes
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `tests/unit/test_models/test_plan_model.py`:
 
@@ -536,7 +536,7 @@ class TestModuleFileField:
         assert plan.modules[0].file is None
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py::TestEnforcementTierField -v
@@ -544,7 +544,7 @@ class TestModuleFileField:
 
 Expected: FAIL — `enforcement_tier` field not recognized (extra_forbidden)
 
-- [ ] **Step 3: Implement the changes**
+- [x] **Step 3: Implement the changes**
 
 In `skills/scripts/models/plan.py`:
 
@@ -568,7 +568,7 @@ file: str | None = None
 enforcement_tier: Tier | None = None
 ```
 
-- [ ] **Step 4: Run all plan model tests**
+- [x] **Step 4: Run all plan model tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -v
@@ -576,7 +576,7 @@ enforcement_tier: Tier | None = None
 
 Expected: All tests PASS (existing + new)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/scripts/models/plan.py tests/unit/test_models/test_plan_model.py
@@ -590,7 +590,7 @@ git commit -m "feat: add enforcement_tier to Plan model and file to Module"
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/materialize-manifest.py`
 
-- [ ] **Step 1: Write the manifest writer**
+- [x] **Step 1: Write the manifest writer**
 
 Create `skills/subagent-driven-development/scripts/materialize-manifest.py`:
 
@@ -756,14 +756,14 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Make executable and verify import**
+- [x] **Step 2: Make executable and verify import**
 
 ```bash
 chmod +x skills/subagent-driven-development/scripts/materialize-manifest.py
 .venv/bin/python3 -c "import importlib.util; spec = importlib.util.spec_from_file_location('m', 'skills/subagent-driven-development/scripts/materialize-manifest.py'); print('OK')"
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/materialize-manifest.py
@@ -777,7 +777,7 @@ git commit -m "feat: add manifest writer script for SDD session materialization"
 **Files:**
 - Create: `tests/unit/test_materialize_manifest.py`
 
-- [ ] **Step 1: Write test file**
+- [x] **Step 1: Write test file**
 
 ```python
 """Tests for materialize-manifest.py."""
@@ -925,7 +925,7 @@ class TestMultiModuleManifest:
         assert len(result["manifest"]["modules"]) == 2
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_materialize_manifest.py -v
@@ -933,7 +933,7 @@ class TestMultiModuleManifest:
 
 Expected: All tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_materialize_manifest.py
