@@ -234,8 +234,8 @@ class TestEnforcementTierValidation:
         result = run_validate(PLAN_WITH_MICRO_TOO_MANY_TASKS)
         # Should produce a WARNING about micro tier with >3 tasks
         assert result["exit_code"] == 2  # WARNING
-        checks = result["output"].get("checks", {})
-        tier_check = checks.get("enforcement_tier_appropriateness", {})
+        sections = result["output"].get("sections", {})
+        tier_check = sections.get("enforcement_tier_appropriateness", {})
         assert tier_check.get("status") == "WARNING"
 ```
 
@@ -257,29 +257,47 @@ grep -n "frontmatter\|yaml_data\|pydantic" skills/subagent-driven-development/sc
 grep -n "task_count\|TASK_HEADER_RE" skills/subagent-driven-development/scripts/validate-plan.py | head -10
 ```
 
-The file accumulates `blockers` (list of str), `warnings_list` (list of str), and `checks` (dict of str→dict) inside `validate_plan_content()`. `task_count` is computed from `TASK_HEADER_RE.findall()`. The frontmatter is available as `yaml_data` (parsed YAML dict) if the file uses the Pydantic path, or as inline text otherwise.
+The output dict uses `sections` (not `checks`) and `warnings` (not `warnings_list`). The `blockers` list is a list of strings. `task_count` is computed from `TASK_HEADER_RE.findall()`.
 
-Note: `validate-plan.py` has TWO code paths — a Pydantic frontmatter path and a regex-based path. The tier check should use the YAML frontmatter `yaml_data` when available, and fall back to regex detection otherwise.
+**Important**: `validate_plan_content()` does NOT currently parse YAML frontmatter into a dict — it delegates that to the Pydantic subprocess. The new tier check needs in-process access to the frontmatter. You must add parsing.
 
-- [ ] **Step 4: Add tier validation to validate-plan.py**
+- [ ] **Step 4: Add YAML frontmatter parsing to validate_plan_content()**
 
-In the checks section of `validate-plan.py`'s `validate_plan_content()` function, after the existing checks and before the final status computation, add:
+At the top of `validate_plan_content()`, after the `has_frontmatter` boolean check, add in-process YAML parsing:
+
+```python
+# Parse YAML frontmatter into dict for in-process checks
+frontmatter = None
+if has_frontmatter:
+    end_idx = content.find("---", 3)
+    if end_idx != -1:
+        try:
+            import yaml
+            frontmatter = yaml.safe_load(content[3:end_idx])
+        except Exception:
+            frontmatter = None
+```
+
+This gives you a `frontmatter` dict (or None) for the tier check below.
+
+- [ ] **Step 5: Add tier validation using the parsed frontmatter**
+
+After the existing checks and BEFORE the final status computation (`if blockers: status = "FAIL"`), add:
 
 ```python
 # ─── Enforcement tier appropriateness ────────────────────────────────
-# If frontmatter has enforcement_tier, check it against task count
-if frontmatter:
+if frontmatter and isinstance(frontmatter, dict):
     tier = frontmatter.get("enforcement_tier")
     if tier is not None:
         if tier not in ("micro", "standard"):
             blockers.append("enforcement_tier_invalid")
-            checks["enforcement_tier_invalid"] = {
+            sections["enforcement_tier_invalid"] = {
                 "status": "FAIL",
                 "detail": f"enforcement_tier '{tier}' is not valid. Must be 'micro' or 'standard'.",
             }
         elif tier == "micro" and task_count > 3:
-            warnings_list.append("enforcement_tier_appropriateness")
-            checks["enforcement_tier_appropriateness"] = {
+            warnings.append("enforcement_tier_appropriateness")
+            sections["enforcement_tier_appropriateness"] = {
                 "status": "WARNING",
                 "detail": f"enforcement_tier is 'micro' but plan has {task_count} tasks. "
                           "Micro tier is designed for 1-2 tasks. Consider 'standard' for better enforcement.",
@@ -287,8 +305,8 @@ if frontmatter:
 
         modules = frontmatter.get("modules")
         if modules and tier == "micro":
-            warnings_list.append("micro_with_modules")
-            checks["micro_with_modules"] = {
+            warnings.append("micro_with_modules")
+            sections["micro_with_modules"] = {
                 "status": "WARNING",
                 "detail": "enforcement_tier is 'micro' but plan has modules. "
                           "Multi-module plans typically need standard enforcement.",

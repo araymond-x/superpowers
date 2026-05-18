@@ -548,12 +548,13 @@ Expected: FAIL — `enforcement_tier` field not recognized (extra_forbidden)
 
 In `skills/scripts/models/plan.py`:
 
-1. Add import: `from typing import Literal` (already present)
-2. Add `Tier` type alias after `FeatureArchetype`:
+1. Add import of `Tier` from `sdd_session` (single source of truth — do NOT redefine):
 
 ```python
-Tier = Literal["micro", "standard"]
+from sdd_session import Tier
 ```
+
+Note: `sdd_session.py` must be created first (Task 1) before this import works. Task dependency already enforces this.
 
 3. Add to `Module` class:
 
