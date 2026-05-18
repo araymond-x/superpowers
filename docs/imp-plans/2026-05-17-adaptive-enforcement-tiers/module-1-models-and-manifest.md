@@ -107,7 +107,7 @@ tasks:
 - `skills/scripts/models/checkpoint_result.py` — follow `SchemaVersionedModel` pattern
 - `skills/scripts/models/plan.py` — understand existing `Module` class and `Plan` fields
 
-- [ ] **Step 1: Read base classes and verify contract facts**
+- [x] **Step 1: Read base classes and verify contract facts**
 
 Read `skills/scripts/models/_base.py` and confirm:
 - `CURRENT_SCHEMA_VERSION` = 1
@@ -119,14 +119,14 @@ Read `skills/scripts/models/checkpoint_result.py` and note:
 - Uses `model_validator(mode="after")` for cross-field validation
 - Uses `int | None` union syntax
 
-- [ ] **Step 2: Read existing Plan model and note extension points**
+- [x] **Step 2: Read existing Plan model and note extension points**
 
 Read `skills/scripts/models/plan.py` and confirm:
 - `Module` class has: `id: int`, `title: str`, `task_ids: list[int]`
 - `Plan` class has: `feature_archetype: FeatureArchetype`, `modules: list[Module] | None`
 - Validator `module_task_ids_are_consistent` already checks for cross-module task ID collisions
 
-- [ ] **Step 3: Record contract facts as fixtures**
+- [x] **Step 3: Record contract facts as fixtures**
 
 Create a contract facts comment in the test file header (to be expanded in Task 2):
 
@@ -140,7 +140,7 @@ Create a contract facts comment in the test file header (to be expanded in Task 
 # - Midpoint formula: task_range[0] + (range_size + 1) // 2
 ```
 
-- [ ] **Step 4: Commit contract verification**
+- [x] **Step 4: Commit contract verification**
 
 ```bash
 git add tests/unit/test_models/test_sdd_session_model.py
