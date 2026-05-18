@@ -142,13 +142,20 @@ class ProcessRequirements(StrictModel):
     deviations_log: RequirementLevel
     checkpoint_script: RequirementLevel
 
+class ArtifactPaths(StrictModel):
+    """All paths are git-root-relative. Hook resolves against git rev-parse --show-toplevel."""
+    feature_dir: str               # e.g. "docs/imp-plans/2026-05-10-my-feature"
+    reports_dir: str               # e.g. "docs/imp-plans/2026-05-10-my-feature/reports"
+    dispatch_log: str              # e.g. "docs/imp-plans/2026-05-10-my-feature/reports/.dispatch-log"
+    deviations_file: str           # e.g. "docs/imp-plans/2026-05-10-my-feature/deviations.md"
+
 class SddSession(SchemaVersionedModel):
     tier: Tier
-    feature_dir: str
-    plan_file: str
+    paths: ArtifactPaths           # all artifact paths, git-root-relative
+    plan_file: str                 # git-root-relative path to plan file
     active_module_id: int | None = None    # from ModuleState.id
-    active_module_file: str | None = None  # from ModuleState.file
-    task_range: tuple[int, int]  # inclusive [start, end]
+    active_module_file: str | None = None  # git-root-relative path to active module file
+    task_range: tuple[int, int]    # inclusive [start, end]
     total_tasks: int
     midpoint: int
     enforcement: Enforcement
@@ -156,6 +163,7 @@ class SddSession(SchemaVersionedModel):
     completed_modules: list[str] = Field(default_factory=list)
     module_reports_archived: bool = False
     modules: list[ModuleState] | None = None
+    dispatch_log_sentinel: bool = False  # true after hook writes first sentinel line
 ```
 
 ### 4.2 Lifecycle
@@ -251,7 +259,18 @@ def materialize_manifest(plan_frontmatter, feature_dir):
 
 Current: regex `(implement|dispatch).*task\s*[0-9]` on dispatch description.
 
-New: Check whether `.sdd-session.json` exists in the feature directory (resolved via `.active-feature`). If present, any Agent dispatch is subject to enforcement — the hook reads the manifest and applies tier-appropriate checks.
+New: The hook resolves the manifest using a CWD-stable path:
+
+```bash
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+ACTIVE_FEAT="$GIT_ROOT/.active-feature"
+if [ -f "$ACTIVE_FEAT" ]; then
+  FEAT=$(cat "$ACTIVE_FEAT" | tr -d '\n')
+  MANIFEST="$GIT_ROOT/$FEAT/.sdd-session.json"
+fi
+```
+
+This resolves `.active-feature` from the git root (stable) rather than the CWD (unstable after `cd` commands in Bash tool calls). If `.sdd-session.json` exists, the hook reads it and applies tier-appropriate checks. All artifact paths come from the manifest's `paths` object, resolved against `$GIT_ROOT` — no further CWD-relative resolution needed.
 
 **Passthrough logic**: The hook reads `tool_input.subagent_type` from the JSON payload. **Implementation note**: Verify that `subagent_type` is exposed in the PreToolUse hook payload via `claude-code-guide` before implementation — if not available, fall back to description-based detection with the reviewer patterns. Non-implementer dispatches are handled as follows:
 
@@ -305,6 +324,38 @@ SDD SESSION CONTRACT (from .sdd-session.json):
 ```
 
 This makes the declared contract visible to the controller on every dispatch, addressing compliance drift by persistent reminder.
+
+### 5.6 Dispatch Log Sentinel (Anti-Forgery)
+
+**Problem**: The dispatch log is the anti-forgery mechanism — it proves reviews were dispatched through the hook (which logged them), not self-written by the controller. Evidence from M16 honesty check: the controller manually created `.dispatch-log` to unblock dispatches, collapsing the provenance chain.
+
+**Solution**: The hook writes a sentinel line on first reviewer dispatch:
+
+1. On first reviewer dispatch, the hook writes: `# sdd-hook-sentinel <sha256 of session-id + timestamp>` as the first line of `.dispatch-log`. The session-id comes from the hook input JSON.
+2. On subsequent implementer dispatches, the hook checks that the sentinel line is present and matches the expected format. If the file exists but has no sentinel, or the sentinel is malformed, WARN (not BLOCK) — the log may have been forged.
+3. The manifest stores `dispatch_log_sentinel: true` after first dispatch. Honesty checks can verify.
+
+This doesn't make forgery impossible but raises the bar from "create a file" to "reverse-engineer the sentinel scheme" — crossing from accidental to intentional circumvention, which is a human-governance problem.
+
+### 5.7 Path Resolution (CWD-Stable)
+
+**Problem**: When a controller runs `cd` in Bash, the session CWD drifts. The hook inherits the new CWD and fails to find `.active-feature` and artifact paths. Evidence: 2 of 6 M16 blocks were CWD drift.
+
+**Solution**: All hook path resolution uses `git rev-parse --show-toplevel` as the stable anchor:
+
+```bash
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null)
+# Read .active-feature from git root (not CWD)
+FEAT=$(cat "$GIT_ROOT/.active-feature" 2>/dev/null | tr -d '\n')
+# Read manifest from feature dir
+MANIFEST="$GIT_ROOT/$FEAT/.sdd-session.json"
+# All artifact paths from manifest, resolved against git root
+REPORTS_DIR="$GIT_ROOT/$(jq -r '.paths.reports_dir' "$MANIFEST")"
+DISPATCH_LOG="$GIT_ROOT/$(jq -r '.paths.dispatch_log' "$MANIFEST")"
+DEVIATIONS_FILE="$GIT_ROOT/$(jq -r '.paths.deviations_file' "$MANIFEST")"
+```
+
+The manifest's `paths` object stores git-root-relative paths. The hook never constructs paths from conventions — it reads them from the manifest. `cd` in the session cannot affect path resolution.
 
 ---
 
@@ -554,8 +605,10 @@ When each fires:
 - [ ] Process requirements are injected into `additionalContext` on every allowed dispatch
 - [ ] Self-reviews (micro tier) must pass `validate-report.py`
 - [ ] `controller-checkpoint.py` reads from manifest when `--manifest` is provided
+- [ ] Hook resolves all paths from git root via manifest `paths` object (CWD-stable)
+- [ ] Dispatch log sentinel written on first reviewer dispatch; checked on implementer dispatch
 - [ ] All existing unit tests pass (backward compatible)
-- [ ] New unit tests cover manifest schema, tier profiles, hook conditionalization, and module transitions
+- [ ] New unit tests cover manifest schema, tier profiles, hook conditionalization, module transitions, path resolution, and dispatch log sentinel
 - [ ] Regression test suite (validate-all-skills.py) passes with updated check count
 - [ ] Installation verification (verify-symlink-install.sh) passes with updated script count
 
@@ -577,7 +630,7 @@ When each fires:
 | File | Change |
 |------|--------|
 | `skills/scripts/models/plan.py` | Add `enforcement_tier` field to `Plan` model; add `file` field to existing `Module` class |
-| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | Replace regex dispatch detection with manifest-presence; conditionalize checks by tier; inject process requirements |
+| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | Replace regex dispatch detection with manifest-presence; conditionalize checks by tier; inject process requirements; git-root path resolution; dispatch log sentinel |
 | `skills/subagent-driven-development/scripts/controller-checkpoint.py` | Add `--manifest` argument; read enforcement flags from manifest |
 | `skills/subagent-driven-development/SKILL.md` | Add manifest ingestion step; add module transition instructions; add tier-based controller instructions |
 | `skills/writing-plans/SKILL.md` | Add `enforcement_tier` to plan template; add tier selection guidance |
