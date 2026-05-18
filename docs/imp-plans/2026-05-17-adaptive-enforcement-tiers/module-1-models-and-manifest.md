@@ -610,6 +610,7 @@ Exit codes:
 import argparse
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -691,6 +692,18 @@ def materialize(plan_file: str, feature_dir: str) -> int:
     enforcement_data = dict(profile["enforcement"])
     if enforcement_data["context_summary_at"] is None and tier == "standard":
         enforcement_data["context_summary_at"] = midpoint
+
+    # Normalize feature_dir to git-root-relative
+    # The hook resolves paths as $GIT_ROOT/$path — absolute paths would break this.
+    if os.path.isabs(feature_dir):
+        git_root = subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True
+        ).stdout.strip()
+        if git_root and feature_dir.startswith(git_root):
+            feature_dir = os.path.relpath(feature_dir, git_root)
+        else:
+            print(f"WARNING: feature_dir '{feature_dir}' is absolute but not under git root", file=sys.stderr)
 
     paths = ArtifactPaths(
         feature_dir=feature_dir,
@@ -862,8 +875,11 @@ class TestManifestWriter:
         assert result["manifest"]["enforcement"]["pre_execution_audit"] is False
 
     def test_default_tier_is_standard(self):
-        plan = make_plan("standard").replace("# enforcement_tier: standard — added by this plan's own Task 3", "")
-        result = run_materialize(plan)
+        """When enforcement_tier line is absent from frontmatter, default to standard."""
+        plan_lines = make_plan("standard").splitlines()
+        plan_lines = [l for l in plan_lines if not l.strip().startswith("enforcement_tier:")]
+        plan_no_tier = "\n".join(plan_lines)
+        result = run_materialize(plan_no_tier)
         assert result["exit_code"] == 0
         assert result["manifest"]["tier"] == "standard"
 
@@ -878,10 +894,11 @@ class TestManifestWriter:
         # range [0, 9], size 10, midpoint = 0 + (10+1)//2 = 5
         assert result["manifest"]["midpoint"] == 5
 
-    def test_paths_are_feature_dir_relative(self):
-        result = run_materialize(make_plan("standard"), feature_dir="/tmp/test-feat")
-        assert result["manifest"]["paths"]["feature_dir"] == "/tmp/test-feat"
-        assert result["manifest"]["paths"]["reports_dir"] == "/tmp/test-feat/reports"
+    def test_paths_are_git_root_relative(self):
+        result = run_materialize(make_plan("standard"), feature_dir="docs/imp-plans/test-feat")
+        assert result["manifest"]["paths"]["feature_dir"] == "docs/imp-plans/test-feat"
+        assert result["manifest"]["paths"]["reports_dir"] == "docs/imp-plans/test-feat/reports"
+        assert result["manifest"]["paths"]["dispatch_log"] == "docs/imp-plans/test-feat/reports/.dispatch-log"
 
     def test_idempotent_rerun(self):
         feature_dir = tempfile.mkdtemp()

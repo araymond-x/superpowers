@@ -459,12 +459,20 @@ git commit -m "refactor: verify legacy fallback intact in pre-dispatch hook"
 def setup_manifest_workspace(
     tmp_path, tier="standard", task_range=(0, 7), total_tasks=8
 ):
-    """Set up a workspace with .sdd-session.json for manifest-mode testing."""
+    """Set up a workspace with .sdd-session.json for manifest-mode testing.
+
+    Initializes a git repo so git rev-parse --show-toplevel works (required by hook).
+    """
     import json
+    import subprocess
     from pathlib import Path
 
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent / "skills" / "scripts" / "models"))
     from sdd_session import TIER_PROFILES
+
+    # Initialize git repo — hook requires git rev-parse --show-toplevel
+    subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True)
+    subprocess.run(["git", "checkout", "-b", "test-feature"], cwd=str(tmp_path), capture_output=True)
 
     feat_dir = tmp_path / "docs" / "imp-plans" / "test-feature"
     feat_dir.mkdir(parents=True)

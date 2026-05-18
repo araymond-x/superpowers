@@ -247,9 +247,23 @@ class TestEnforcementTierValidation:
 
 Expected: FAIL (no `enforcement_tier_appropriateness` check exists yet)
 
-- [ ] **Step 3: Add tier validation to validate-plan.py**
+- [ ] **Step 3: Discover integration points in validate-plan.py**
 
-In the checks section of `validate-plan.py`, after the existing checks, add:
+The variables referenced below are defined inside `validate_plan_content()` (the main validation function). Run this discovery step first:
+
+```bash
+grep -n "blockers\|warnings_list\|checks\[" skills/subagent-driven-development/scripts/validate-plan.py | head -20
+grep -n "frontmatter\|yaml_data\|pydantic" skills/subagent-driven-development/scripts/validate-plan.py | head -10
+grep -n "task_count\|TASK_HEADER_RE" skills/subagent-driven-development/scripts/validate-plan.py | head -10
+```
+
+The file accumulates `blockers` (list of str), `warnings_list` (list of str), and `checks` (dict of str→dict) inside `validate_plan_content()`. `task_count` is computed from `TASK_HEADER_RE.findall()`. The frontmatter is available as `yaml_data` (parsed YAML dict) if the file uses the Pydantic path, or as inline text otherwise.
+
+Note: `validate-plan.py` has TWO code paths — a Pydantic frontmatter path and a regex-based path. The tier check should use the YAML frontmatter `yaml_data` when available, and fall back to regex detection otherwise.
+
+- [ ] **Step 4: Add tier validation to validate-plan.py**
+
+In the checks section of `validate-plan.py`'s `validate_plan_content()` function, after the existing checks and before the final status computation, add:
 
 ```python
 # ─── Enforcement tier appropriateness ────────────────────────────────

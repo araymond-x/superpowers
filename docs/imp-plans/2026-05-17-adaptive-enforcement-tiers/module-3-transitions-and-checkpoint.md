@@ -160,8 +160,15 @@ def transition(manifest_path: str, completed_module: str, next_module: str) -> i
         print("Not a multi-module plan — no modules in manifest", file=sys.stderr)
         return 1
 
-    # Determine git root from manifest path
-    git_root = str(manifest_file.parent.parent.parent)  # feature_dir/../..
+    # Determine git root robustly
+    git_result = subprocess.run(
+        ["git", "-C", str(manifest_file.parent), "rev-parse", "--show-toplevel"],
+        capture_output=True, text=True,
+    )
+    if git_result.returncode != 0:
+        print(f"Cannot determine git root from {manifest_path}", file=sys.stderr)
+        return 2
+    git_root = git_result.stdout.strip()
 
     # Step 1: Validate completion
     errors = validate_module_completion(manifest, completed_module, git_root)
@@ -503,31 +510,119 @@ git commit -m "feat: add --manifest support to controller-checkpoint.py"
 - [ ] **Step 1: Add manifest-mode tests**
 
 ```python
+import json
+import os
+import subprocess
+import sys
+
+import pytest
+
+CHECKPOINT_SCRIPT = os.path.join(
+    os.path.dirname(__file__), "..", "..",
+    "skills", "subagent-driven-development", "scripts", "controller-checkpoint.py",
+)
+PYTHON = os.path.join(os.path.dirname(__file__), "..", "..", ".venv", "bin", "python3")
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "skills", "scripts", "models"))
+from sdd_session import TIER_PROFILES
+
+
+def setup_checkpoint_workspace(tmp_path, tier="standard"):
+    """Create a workspace with manifest, plan, deviations, and reports for checkpoint testing."""
+    feat_dir = tmp_path / "docs" / "imp-plans" / "test-feature"
+    feat_dir.mkdir(parents=True)
+    reports_dir = feat_dir / "reports"
+    reports_dir.mkdir()
+
+    plan_content = "# Plan\n\n### Task 0: Setup\n- [x] Done\n\n### Task 1: Build\n- [x] Done\n"
+    (feat_dir / "plan.md").write_text(plan_content)
+    (feat_dir / "deviations.md").write_text("# Deviations\n")
+
+    profile = TIER_PROFILES[tier]
+    manifest = {
+        "schema_version": 1,
+        "tier": tier,
+        "paths": {
+            "feature_dir": str(feat_dir.relative_to(tmp_path)),
+            "reports_dir": str(reports_dir.relative_to(tmp_path)),
+            "dispatch_log": str((reports_dir / ".dispatch-log").relative_to(tmp_path)),
+            "deviations_file": str((feat_dir / "deviations.md").relative_to(tmp_path)),
+        },
+        "plan_file": str((feat_dir / "plan.md").relative_to(tmp_path)),
+        "active_module_id": None,
+        "active_module_file": None,
+        "task_range": [0, 1],
+        "total_tasks": 2,
+        "midpoint": 1,
+        "enforcement": profile["enforcement"],
+        "process_requirements": profile["process_requirements"],
+        "completed_modules": [],
+        "module_reports_archived": False,
+        "modules": None,
+        "dispatch_log_sentinel": False,
+    }
+    manifest_path = feat_dir / ".sdd-session.json"
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+    return {"manifest_path": manifest_path, "feat_dir": feat_dir, "reports_dir": reports_dir}
+
+
+def run_checkpoint(phase, manifest_path=None, plan_file=None, task_number=None,
+                   deviations_file=None, reports_dir=None):
+    cmd = [PYTHON, CHECKPOINT_SCRIPT, "--phase", phase]
+    if manifest_path:
+        cmd.extend(["--manifest", str(manifest_path)])
+    if plan_file:
+        cmd.extend(["--plan-file", str(plan_file)])
+    if task_number is not None:
+        cmd.extend(["--task-number", str(task_number)])
+    if deviations_file:
+        cmd.extend(["--deviations-file", str(deviations_file)])
+    if reports_dir:
+        cmd.extend(["--reports-dir", str(reports_dir)])
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+    output = json.loads(result.stdout) if result.stdout.strip() else {}
+    return {"exit_code": result.returncode, "output": output, "stderr": result.stderr}
+
+
 class TestManifestMode:
     """Tests for --manifest argument."""
 
     def test_manifest_overrides_plan_file(self, tmp_path):
         """When --manifest is provided, plan_file comes from manifest."""
-        # Create manifest with specific plan_file path
-        # Run checkpoint with --manifest
-        # Verify it reads the plan from the manifest path, not --plan-file
-        pass  # Implement with actual workspace setup
+        ws = setup_checkpoint_workspace(tmp_path)
+        result = run_checkpoint(
+            "pre-execution",
+            manifest_path=ws["manifest_path"],
+            deviations_file=str(ws["feat_dir"] / "deviations.md"),
+            reports_dir=str(ws["reports_dir"]),
+        )
+        # Should not error about missing plan file — manifest provides it
+        assert result["exit_code"] != 3, f"Script error: {result['stderr']}"
 
     def test_micro_tier_skips_honesty_check(self, tmp_path):
         """Pre-completion with micro tier should SKIP honesty check."""
-        # Create micro-tier manifest
-        # Run checkpoint --phase pre-completion --manifest
-        # Verify honesty_check status is SKIP
-        pass  # Implement with actual workspace setup
+        ws = setup_checkpoint_workspace(tmp_path, tier="micro")
+        result = run_checkpoint(
+            "pre-completion",
+            manifest_path=ws["manifest_path"],
+            deviations_file=str(ws["feat_dir"] / "deviations.md"),
+            reports_dir=str(ws["reports_dir"]),
+        )
+        checks = result["output"].get("checks", {})
+        honesty = checks.get("honesty_check", {})
+        assert honesty.get("status") == "SKIP", f"Expected SKIP, got {honesty}"
 
     def test_backward_compat_without_manifest(self, tmp_path):
         """When --manifest absent, --plan-file works as before."""
-        # Run checkpoint with --plan-file only (no --manifest)
-        # Verify existing behavior unchanged
-        pass  # Implement with actual workspace setup
+        ws = setup_checkpoint_workspace(tmp_path)
+        result = run_checkpoint(
+            "pre-execution",
+            plan_file=str(ws["feat_dir"] / "plan.md"),
+            deviations_file=str(ws["feat_dir"] / "deviations.md"),
+            reports_dir=str(ws["reports_dir"]),
+        )
+        assert result["exit_code"] != 3, f"Script error: {result['stderr']}"
 ```
-
-Note: The actual test implementations will follow the patterns in `test_controller_checkpoint_stale.py` — creating plan files, deviations, reports in a temp directory and running the checkpoint script via subprocess.
 
 - [ ] **Step 2: Run tests**
 
