@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import Field, model_validator
 
 from _base import StrictModel, SchemaVersionedModel
+from sdd_session import Tier
 
 FeatureArchetype = Literal["greenfield", "replacement", "extension", "refactor", "migration"]
 
@@ -33,10 +34,12 @@ class Module(StrictModel):
     id: int
     title: str
     task_ids: list[int]
+    file: str | None = None
 
 
 class Plan(SchemaVersionedModel):
     feature_archetype: FeatureArchetype
+    enforcement_tier: Tier | None = None
     source_contracts: str | None = None
     shared_constants: list[SharedConstant] = Field(default_factory=list)
     pattern_references: list[PatternReference] = Field(default_factory=list)

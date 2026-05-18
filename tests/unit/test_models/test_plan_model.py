@@ -5,6 +5,7 @@ from pydantic import ValidationError
 from plan import (
     Plan, Task, Module, SharedConstant, PatternReference, FeatureArchetype,
 )
+from sdd_session import Tier
 from _base import CURRENT_SCHEMA_VERSION
 
 
@@ -189,3 +190,43 @@ class TestModuleValidation:
     def test_no_modules_is_valid(self):
         plan = Plan.model_validate(MINIMAL_PLAN)
         assert plan.modules is None
+
+
+class TestEnforcementTierField:
+    def test_accepts_standard_tier(self):
+        data = {**MINIMAL_PLAN, "enforcement_tier": "standard"}
+        plan = Plan.model_validate(data)
+        assert plan.enforcement_tier == "standard"
+
+    def test_accepts_micro_tier(self):
+        data = {**MINIMAL_PLAN, "enforcement_tier": "micro"}
+        plan = Plan.model_validate(data)
+        assert plan.enforcement_tier == "micro"
+
+    def test_defaults_to_none(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        assert plan.enforcement_tier is None
+
+    def test_rejects_comprehensive(self):
+        data = {**MINIMAL_PLAN, "enforcement_tier": "comprehensive"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+
+class TestModuleFileField:
+    def test_accepts_file_path(self):
+        data = {
+            **MINIMAL_PLAN,
+            "modules": [{"id": 1, "title": "All", "task_ids": [0, 1], "file": "docs/module-1.md"}],
+        }
+        plan = Plan.model_validate(data)
+        assert plan.modules[0].file == "docs/module-1.md"
+
+    def test_defaults_to_none(self):
+        data = {
+            **MINIMAL_PLAN,
+            "modules": [{"id": 1, "title": "All", "task_ids": [0, 1]}],
+        }
+        plan = Plan.model_validate(data)
+        assert plan.modules[0].file is None
