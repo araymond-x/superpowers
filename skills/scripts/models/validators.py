@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""CLI entry points for Pydantic validation of plan, handoff, and report artifacts.
+"""CLI entry points for Pydantic validation of plan, handoff, report, and session artifacts.
 
 Usage:
     python3 validators.py plan <path/to/plan.md> [--schema-version N]
     python3 validators.py handoff <path/to/package-dir/> [--schema-version N]
     python3 validators.py report <path/to/report.md> [--schema-version N]
+    python3 validators.py session <path/to/.sdd-session.json> [--schema-version N]
 
 Exit codes: 0 = pass, 1 = validation fail, 2 = infrastructure error.
 """
 import argparse
+import json
 import os
 import sys
 from pathlib import Path
@@ -224,10 +226,46 @@ def validate_report(path: str, schema_version: int | None = None) -> int:
     return 0
 
 
+def validate_session(path: str, schema_version: int | None = None) -> int:
+    """Validate an SDD session manifest file. Returns exit code."""
+    session_path = Path(path)
+    if not session_path.is_file():
+        print(f"File not found: {path}", file=sys.stderr)
+        return 2
+
+    if _check_bypass():
+        return 0
+
+    try:
+        data = json.loads(session_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        print(f"Invalid JSON in {path}: {e}", file=sys.stderr)
+        return 1
+
+    try:
+        from sdd_session import SddSession
+        SddSession.model_validate(data)
+    except ValidationError as e:
+        print(format_validation_error(e, path), file=sys.stderr)
+        return 1
+    except Exception as e:
+        print(
+            f"VALIDATOR CRASHED (this is a bug in the validator, not your artifact): "
+            f"{type(e).__name__}: {e}",
+            file=sys.stderr,
+        )
+        return 2
+
+    return 0
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pydantic artifact validator")
-    parser.add_argument("command", choices=["plan", "handoff", "report"])
-    parser.add_argument("path", help="Path to plan file, handoff package directory, or report file")
+    parser.add_argument("command", choices=["plan", "handoff", "report", "session"])
+    parser.add_argument(
+        "path",
+        help="Path to plan file, handoff package directory, report file, or session manifest",
+    )
     parser.add_argument(
         "--schema-version",
         type=int,
@@ -242,6 +280,8 @@ def main() -> None:
         sys.exit(validate_handoff(args.path, args.schema_version))
     elif args.command == "report":
         sys.exit(validate_report(args.path, args.schema_version))
+    elif args.command == "session":
+        sys.exit(validate_session(args.path, args.schema_version))
 
 
 if __name__ == "__main__":
