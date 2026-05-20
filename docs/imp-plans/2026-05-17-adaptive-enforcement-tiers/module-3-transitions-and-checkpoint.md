@@ -265,7 +265,7 @@ git commit -m "feat: add transition-module.py for multi-module SDD lifecycle"
 **Files:**
 - Create: `tests/unit/test_transition_module.py`
 
-- [ ] **Step 1: Write tests**
+- [x] **Step 1: Write tests**
 
 ```python
 """Tests for transition-module.py."""
@@ -419,7 +419,7 @@ class TestTransitionModule:
         assert "Module transition" in devs
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_transition_module.py -v
@@ -427,7 +427,7 @@ class TestTransitionModule:
 
 Expected: All tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_transition_module.py
