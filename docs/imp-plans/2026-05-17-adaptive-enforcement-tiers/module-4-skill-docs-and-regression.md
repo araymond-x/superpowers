@@ -62,12 +62,12 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `python3 validators.py session <manifest.json>` validates manifest files
-- [ ] `validate-plan.py` warns on micro tier with >3 tasks
-- [ ] `validate-plan.py` warns on modules with micro tier
-- [ ] SDD SKILL.md documents manifest ingestion and module transitions
-- [ ] Writing-plans SKILL.md includes `enforcement_tier` in plan template
-- [ ] Regression suite passes with updated check counts
+- [x] `python3 validators.py session <manifest.json>` validates manifest files
+- [x] `validate-plan.py` warns on micro tier with >3 tasks
+- [x] `validate-plan.py` warns on modules with micro tier
+- [x] SDD SKILL.md documents manifest ingestion and module transitions
+- [x] Writing-plans SKILL.md includes `enforcement_tier` in plan template
+- [x] Regression suite passes with updated check counts
 
 ---
 
@@ -443,7 +443,7 @@ git commit -m "docs: add enforcement_tier and module file to writing-plans templ
 **Files:**
 - Modify: `tests/ARaymond-skill-regression/validate-all-skills.py`
 
-- [ ] **Step 1: Run existing regression suite**
+- [x] **Step 1: Run existing regression suite**
 
 ```bash
 python3 tests/ARaymond-skill-regression/validate-all-skills.py
@@ -451,7 +451,7 @@ python3 tests/ARaymond-skill-regression/validate-all-skills.py
 
 Note which checks fail due to the new content.
 
-- [ ] **Step 2: Update check counts and patterns**
+- [x] **Step 2: Update check counts and patterns**
 
 Update any hardcoded check counts that changed due to:
 - New `enforcement_tier` in plan template (writing-plans SKILL.md)
@@ -461,7 +461,7 @@ Update any hardcoded check counts that changed due to:
 - New `materialize-manifest.py` script
 - New `transition-module.py` script
 
-- [ ] **Step 3: Run regression suite**
+- [x] **Step 3: Run regression suite**
 
 ```bash
 python3 tests/ARaymond-skill-regression/validate-all-skills.py
@@ -469,7 +469,7 @@ python3 tests/ARaymond-skill-regression/validate-all-skills.py
 
 Expected: All checks PASS
 
-- [ ] **Step 4: Run installation verification**
+- [x] **Step 4: Run installation verification**
 
 ```bash
 bash tests/ARaymond-installation/verify-symlink-install.sh
@@ -477,7 +477,7 @@ bash tests/ARaymond-installation/verify-symlink-install.sh
 
 Expected: All checks PASS (script counts may need updating if new scripts were added)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/ARaymond-skill-regression/validate-all-skills.py
