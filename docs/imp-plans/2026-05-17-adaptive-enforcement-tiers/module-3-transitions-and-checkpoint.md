@@ -63,14 +63,14 @@ tasks:
 
 ## Acceptance Criteria
 
-- [ ] `transition-module.py` validates module completion before allowing transition
-- [ ] Reports archived to `reports/archive-{module-name}/`
-- [ ] Manifest updated with new active module, task range, midpoint
-- [ ] Dispatch log archived and truncated
-- [ ] Module transition logged to deviations.md
-- [ ] `controller-checkpoint.py --manifest` reads from manifest
-- [ ] Micro tier skips honesty check and trace audit in pre-completion
-- [ ] Backward compatible: `--plan-file` without `--manifest` works unchanged
+- [x] `transition-module.py` validates module completion before allowing transition
+- [x] Reports archived to `reports/archive-{module-name}/`
+- [x] Manifest updated with new active module, task range, midpoint
+- [x] Dispatch log archived and truncated
+- [x] Module transition logged to deviations.md
+- [x] `controller-checkpoint.py --manifest` reads from manifest
+- [x] Micro tier skips honesty check and trace audit in pre-completion
+- [x] Backward compatible: `--plan-file` without `--manifest` works unchanged
 
 ---
 

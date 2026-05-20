@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "phase": "pre-completion",
+  "status": "PASS",
+  "checks": {
+    "all_checkboxes_checked": {
+      "status": "PASS",
+      "detail": "119/119 checked"
+    },
+    "no_pending_deviations": {
+      "status": "PASS",
+      "detail": "All DEVIATIONS.md entries are dispositioned"
+    },
+    "all_tasks_have_reports": {
+      "status": "PASS",
+      "detail": "All 21 task(s) have report files in docs/imp-plans/2026-05-17-adaptive-enforcement-tiers/reports"
+    },
+    "all_reports_complete": {
+      "status": "PASS",
+      "detail": "All 21 report(s) have required sections"
+    },
+    "honesty_check_missing": {
+      "status": "PASS",
+      "detail": "Honesty check response present"
+    },
+    "trace_audit_missing": {
+      "status": "PASS",
+      "detail": "Execution trace audit present"
+    },
+    "excessive_minimum_tier_quality": {
+      "status": "PASS",
+      "detail": "5/21 quality reviews are minimum-tier"
+    },
+    "excessive_minimum_tier_partner": {
+      "status": "PASS",
+      "detail": "7/23 partner reviews are minimum-tier"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 21,
+    "tasks_completed": 21,
+    "checkboxes_total": 119,
+    "checkboxes_checked": 119,
+    "percentage": 100
+  }
+}
