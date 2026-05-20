@@ -440,8 +440,13 @@ def _load_manifest_config(args: argparse.Namespace) -> Tuple[Optional[str], Opti
     git_root = _resolve_git_root(manifest_path)
 
     # Prefer active_module_file when set; otherwise use plan_file.
+    # NOTE: active_module_file is a bare filename per Module 1 convention
+    # (deviations.md row 2). Must be joined with feature_dir, not just git_root —
+    # matches the hook's reconstruction at deviations.md row 3 ($GIT_ROOT/$FEAT/$FILE).
     if manifest.active_module_file:
-        args.plan_file = os.path.join(git_root, manifest.active_module_file)
+        args.plan_file = os.path.join(
+            git_root, manifest.paths.feature_dir, manifest.active_module_file
+        )
     else:
         args.plan_file = os.path.join(git_root, manifest.plan_file)
 
