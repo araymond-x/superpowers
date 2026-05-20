@@ -342,7 +342,9 @@ def check_cross_module_collisions(
         for num in extract_task_numbers(content):
             all_tasks.setdefault(num, []).append("additional file {}".format(i))
 
-    collisions = {num: sources for num, sources in all_tasks.items() if len(sources) > 1}
+    collisions = {
+        num: sources for num, sources in all_tasks.items() if len(sources) > 1
+    }
 
     if not collisions:
         return {
@@ -366,7 +368,9 @@ def check_cross_module_collisions(
     }, "cross_module_task_collision"
 
 
-def validate_plan(content: str, additional_contents: Optional[List[str]] = None) -> Dict:
+def validate_plan(
+    content: str, additional_contents: Optional[List[str]] = None
+) -> Dict:
     """
     Run all structural checks on plan content.
 
@@ -384,6 +388,18 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
     plan_lines = len(lines)
     warnings: List[str] = []
     blockers: List[str] = []
+
+    # Parse YAML frontmatter into dict for in-process checks (enforcement_tier, modules)
+    frontmatter: Optional[Dict] = None
+    if has_frontmatter:
+        end_idx = content.find("---", 3)
+        if end_idx != -1:
+            try:
+                import yaml
+
+                frontmatter = yaml.safe_load(content[3:end_idx])
+            except Exception:
+                frontmatter = None
 
     # --- Size: total plan length ---
     has_modules = bool(MODULE_HEADER_RE.search(content))
@@ -409,7 +425,9 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
 
     # If File Map is absent, emit a warning (not a blocker)
     if not sections["file_map"]["present"]:
-        warnings.append("No File Map / File Structure / Code Footprint section found — recommended for plan clarity")
+        warnings.append(
+            "No File Map / File Structure / Code Footprint section found — recommended for plan clarity"
+        )
 
     # If Source Contracts is present and non-empty, Task 0 must exist
     sc_present = sections["source_contracts"]["present"]
@@ -466,16 +484,24 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
     if has_frontmatter:
         validators_path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
-            "..", "..", "scripts", "models", "validators.py"
+            "..",
+            "..",
+            "scripts",
+            "models",
+            "validators.py",
         )
         if os.path.isfile(validators_path):
-            with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as tmp:
+            with tempfile.NamedTemporaryFile(
+                mode="w", suffix=".md", delete=False
+            ) as tmp:
                 tmp.write(content)
                 tmp_path = tmp.name
             try:
                 pydantic_result = subprocess.run(
                     [sys.executable, validators_path, "plan", tmp_path],
-                    capture_output=True, text=True, timeout=10,
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 if pydantic_result.returncode == 1:
                     blockers.append(
@@ -488,6 +514,42 @@ def validate_plan(content: str, additional_contents: Optional[List[str]] = None)
             "No YAML frontmatter detected. Post-Phase 1 plans should include "
             "frontmatter with schema_version, feature_archetype, and tasks fields."
         )
+
+    # --- Enforcement tier appropriateness ---
+    # Valid tier values match sdd_session.Tier (Literal["micro", "standard"]).
+    if frontmatter and isinstance(frontmatter, dict):
+        tier = frontmatter.get("enforcement_tier")
+        if tier is not None:
+            if tier not in ("micro", "standard"):
+                blockers.append("enforcement_tier_invalid")
+                sections["enforcement_tier_invalid"] = {
+                    "status": "FAIL",
+                    "detail": (
+                        "enforcement_tier '{}' is not valid. "
+                        "Must be 'micro' or 'standard'.".format(tier)
+                    ),
+                }
+            elif tier == "micro" and task_count > 3:
+                warnings.append("enforcement_tier_appropriateness")
+                sections["enforcement_tier_appropriateness"] = {
+                    "status": "WARNING",
+                    "detail": (
+                        "enforcement_tier is 'micro' but plan has {} tasks. "
+                        "Micro tier is designed for 1-2 tasks. "
+                        "Consider 'standard' for better enforcement.".format(task_count)
+                    ),
+                }
+
+            modules = frontmatter.get("modules")
+            if modules and tier == "micro":
+                warnings.append("micro_with_modules")
+                sections["micro_with_modules"] = {
+                    "status": "WARNING",
+                    "detail": (
+                        "enforcement_tier is 'micro' but plan has modules. "
+                        "Multi-module plans typically need standard enforcement."
+                    ),
+                }
 
     # --- Overall status ---
     if blockers:
@@ -572,7 +634,9 @@ def main() -> int:
         for path in args.additional_plan_files:
             if not os.path.isfile(path):
                 print(
-                    json.dumps({"error": "Additional plan file not found: {}".format(path)}),
+                    json.dumps(
+                        {"error": "Additional plan file not found: {}".format(path)}
+                    ),
                     file=sys.stderr,
                 )
                 return 3
@@ -580,7 +644,9 @@ def main() -> int:
                 additional_contents.append(read_file(path))
             except OSError as exc:
                 print(
-                    json.dumps({"error": "Could not read additional plan file: {}".format(exc)}),
+                    json.dumps(
+                        {"error": "Could not read additional plan file: {}".format(exc)}
+                    ),
                     file=sys.stderr,
                 )
                 return 3

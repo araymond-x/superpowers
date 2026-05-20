@@ -29,7 +29,9 @@ SCRIPT_PATH = os.path.join(
 )
 
 
-def run_validate(plan_content: str, additional_plan_contents: list | None = None) -> dict:
+def run_validate(
+    plan_content: str, additional_plan_contents: list | None = None
+) -> dict:
     """
     Write plan content to a temp file, run validate-plan.py, return parsed JSON output.
     If additional_plan_contents is provided, writes each to a temp file and passes
@@ -219,26 +221,33 @@ class TestWithinFileDuplicates:
 
     def test_clean_plan_no_duplicates(self):
         result = run_validate(CLEAN_SINGLE_MODULE)
-        assert result["exit_code"] in (0, 2), f"Expected PASS or WARNING, got exit {result['exit_code']}"
+        assert result["exit_code"] in (0, 2), (
+            f"Expected PASS or WARNING, got exit {result['exit_code']}"
+        )
         assert "duplicate_task_numbers" not in result["output"].get("blockers", [])
 
     def test_duplicate_task_1_is_blocker(self):
         result = run_validate(DUPLICATE_WITHIN_FILE)
-        assert result["exit_code"] == 1, f"Expected FAIL (exit 1), got exit {result['exit_code']}"
+        assert result["exit_code"] == 1, (
+            f"Expected FAIL (exit 1), got exit {result['exit_code']}"
+        )
         assert "duplicate_task_numbers" in result["output"]["blockers"]
 
     def test_duplicate_reported_in_blocker_message(self):
         result = run_validate(DUPLICATE_WITHIN_FILE)
         dup_check = result["output"]["sections"].get("duplicate_task_numbers", {})
-        assert "1" in dup_check.get("detail", ""), "Blocker should identify Task 1 as duplicate"
+        assert "1" in dup_check.get("detail", ""), (
+            "Blocker should identify Task 1 as duplicate"
+        )
 
     def test_triple_duplicate_detected(self):
         result = run_validate(TRIPLE_DUPLICATE)
         assert result["exit_code"] == 1
         assert "duplicate_task_numbers" in result["output"]["blockers"]
         dup_check = result["output"]["sections"]["duplicate_task_numbers"]
-        assert "3" in dup_check["detail"] or "1" in dup_check["detail"], \
+        assert "3" in dup_check["detail"] or "1" in dup_check["detail"], (
             "Should report Task 1 appears 3 times"
+        )
 
     def test_single_task_no_duplicate(self):
         result = run_validate(SINGLE_TASK)
@@ -256,14 +265,20 @@ class TestCrossModuleCollisions:
     def test_cross_module_collision_is_blocker(self):
         """M1 has Task 3, M2 also has Task 3 -> FAIL."""
         result = run_validate(MODULE_1_CLEAN, [MODULE_2_COLLISION])
-        assert result["exit_code"] == 1, f"Expected FAIL, got exit {result['exit_code']}"
+        assert result["exit_code"] == 1, (
+            f"Expected FAIL, got exit {result['exit_code']}"
+        )
         assert "cross_module_task_collision" in result["output"]["blockers"]
 
     def test_cross_module_collision_identifies_task(self):
         """Blocker detail should identify Task 3 as the collision."""
         result = run_validate(MODULE_1_CLEAN, [MODULE_2_COLLISION])
-        collision_check = result["output"]["sections"].get("cross_module_task_collision", {})
-        assert "3" in collision_check.get("detail", ""), "Should identify Task 3 as colliding"
+        collision_check = result["output"]["sections"].get(
+            "cross_module_task_collision", {}
+        )
+        assert "3" in collision_check.get("detail", ""), (
+            "Should identify Task 3 as colliding"
+        )
 
     def test_cross_module_no_collision(self):
         """M1 has Tasks 0-3, M2 has Tasks 4-6 -> PASS."""
@@ -317,8 +332,9 @@ class TestModuleHeaderDetection:
     def test_long_plan_with_module_mid_heading_passes(self):
         """'# Feature Name — Module 5: Hooks' should be recognized as modular."""
         result = run_validate(LONG_PLAN_MODULE_MID_HEADING)
-        assert not self._has_size_blocker(result), \
+        assert not self._has_size_blocker(result), (
             "Module in mid-heading should satisfy the modular decomposition check"
+        )
 
     def test_long_plan_with_module_first_word_passes(self):
         """'# Module 5: Hooks' should be recognized as modular."""
@@ -338,12 +354,102 @@ class TestBlockerMessages:
         result = run_validate(DUPLICATE_WITHIN_FILE)
         dup_check = result["output"]["sections"].get("duplicate_task_numbers", {})
         detail = dup_check.get("detail", "").lower()
-        assert any(word in detail for word in ["report", "hook", "overwrite", "sequential"]), \
+        assert any(
+            word in detail for word in ["report", "hook", "overwrite", "sequential"]
+        ), (
             f"Blocker should explain WHY duplicates break the pipeline: {dup_check.get('detail', '')}"
+        )
 
     def test_cross_module_message_explains_hook_impact(self):
         result = run_validate(MODULE_1_CLEAN, [MODULE_2_COLLISION])
-        collision_check = result["output"]["sections"].get("cross_module_task_collision", {})
+        collision_check = result["output"]["sections"].get(
+            "cross_module_task_collision", {}
+        )
         detail = collision_check.get("detail", "").lower()
-        assert any(word in detail for word in ["report", "hook", "overwrite", "sequential"]), \
+        assert any(
+            word in detail for word in ["report", "hook", "overwrite", "sequential"]
+        ), (
             f"Blocker should explain WHY cross-module collisions break the pipeline: {collision_check.get('detail', '')}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Enforcement tier validation
+# ---------------------------------------------------------------------------
+
+
+PLAN_WITH_MICRO_TIER = """\
+---
+schema_version: 1
+feature_archetype: greenfield
+enforcement_tier: micro
+tasks:
+  - id: 0
+    title: "Fix bug"
+  - id: 1
+    title: "Test fix"
+---
+# Plan
+
+**Source Contracts**: None
+**Feature Archetype**: Greenfield
+
+## Code Footprint
+- app/fix.py (modified)
+
+**Task 0** — Fix
+- [ ] Fix the bug
+
+**Task 1** — Test
+- [ ] Test the fix
+"""
+
+PLAN_WITH_MICRO_TOO_MANY_TASKS = """\
+---
+schema_version: 1
+feature_archetype: greenfield
+enforcement_tier: micro
+tasks:
+  - id: 0
+    title: "T0"
+  - id: 1
+    title: "T1"
+  - id: 2
+    title: "T2"
+  - id: 3
+    title: "T3"
+  - id: 4
+    title: "T4"
+---
+# Plan
+
+**Source Contracts**: None
+**Feature Archetype**: Greenfield
+
+## Code Footprint
+- app/thing.py
+
+### Task 0
+- [ ] Do thing 0
+### Task 1
+- [ ] Do thing 1
+### Task 2
+- [ ] Do thing 2
+### Task 3
+- [ ] Do thing 3
+### Task 4
+- [ ] Do thing 4
+"""
+
+
+class TestEnforcementTierValidation:
+    def test_valid_micro_tier_passes(self):
+        result = run_validate(PLAN_WITH_MICRO_TIER)
+        assert result["exit_code"] in (0, 2)  # PASS or WARNING
+
+    def test_micro_with_many_tasks_warns(self):
+        result = run_validate(PLAN_WITH_MICRO_TOO_MANY_TASKS)
+        assert result["exit_code"] == 2  # WARNING
+        sections = result["output"].get("sections", {})
+        tier_check = sections.get("enforcement_tier_appropriateness", {})
+        assert tier_check.get("status") == "WARNING"
