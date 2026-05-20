@@ -80,6 +80,18 @@ NEED_PROV=""
 NEED_CHECKPOINT=""
 NEED_PARTNER=""
 CONTEXT_SUMMARY_AT=""
+PR_DISPATCH=""
+PR_SPEC=""
+PR_QUALITY=""
+PR_PARTNER=""
+PR_DEVLOG=""
+PR_CHECKPOINT=""
+PROCESS_CONTRACT=""
+SENTINEL_LINE=""
+SESSION_ID=""
+SENTINEL_HASH=""
+SENTINEL=""
+TEMP_LOG=""
 
 if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
   FEAT_FROM_ROOT=$(cat "$GIT_ROOT/.active-feature" 2>/dev/null | tr -d '\n' | sed 's|/$||')
@@ -172,7 +184,21 @@ if [ "$MANIFEST_MODE" = true ]; then
         echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$REVIEW_TASK type=$REVIEW_TYPE" >> "$DISPATCH_LOG"
       fi
     fi
-    # (Sentinel logic added in Task 9)
+    # Dispatch log sentinel — write on first reviewer dispatch
+    if [ -f "$DISPATCH_LOG" ]; then
+      SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
+      if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
+        # First dispatch — write sentinel
+        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+        SENTINEL_HASH=$(echo -n "${SESSION_ID}-$(date -u +%Y%m%d%H%M%S)" | shasum -a 256 | cut -d' ' -f1)
+        SENTINEL="# sdd-hook-sentinel $SENTINEL_HASH"
+        # Prepend sentinel to dispatch log
+        TEMP_LOG=$(mktemp)
+        echo "$SENTINEL" > "$TEMP_LOG"
+        cat "$DISPATCH_LOG" >> "$TEMP_LOG"
+        mv "$TEMP_LOG" "$DISPATCH_LOG"
+      fi
+    fi
     exit 0
   fi
 
@@ -289,6 +315,14 @@ check_report_file() {
 }
 
 # ─── Enforcement checks (implementer dispatches only) ─────────────────────
+
+# Check dispatch log sentinel integrity (WARN only, never blocks)
+if [ "$MANIFEST_MODE" = true ] && [ -f "$DISPATCH_LOG" ]; then
+  SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
+  if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
+    echo "WARNING: Dispatch log exists but has no hook-written sentinel. The log may have been manually created." >&2
+  fi
+fi
 
 ERRORS=()
 
@@ -794,6 +828,20 @@ fi
 
 # Build additionalContext with SDD reminder + optional token warning
 CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to ${REPORTS_DIR}/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to ${REPORTS_DIR}/task-N-spec-review.md, (3) Dispatch code quality review and save to ${REPORTS_DIR}/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to ${DEVIATIONS_FILE}, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
+
+if [ "$MANIFEST_MODE" = true ]; then
+  # Read process requirements from manifest for injection
+  PR_DISPATCH=$(jq -r '.process_requirements.subagent_dispatch' "$MANIFEST")
+  PR_SPEC=$(jq -r '.process_requirements.spec_review_mode' "$MANIFEST")
+  PR_QUALITY=$(jq -r '.process_requirements.quality_review_mode' "$MANIFEST")
+  PR_PARTNER=$(jq -r '.process_requirements.partner_review_mode' "$MANIFEST")
+  PR_DEVLOG=$(jq -r '.process_requirements.deviations_log' "$MANIFEST")
+  PR_CHECKPOINT=$(jq -r '.process_requirements.checkpoint_script' "$MANIFEST")
+
+  PROCESS_CONTRACT="SDD SESSION CONTRACT (from .sdd-session.json): Tier: $MANIFEST_TIER | Subagent dispatch: $PR_DISPATCH | Spec review: $PR_SPEC | Quality review: $PR_QUALITY | Partner review: $PR_PARTNER | Deviations log: $PR_DEVLOG | Checkpoint script: $PR_CHECKPOINT"
+
+  CONTEXT="$CONTEXT | $PROCESS_CONTRACT"
+fi
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
