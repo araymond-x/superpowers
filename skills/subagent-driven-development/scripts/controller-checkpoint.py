@@ -37,12 +37,15 @@ import glob
 import json
 import os
 import re
+import subprocess
 import sys
 from pathlib import Path
+from typing import Optional, Tuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
 from _base import CURRENT_SCHEMA_VERSION
 from checkpoint_result import CheckpointResult, CheckResult, Progress
+from sdd_session import SddSession
 
 # Character-to-token approximation (standard industry estimate: 1 token = 4 chars)
 CHARS_PER_TOKEN = 4
@@ -363,6 +366,88 @@ def all_tasks_have_reports(plan_content: str, reports_dir: str) -> dict:
     return {"pass": not missing, "missing": missing}
 
 
+# --- Manifest loader ---
+
+
+def _resolve_git_root(manifest_path: Path) -> str:
+    """Resolve git root from manifest path via `git rev-parse`.
+
+    Prefers `git -C <manifest_parent> rev-parse --show-toplevel` (matches
+    transition-module.py:115-123). Falls back to `parent.parent.parent` with a
+    stderr warning when git is unavailable or the path is outside a repo.
+    """
+    git_result = subprocess.run(
+        ["git", "-C", str(manifest_path.parent), "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    if git_result.returncode == 0:
+        return git_result.stdout.strip()
+
+    fallback = str(manifest_path.resolve().parent.parent.parent)
+    print(
+        json.dumps({
+            "warning": (
+                f"git rev-parse failed for {manifest_path}; "
+                f"falling back to parent.parent.parent ({fallback})"
+            )
+        }),
+        file=sys.stderr,
+    )
+    return fallback
+
+
+def _load_manifest_config(args: argparse.Namespace) -> Tuple[Optional[str], Optional[dict]]:
+    """Load and validate the SDD session manifest when --manifest is provided.
+
+    Side effects:
+      - Mutates args.plan_file in place. Prefers active_module_file over plan_file.
+      - On unrecoverable error (missing file, invalid JSON, schema validation
+        failure), prints a JSON error to stderr and calls sys.exit(3).
+
+    Returns:
+      (tier, enforcement_dict) when args.manifest is set, otherwise (None, None).
+    """
+    if not args.manifest:
+        return None, None
+
+    manifest_path = Path(args.manifest)
+    if not manifest_path.is_file():
+        print(
+            json.dumps({"error": f"Manifest not found: {args.manifest}"}),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    try:
+        manifest_data = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as exc:
+        print(
+            json.dumps({"error": f"Cannot parse manifest {args.manifest}: {exc}"}),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    try:
+        manifest = SddSession.model_validate(manifest_data)
+    except Exception as exc:  # pydantic.ValidationError or otherwise
+        print(
+            json.dumps({"error": f"Manifest failed validation: {exc}"}),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+
+    git_root = _resolve_git_root(manifest_path)
+
+    # Prefer active_module_file when set; otherwise use plan_file.
+    if manifest.active_module_file:
+        args.plan_file = os.path.join(git_root, manifest.active_module_file)
+    else:
+        args.plan_file = os.path.join(git_root, manifest.plan_file)
+
+    return manifest.tier, manifest.enforcement.model_dump()
+
+
 # --- Phase handlers ---
 
 
@@ -371,6 +456,8 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
     Phase: pre-execution
     Checks that all structural prerequisites exist before any task is dispatched.
     """
+    _load_manifest_config(args)
+
     checks = {}
     blockers = []
     warnings = []
@@ -510,6 +597,8 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
     Phase: pre-dispatch
     Checks before dispatching task N that the previous task is fully complete.
     """
+    _load_manifest_config(args)
+
     if args.task_number is None:
         print(
             json.dumps({"error": "--task-number is required for phase pre-dispatch"}),
@@ -756,6 +845,8 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     Phase: pre-completion
     Checks before declaring implementation complete.
     """
+    tier, _enforcement = _load_manifest_config(args)
+
     if args.deviations_file is None:
         print(
             json.dumps(
@@ -901,47 +992,59 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         blockers.append("all_reports_complete")
 
     # Check 5: Honesty check artifact exists (reports/honesty-check-YYYY-MM-DD.md)
-    honesty_matches = sorted(glob.glob(
-        os.path.join(args.reports_dir, "honesty-check-*.md")
-    ))
-    honesty_found = any(
-        os.path.isfile(p) and file_size_bytes(p) >= 50
-        for p in honesty_matches
-    )
-    if honesty_found:
+    if tier == "micro":
         checks["honesty_check_missing"] = {
-            "status": "PASS",
-            "detail": "Honesty check response present",
+            "status": "SKIP",
+            "detail": "Micro tier — honesty check skipped per manifest",
         }
     else:
-        checks["honesty_check_missing"] = {
-            "status": "FAIL",
-            "detail": (
-                "Missing or empty reports/honesty-check-YYYY-MM-DD.md — "
-                "the honesty check must be completed before the Pre-Completion Gate. "
-                "Present the honesty check prompt to the user, save their response, "
-                "then re-run this checkpoint."
-            ),
-        }
-        blockers.append("honesty_check_missing")
+        honesty_matches = sorted(glob.glob(
+            os.path.join(args.reports_dir, "honesty-check-*.md")
+        ))
+        honesty_found = any(
+            os.path.isfile(p) and file_size_bytes(p) >= 50
+            for p in honesty_matches
+        )
+        if honesty_found:
+            checks["honesty_check_missing"] = {
+                "status": "PASS",
+                "detail": "Honesty check response present",
+            }
+        else:
+            checks["honesty_check_missing"] = {
+                "status": "FAIL",
+                "detail": (
+                    "Missing or empty reports/honesty-check-YYYY-MM-DD.md — "
+                    "the honesty check must be completed before the Pre-Completion Gate. "
+                    "Present the honesty check prompt to the user, save their response, "
+                    "then re-run this checkpoint."
+                ),
+            }
+            blockers.append("honesty_check_missing")
 
     # Check 6: Execution trace audit artifact exists
-    trace_path = os.path.join(args.reports_dir, "execution-trace-audit.md")
-    if os.path.isfile(trace_path) and file_size_bytes(trace_path) >= 50:
+    if tier == "micro":
         checks["trace_audit_missing"] = {
-            "status": "PASS",
-            "detail": "Execution trace audit present",
+            "status": "SKIP",
+            "detail": "Micro tier — trace audit skipped per manifest",
         }
     else:
-        checks["trace_audit_missing"] = {
-            "status": "FAIL",
-            "detail": (
-                "Missing or empty reports/execution-trace-audit.md — "
-                "run extract-execution-trace.py and dispatch the trace auditor "
-                "subagent before declaring completion."
-            ),
-        }
-        blockers.append("trace_audit_missing")
+        trace_path = os.path.join(args.reports_dir, "execution-trace-audit.md")
+        if os.path.isfile(trace_path) and file_size_bytes(trace_path) >= 50:
+            checks["trace_audit_missing"] = {
+                "status": "PASS",
+                "detail": "Execution trace audit present",
+            }
+        else:
+            checks["trace_audit_missing"] = {
+                "status": "FAIL",
+                "detail": (
+                    "Missing or empty reports/execution-trace-audit.md — "
+                    "run extract-execution-trace.py and dispatch the trace auditor "
+                    "subagent before declaring completion."
+                ),
+            }
+            blockers.append("trace_audit_missing")
 
     # Check 7: Minimum-tier review ratio cap (>50% triggers blocker)
     quality_total, quality_min = _count_review_tiers(args.reports_dir, "quality-review")
@@ -1054,9 +1157,23 @@ def main() -> int:
     )
     parser.add_argument(
         "--plan-file",
-        required=True,
+        required=False,
+        default=None,
         metavar="PATH",
-        help="Path to the implementation plan markdown file.",
+        help=(
+            "Path to the implementation plan markdown file. "
+            "Required unless --manifest is provided."
+        ),
+    )
+    parser.add_argument(
+        "--manifest",
+        type=str,
+        default=None,
+        help=(
+            "Path to .sdd-session.json. When provided, reads plan_file, "
+            "enforcement, task_range, and midpoint from manifest instead of "
+            "command-line arguments."
+        ),
     )
     parser.add_argument(
         "--deviations-file",
@@ -1110,6 +1227,15 @@ def main() -> int:
         default=None,
     )
     args = parser.parse_args()
+
+    if args.manifest is None and args.plan_file is None:
+        print(
+            json.dumps({
+                "error": "Either --plan-file or --manifest is required."
+            }),
+            file=sys.stderr,
+        )
+        return 3
 
     if args.feature_dir:
         if not args.reports_dir:
