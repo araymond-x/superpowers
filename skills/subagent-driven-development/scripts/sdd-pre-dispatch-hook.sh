@@ -75,6 +75,11 @@ MANIFEST_TASK_START=""
 MANIFEST_TASK_END=""
 MANIFEST_PLAN_FILE=""
 MANIFEST_MODULE_FILE=""
+NEED_AUDIT=""
+NEED_PROV=""
+NEED_CHECKPOINT=""
+NEED_PARTNER=""
+CONTEXT_SUMMARY_AT=""
 
 if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
   FEAT_FROM_ROOT=$(cat "$GIT_ROOT/.active-feature" 2>/dev/null | tr -d '\n' | sed 's|/$||')
@@ -325,16 +330,24 @@ if [ "$CURRENT_BRANCH" != "main" ] && [ "$CURRENT_BRANCH" != "master" ]; then
 fi
 
 # Check 2: Pre-execution audit report must exist with substantive content
-AUDIT_RESULT=$(check_report_file "${REPORTS_DIR}/pre-execution-audit*" "pre-execution audit")
-case "$AUDIT_RESULT" in
-  MISSING)
-    ERRORS+=("BLOCKED: No pre-execution audit report found (${REPORTS_DIR}/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to ${REPORTS_DIR}/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to ${REPORTS_DIR}/pre-execution-audit.md.")
-    ;;
-  TOO_SMALL*)
-    FILE_SIZE=$(echo "$AUDIT_RESULT" | cut -d: -f2)
-    ERRORS+=("BLOCKED: Pre-execution audit report exists but is only $FILE_SIZE bytes — likely a placeholder. The audit report must contain the auditor's verdict and any remediation order resolutions (minimum $MIN_REPORT_BYTES bytes).")
-    ;;
-esac
+# Gated by enforcement.pre_execution_audit in manifest mode ("false" → skip).
+if [ "$MANIFEST_MODE" = true ]; then
+  NEED_AUDIT=$(jq -r '.enforcement.pre_execution_audit' "$MANIFEST")
+fi
+if [ "$MANIFEST_MODE" = true ] && [ "$NEED_AUDIT" = "false" ]; then
+  : # Skip — manifest tier does not require pre-execution audit
+else
+  AUDIT_RESULT=$(check_report_file "${REPORTS_DIR}/pre-execution-audit*" "pre-execution audit")
+  case "$AUDIT_RESULT" in
+    MISSING)
+      ERRORS+=("BLOCKED: No pre-execution audit report found (${REPORTS_DIR}/pre-execution-audit*). Complete the Pre-Execution Audit: (1) Write self-assessment to ${REPORTS_DIR}/pre-execution-audit-self-assessment.md, (2) Dispatch auditor via pre-execution-audit-prompt.md, (3) Resolve all remediation orders, (4) Save audit report to ${REPORTS_DIR}/pre-execution-audit.md.")
+      ;;
+    TOO_SMALL*)
+      FILE_SIZE=$(echo "$AUDIT_RESULT" | cut -d: -f2)
+      ERRORS+=("BLOCKED: Pre-execution audit report exists but is only $FILE_SIZE bytes — likely a placeholder. The audit report must contain the auditor's verdict and any remediation order resolutions (minimum $MIN_REPORT_BYTES bytes).")
+      ;;
+  esac
+fi
 
 # Check 3: DEVIATIONS.md must exist
 if [ ! -f "$DEVIATIONS_FILE" ]; then
@@ -376,120 +389,148 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
 
   PREV_PADDED=$(printf "%03d" "$PREV" 2>/dev/null || echo "$PREV")
 
-  # Previous task implementer report
-  IMPL_GLOB=$(task_report_glob "$PREV" "implementer-report")
-  RESULT=$(check_report_file "$IMPL_GLOB" "implementer report")
-  case "$RESULT" in
-    MISSING)
-      ERRORS+=("BLOCKED: No implementer report found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-implementer-report.md). Save the implementer's report using the task-NNN naming convention.")
-      ;;
-    TOO_SMALL*)
-      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Implementer report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the full subagent response (minimum $MIN_REPORT_BYTES bytes).")
-      ;;
-  esac
+  # ── Check 4 N-1 file existence: skip when current task is the first in the module ──
+  # In manifest mode, the previous task's reports are archived from the prior module.
+  # Wrap only this sub-block — dispatch provenance is gated separately below.
+  if [ "$MANIFEST_MODE" = true ] && [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -eq "$MANIFEST_TASK_START" ] 2>/dev/null; then
+    : # Skip — first task in module, N-1 reports are from a prior archived module
+  else
+    # Previous task implementer report
+    IMPL_GLOB=$(task_report_glob "$PREV" "implementer-report")
+    RESULT=$(check_report_file "$IMPL_GLOB" "implementer report")
+    case "$RESULT" in
+      MISSING)
+        ERRORS+=("BLOCKED: No implementer report found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-implementer-report.md). Save the implementer's report using the task-NNN naming convention.")
+        ;;
+      TOO_SMALL*)
+        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+        FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+        ERRORS+=("BLOCKED: Implementer report for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — likely an empty placeholder. Save the full subagent response (minimum $MIN_REPORT_BYTES bytes).")
+        ;;
+    esac
 
-  # Check 4b: Previous task implementer report is structurally COMPLETE
-  # Size check (above) catches empty/trivial files; this catches files that pass
-  # the size check but are missing required sections (Swiss Cheese layer 2).
-  if [ "$RESULT" = "OK" ] && [ -f "$VALIDATE_REPORT_SCRIPT" ]; then
-    IMPL_LATEST=$(ls $IMPL_GLOB 2>/dev/null | sort | tail -1)
-    if [ -n "$IMPL_LATEST" ]; then
-      VALIDATE_OUTPUT=$($PYTHON "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
-      VALIDATE_EXIT=$?
-      if [ "$VALIDATE_EXIT" -ne 0 ]; then
-        ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT). Re-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")
-      else
-        VALIDATE_STATUS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
-        if [ "$VALIDATE_STATUS" = "INCOMPLETE" ]; then
-          MISSING_SECTIONS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(', '.join(json.load(sys.stdin).get('sections_missing',[])))" 2>/dev/null)
-          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) is structurally incomplete — missing sections: $MISSING_SECTIONS. Re-dispatch the implementer to complete all 5 required prose sections before proceeding.")
+    # Check 4b: Previous task implementer report is structurally COMPLETE
+    # Size check (above) catches empty/trivial files; this catches files that pass
+    # the size check but are missing required sections (Swiss Cheese layer 2).
+    if [ "$RESULT" = "OK" ] && [ -f "$VALIDATE_REPORT_SCRIPT" ]; then
+      IMPL_LATEST=$(ls $IMPL_GLOB 2>/dev/null | sort | tail -1)
+      if [ -n "$IMPL_LATEST" ]; then
+        VALIDATE_OUTPUT=$($PYTHON "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
+        VALIDATE_EXIT=$?
+        if [ "$VALIDATE_EXIT" -ne 0 ]; then
+          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT). Re-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")
+        else
+          VALIDATE_STATUS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+          if [ "$VALIDATE_STATUS" = "INCOMPLETE" ]; then
+            MISSING_SECTIONS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(', '.join(json.load(sys.stdin).get('sections_missing',[])))" 2>/dev/null)
+            ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) is structurally incomplete — missing sections: $MISSING_SECTIONS. Re-dispatch the implementer to complete all 5 required prose sections before proceeding.")
+          fi
         fi
       fi
     fi
+
+    # Previous task spec review report
+    SPEC_GLOB=$(task_report_glob "$PREV" "spec-review")
+    RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
+    case "$RESULT" in
+      MISSING)
+        ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
+        ;;
+      TOO_SMALL*)
+        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+        FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+        ERRORS+=("BLOCKED: Spec review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
+        ;;
+    esac
+
+    # Previous task quality review report
+    QUAL_GLOB=$(task_report_glob "$PREV" "quality-review")
+    RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
+    case "$RESULT" in
+      MISSING)
+        ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
+        ;;
+      TOO_SMALL*)
+        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+        FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+        ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
+        ;;
+    esac
   fi
-
-  # Previous task spec review report
-  SPEC_GLOB=$(task_report_glob "$PREV" "spec-review")
-  RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
-  case "$RESULT" in
-    MISSING)
-      ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
-      ;;
-    TOO_SMALL*)
-      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Spec review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
-      ;;
-  esac
-
-  # Previous task quality review report
-  QUAL_GLOB=$(task_report_glob "$PREV" "quality-review")
-  RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
-  case "$RESULT" in
-    MISSING)
-      ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
-      ;;
-    TOO_SMALL*)
-      FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-      FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-      ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
-      ;;
-  esac
 
   # Check 4c: Dispatch provenance — verify reviewers were actually dispatched
   # Report files can be self-written by the controller. The dispatch log is written
   # by THIS HOOK when it processes Agent calls with reviewer descriptions.
   # The controller cannot forge dispatch log entries without going through the Agent tool.
-  if [ -f "$DISPATCH_LOG" ]; then
-    # Check for spec-review dispatch entry for previous task
-    SPEC_DISPATCHED=false
-    if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
-      SPEC_DISPATCHED=true
-    fi
-
-    # Check for quality-review dispatch entry for previous task
-    # quality-review-minimum-tier is acceptable if the report file matches that pattern
-    QUAL_DISPATCHED=false
-    QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
-    HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
-    if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
-      QUAL_DISPATCHED=true
-    elif [ -n "$HAS_MINIMUM_TIER" ]; then
-      # Minimum tier allows controller-written quality review (no dispatch needed)
-      QUAL_DISPATCHED=true
-    fi
-
-    if [ "$SPEC_DISPATCHED" = false ]; then
-      ERRORS+=("BLOCKED: No spec-review dispatch recorded for Task $PREV. The dispatch log ($DISPATCH_LOG) has no entry for a spec reviewer being dispatched via the Agent tool. Spec reviews must be dispatched subagents, not self-written by the controller. Dispatch the spec reviewer now.")
-    fi
-
-    if [ "$QUAL_DISPATCHED" = false ]; then
-      ERRORS+=("BLOCKED: No quality-review dispatch recorded for Task $PREV. Dispatch the code quality reviewer via the Agent tool. Controller-written quality reviews are only allowed for minimum-tier tasks (and the file must be named task-NNN-quality-review-minimum-tier.md).")
-    fi
+  # Gated by enforcement.dispatch_provenance in manifest mode ("false" → skip).
+  if [ "$MANIFEST_MODE" = true ]; then
+    NEED_PROV=$(jq -r '.enforcement.dispatch_provenance' "$MANIFEST")
+  fi
+  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_PROV" = "false" ]; then
+    : # Skip — manifest tier does not require dispatch provenance
   else
-    # No dispatch log exists at all — log was deleted or no reviewers were ever dispatched
-    ERRORS+=("BLOCKED: No dispatch log found ($DISPATCH_LOG). This file is created automatically by the SDD hook when reviewers are dispatched. Its absence means no reviewers were dispatched via the Agent tool for any task. Start by dispatching the spec reviewer for Task $PREV.")
+    if [ -f "$DISPATCH_LOG" ]; then
+      # Check for spec-review dispatch entry for previous task
+      SPEC_DISPATCHED=false
+      if grep -q "task=$PREV type=spec-review" "$DISPATCH_LOG" 2>/dev/null; then
+        SPEC_DISPATCHED=true
+      fi
+
+      # Check for quality-review dispatch entry for previous task
+      # quality-review-minimum-tier is acceptable if the report file matches that pattern
+      QUAL_DISPATCHED=false
+      QUAL_GLOB_MIN=$(task_report_glob "$PREV" "quality-review-minimum-tier")
+      HAS_MINIMUM_TIER=$(ls $QUAL_GLOB_MIN 2>/dev/null | head -1)
+      if grep -q "task=$PREV type=quality-review" "$DISPATCH_LOG" 2>/dev/null; then
+        QUAL_DISPATCHED=true
+      elif [ -n "$HAS_MINIMUM_TIER" ]; then
+        # Minimum tier allows controller-written quality review (no dispatch needed)
+        QUAL_DISPATCHED=true
+      fi
+
+      if [ "$SPEC_DISPATCHED" = false ]; then
+        ERRORS+=("BLOCKED: No spec-review dispatch recorded for Task $PREV. The dispatch log ($DISPATCH_LOG) has no entry for a spec reviewer being dispatched via the Agent tool. Spec reviews must be dispatched subagents, not self-written by the controller. Dispatch the spec reviewer now.")
+      fi
+
+      if [ "$QUAL_DISPATCHED" = false ]; then
+        ERRORS+=("BLOCKED: No quality-review dispatch recorded for Task $PREV. Dispatch the code quality reviewer via the Agent tool. Controller-written quality reviews are only allowed for minimum-tier tasks (and the file must be named task-NNN-quality-review-minimum-tier.md).")
+      fi
+    else
+      # No dispatch log exists at all — log was deleted or no reviewers were ever dispatched
+      ERRORS+=("BLOCKED: No dispatch log found ($DISPATCH_LOG). This file is created automatically by the SDD hook when reviewers are dispatched. Its absence means no reviewers were dispatched via the Agent tool for any task. Start by dispatching the spec reviewer for Task $PREV.")
+    fi
   fi
 fi
 
 # Check 5: If Task N > 0 and plan has Source Contracts, verify Task 0 completed
+# Unconditional — no enforcement flag gates this check. Required at any tier
+# when the plan declares Source Contracts (Task 0 verifies them regardless).
+# In manifest mode, check only MANIFEST_PLAN_FILE instead of glob.
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   HAS_SOURCE_CONTRACTS=false
-  if [ -n "$FEAT" ]; then
-    PLAN_SEARCH_GLOB="$FEAT/*.md"
-  else
-    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-  fi
-  for plan_file in $PLAN_SEARCH_GLOB; do
-    if [ -f "$plan_file" ]; then
-      if grep -q "Source Contracts" "$plan_file" && ! grep -qiE "Source Contracts.*:.*None" "$plan_file"; then
+  if [ "$MANIFEST_MODE" = true ]; then
+    # Manifest mode: check only the manifest's plan file (CWD-stable absolute path)
+    if [ -f "$MANIFEST_PLAN_FILE" ]; then
+      if grep -q "Source Contracts" "$MANIFEST_PLAN_FILE" && ! grep -qiE "Source Contracts.*:.*None" "$MANIFEST_PLAN_FILE"; then
         HAS_SOURCE_CONTRACTS=true
-        break
       fi
     fi
-  done
+  else
+    # Legacy mode: glob across feature directory or standard plan locations
+    if [ -n "$FEAT" ]; then
+      PLAN_SEARCH_GLOB="$FEAT/*.md"
+    else
+      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+    fi
+    for plan_file in $PLAN_SEARCH_GLOB; do
+      if [ -f "$plan_file" ]; then
+        if grep -q "Source Contracts" "$plan_file" && ! grep -qiE "Source Contracts.*:.*None" "$plan_file"; then
+          HAS_SOURCE_CONTRACTS=true
+          break
+        fi
+      fi
+    done
+  fi
 
   if [ "$HAS_SOURCE_CONTRACTS" = true ]; then
     T0_GLOB=$(task_report_glob "0" "implementer-report")
@@ -521,13 +562,21 @@ fi
 # The controller must run controller-checkpoint.py --phase pre-dispatch before each
 # dispatch and save the JSON output. This replaces the advisory instruction with
 # a mechanical gate.
+# Gated by enforcement.checkpoint_files in manifest mode ("false" → skip).
 if [ -n "$TASK_NUMBER" ]; then
-  TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
-  CHECKPOINT_FILE="${REPORTS_DIR}/checkpoint-pre-dispatch-${TASK_PADDED}.json"
-  if [ ! -f "$CHECKPOINT_FILE" ]; then
-    ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file $DEVIATIONS_FILE --reports-dir $REPORTS_DIR > $CHECKPOINT_FILE")
-  elif [ "$(wc -c < "$CHECKPOINT_FILE" 2>/dev/null | tr -d ' ')" -lt "$MIN_REPORT_BYTES" ]; then
-    ERRORS+=("BLOCKED: Checkpoint file $CHECKPOINT_FILE is too small (< $MIN_REPORT_BYTES bytes). Run the full controller-checkpoint.py command and redirect its JSON output to this file.")
+  if [ "$MANIFEST_MODE" = true ]; then
+    NEED_CHECKPOINT=$(jq -r '.enforcement.checkpoint_files' "$MANIFEST")
+  fi
+  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_CHECKPOINT" = "false" ]; then
+    : # Skip — manifest tier does not require checkpoint files
+  else
+    TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
+    CHECKPOINT_FILE="${REPORTS_DIR}/checkpoint-pre-dispatch-${TASK_PADDED}.json"
+    if [ ! -f "$CHECKPOINT_FILE" ]; then
+      ERRORS+=("BLOCKED: No pre-dispatch checkpoint found for Task $TASK_NUMBER (expected: $CHECKPOINT_FILE). Run controller-checkpoint.py and save the output: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number $TASK_NUMBER --plan-file <plan.md> --deviations-file $DEVIATIONS_FILE --reports-dir $REPORTS_DIR > $CHECKPOINT_FILE")
+    elif [ "$(wc -c < "$CHECKPOINT_FILE" 2>/dev/null | tr -d ' ')" -lt "$MIN_REPORT_BYTES" ]; then
+      ERRORS+=("BLOCKED: Checkpoint file $CHECKPOINT_FILE is too small (< $MIN_REPORT_BYTES bytes). Run the full controller-checkpoint.py command and redirect its JSON output to this file.")
+    fi
   fi
 fi
 
@@ -540,21 +589,30 @@ fi
 # Full-tier reviews must come from an actual agent dispatch — verified by
 # checking the dispatch log for type=partner-review task=N, written by this
 # hook when the partner Agent call passed through it.
+#
+# Gated by enforcement.partner_review in manifest mode ("false" → skip).
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
-  TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
-  PARTNER_FILE="${REPORTS_DIR}/partner-review-${TASK_PADDED}.md"
-  PARTNER_FILE_MIN="${REPORTS_DIR}/partner-review-${TASK_PADDED}-minimum-tier.md"
-  if [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
-    : # Minimum tier — controller-written, no dispatch provenance needed
-  elif [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
-    # Full-tier review exists — verify it came from an actual agent dispatch
-    if [ -f "$DISPATCH_LOG" ] && grep -q "task=$TASK_NUMBER type=partner-review" "$DISPATCH_LOG" 2>/dev/null; then
-      : # Dispatch provenance confirmed
-    else
-      ERRORS+=("BLOCKED: partner-review-${TASK_PADDED}.md exists but no dispatch log entry found for type=partner-review task=$TASK_NUMBER. The partner review appears to be controller-written. Dispatch the partner agent (description must contain 'partner review') via the Agent tool so the hook can record provenance, then save the output to $PARTNER_FILE.")
-    fi
+  if [ "$MANIFEST_MODE" = true ]; then
+    NEED_PARTNER=$(jq -r '.enforcement.partner_review' "$MANIFEST")
+  fi
+  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_PARTNER" = "false" ]; then
+    : # Skip — manifest tier does not require partner review
   else
-    ERRORS+=("BLOCKED: No partner review found for Task $TASK_NUMBER (expected: $PARTNER_FILE or $PARTNER_FILE_MIN). Dispatch the controller partner (see controller-partner-prompt.md) and save the output, or write a minimum-tier review with rationale (>$MIN_REPORT_BYTES bytes).")
+    TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
+    PARTNER_FILE="${REPORTS_DIR}/partner-review-${TASK_PADDED}.md"
+    PARTNER_FILE_MIN="${REPORTS_DIR}/partner-review-${TASK_PADDED}-minimum-tier.md"
+    if [ -f "$PARTNER_FILE_MIN" ] && [ "$(wc -c < "$PARTNER_FILE_MIN" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+      : # Minimum tier — controller-written, no dispatch provenance needed
+    elif [ -f "$PARTNER_FILE" ] && [ "$(wc -c < "$PARTNER_FILE" 2>/dev/null | tr -d ' ')" -ge "$MIN_REPORT_BYTES" ]; then
+      # Full-tier review exists — verify it came from an actual agent dispatch
+      if [ -f "$DISPATCH_LOG" ] && grep -q "task=$TASK_NUMBER type=partner-review" "$DISPATCH_LOG" 2>/dev/null; then
+        : # Dispatch provenance confirmed
+      else
+        ERRORS+=("BLOCKED: partner-review-${TASK_PADDED}.md exists but no dispatch log entry found for type=partner-review task=$TASK_NUMBER. The partner review appears to be controller-written. Dispatch the partner agent (description must contain 'partner review') via the Agent tool so the hook can record provenance, then save the output to $PARTNER_FILE.")
+      fi
+    else
+      ERRORS+=("BLOCKED: No partner review found for Task $TASK_NUMBER (expected: $PARTNER_FILE or $PARTNER_FILE_MIN). Dispatch the controller partner (see controller-partner-prompt.md) and save the output, or write a minimum-tier review with rationale (>$MIN_REPORT_BYTES bytes).")
+    fi
   fi
 fi
 
@@ -567,20 +625,33 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
   # Find a plan file to extract the task from
   PLAN_FILE=""
   SEARCHED_DIRS=""
-  if [ -n "$FEAT" ]; then
-    PLAN_SEARCH_GLOB="$FEAT/*.md"
-  else
-    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-  fi
-  for pf in $PLAN_SEARCH_GLOB; do
-    if [ -f "$pf" ]; then
-      SEARCHED_DIRS="${SEARCHED_DIRS} $(basename "$pf")"
-      if grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
-        PLAN_FILE="$pf"
-        break
-      fi
+
+  if [ "$MANIFEST_MODE" = true ]; then
+    # Manifest mode: use module file if it exists, else fall back to plan file.
+    # These paths are absolute (set up in the manifest resolution block above).
+    if [ -n "$MANIFEST_MODULE_FILE" ] && [ -f "$MANIFEST_MODULE_FILE" ]; then
+      PLAN_FILE="$MANIFEST_MODULE_FILE"
+    elif [ -n "$MANIFEST_PLAN_FILE" ] && [ -f "$MANIFEST_PLAN_FILE" ]; then
+      PLAN_FILE="$MANIFEST_PLAN_FILE"
     fi
-  done
+    # SEARCHED_DIRS left empty — diagnostics below will reference PLAN_FILE directly
+  else
+    # Legacy mode: glob across feature directory or standard plan locations
+    if [ -n "$FEAT" ]; then
+      PLAN_SEARCH_GLOB="$FEAT/*.md"
+    else
+      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+    fi
+    for pf in $PLAN_SEARCH_GLOB; do
+      if [ -f "$pf" ]; then
+        SEARCHED_DIRS="${SEARCHED_DIRS} $(basename "$pf")"
+        if grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
+          PLAN_FILE="$pf"
+          break
+        fi
+      fi
+    done
+  fi
 
   if [ -n "$PLAN_FILE" ]; then
     ESTIMATE_OUTPUT=$(python3 "$ESTIMATE_SCRIPT" --plan-file "$PLAN_FILE" --task "$TASK_NUMBER" 2>/dev/null || echo "")
@@ -600,7 +671,7 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
   else
     # Diagnostic: couldn't find the task in any plan file
     if [ -z "$SEARCHED_DIRS" ]; then
-      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in ${PLAN_SEARCH_GLOB}. Create the plan file or ensure it is in the expected location.")
+      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in ${PLAN_SEARCH_GLOB:-manifest}. Create the plan file or ensure it is in the expected location.")
     else
       ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — task header not found in plan files (searched:${SEARCHED_DIRS}). Verify task numbering matches plan headers (expected: '### Task $TASK_NUMBER').")
     fi
@@ -613,40 +684,53 @@ fi
 # doesn't exist, inject a WARNING.
 
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
-  # Count tasks in THE plan file containing the current task, not across
-  # every .md file in docs/imp-plans/ + docs/plans/. Stale plans from
-  # prior features (or modular plans from unrelated sibling features) sit
-  # in these directories and would otherwise inflate TOTAL_TASKS and push
-  # the midpoint past the real halfway point.
-  #
-  # Scoping strategy: locate the plan file that contains a `### Task N`
-  # header matching the current task number. For modular plans, this
-  # correctly scopes to the module being executed (each module is its own
-  # SDD run, so "midpoint" is per-module).
-  #
-  # NOTE: `grep -c` already prints "0" on zero-match files. Use `|| true`
-  # (not `|| echo "0"`) to suppress grep's exit-1-on-no-match without
-  # appending a second "0" on a new line — see the 2026-04-10 commit for
-  # the multi-line arithmetic crash that idiom caused.
-  TOTAL_TASKS=0
-  if [ -n "$FEAT" ]; then
-    PLAN_SEARCH_GLOB="$FEAT/*.md"
-  else
-    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-  fi
-  for pf in $PLAN_SEARCH_GLOB; do
-    if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
-      TOTAL_TASKS=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
-      TOTAL_TASKS=${TOTAL_TASKS:-0}
-      break
-    fi
-  done
-
-  if [ "$TOTAL_TASKS" -gt 0 ]; then
-    MIDPOINT=$(( (TOTAL_TASKS + 1) / 2 ))
-    if [ "$TASK_NUMBER" -ge "$MIDPOINT" ]; then
+  if [ "$MANIFEST_MODE" = true ]; then
+    # Manifest mode: use enforcement.context_summary_at (int threshold or null).
+    # jq returns the literal string "null" when JSON value is null.
+    CONTEXT_SUMMARY_AT=$(jq -r '.enforcement.context_summary_at' "$MANIFEST")
+    if [ "$CONTEXT_SUMMARY_AT" = "null" ] || [ -z "$CONTEXT_SUMMARY_AT" ]; then
+      : # context_summary_at is null — this tier doesn't require a context summary
+    elif [ "$TASK_NUMBER" -ge "$CONTEXT_SUMMARY_AT" ] 2>/dev/null; then
       if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
-        ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
+        ERRORS+=("BLOCKED: Context summary required at task $CONTEXT_SUMMARY_AT threshold (enforcement.context_summary_at). You are at Task $TASK_NUMBER. Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
+      fi
+    fi
+  else
+    # Legacy mode: count tasks in THE plan file containing the current task, not across
+    # every .md file in docs/imp-plans/ + docs/plans/. Stale plans from
+    # prior features (or modular plans from unrelated sibling features) sit
+    # in these directories and would otherwise inflate TOTAL_TASKS and push
+    # the midpoint past the real halfway point.
+    #
+    # Scoping strategy: locate the plan file that contains a `### Task N`
+    # header matching the current task number. For modular plans, this
+    # correctly scopes to the module being executed (each module is its own
+    # SDD run, so "midpoint" is per-module).
+    #
+    # NOTE: `grep -c` already prints "0" on zero-match files. Use `|| true`
+    # (not `|| echo "0"`) to suppress grep's exit-1-on-no-match without
+    # appending a second "0" on a new line — see the 2026-04-10 commit for
+    # the multi-line arithmetic crash that idiom caused.
+    TOTAL_TASKS=0
+    if [ -n "$FEAT" ]; then
+      PLAN_SEARCH_GLOB="$FEAT/*.md"
+    else
+      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
+    fi
+    for pf in $PLAN_SEARCH_GLOB; do
+      if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
+        TOTAL_TASKS=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
+        TOTAL_TASKS=${TOTAL_TASKS:-0}
+        break
+      fi
+    done
+
+    if [ "$TOTAL_TASKS" -gt 0 ]; then
+      MIDPOINT=$(( (TOTAL_TASKS + 1) / 2 ))
+      if [ "$TASK_NUMBER" -ge "$MIDPOINT" ]; then
+        if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
+          ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
+        fi
       fi
     fi
   fi
