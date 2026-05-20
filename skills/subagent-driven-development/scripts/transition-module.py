@@ -35,16 +35,7 @@ def _find_module(modules: List[ModuleState], name_or_id: str) -> Optional[Module
     return None
 
 
-def compute_midpoint(start: int, end: int) -> int:
-    """Compute the midpoint of a task range.
-
-    Matches Module 1's authoritative formula in materialize-manifest.py.
-    Formula: start + (range_size + 1) // 2, where range_size = end - start.
-    This gives a ceiling-biased midpoint that stays inside [start, end] for
-    all range sizes (including single-task and two-task ranges).
-    """
-    range_size = end - start
-    return start + (range_size + 1) // 2
+from _midpoint import compute_midpoint  # noqa: E402  (single source of truth)
 
 
 def validate_module_completion(

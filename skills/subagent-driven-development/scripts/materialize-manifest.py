@@ -56,14 +56,7 @@ def extract_frontmatter(text: str) -> Optional[dict]:
         return None
 
 
-def compute_midpoint(start: int, end: int) -> int:
-    """Compute the midpoint of a task range.
-
-    Formula: start + (range_size + 1) // 2, where range_size = end - start.
-    This gives a ceiling-biased midpoint within the range.
-    """
-    range_size = end - start
-    return start + (range_size + 1) // 2
+from _midpoint import compute_midpoint  # noqa: E402  (single source of truth)
 
 
 def git_root_relative(path: str) -> str:
