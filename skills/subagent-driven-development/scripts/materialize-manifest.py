@@ -17,6 +17,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 # Add models to path (same pattern as controller-checkpoint.py)
 sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
@@ -40,7 +41,7 @@ from sdd_session import (
 )
 
 
-def extract_frontmatter(text: str) -> dict | None:
+def extract_frontmatter(text: str) -> Optional[dict]:
     """Extract YAML frontmatter between --- delimiters. Returns None if absent."""
     if not text.startswith("---"):
         return None
@@ -106,7 +107,10 @@ def materialize(plan_file: str, feature_dir: str) -> int:
     # --- Tier ---
     tier = frontmatter.get("enforcement_tier") or "standard"
     if tier not in TIER_PROFILES:
-        print(f"Invalid enforcement_tier: '{tier}'. Must be one of: {list(TIER_PROFILES)}", file=sys.stderr)
+        print(
+            f"Invalid enforcement_tier: '{tier}'. Must be one of: {list(TIER_PROFILES)}",
+            file=sys.stderr,
+        )
         return 1
 
     # --- Tasks ---
@@ -118,9 +122,9 @@ def materialize(plan_file: str, feature_dir: str) -> int:
 
     # --- Modules (optional) ---
     modules_raw = frontmatter.get("modules")
-    modules: list[ModuleState] | None = None
-    active_module_id: int | None = None
-    active_module_file: str | None = None
+    modules: Optional[List[ModuleState]] = None
+    active_module_id: Optional[int] = None
+    active_module_file: Optional[str] = None
 
     if modules_raw:
         modules = []
@@ -133,12 +137,14 @@ def materialize(plan_file: str, feature_dir: str) -> int:
                     file=sys.stderr,
                 )
                 return 1
-            modules.append(ModuleState(
-                id=m["id"],
-                title=m["title"],
-                file=file_val,
-                task_ids=m["task_ids"],
-            ))
+            modules.append(
+                ModuleState(
+                    id=m["id"],
+                    title=m["title"],
+                    file=file_val,
+                    task_ids=m["task_ids"],
+                )
+            )
         first = modules[0]
         task_range = (first.task_ids[0], first.task_ids[-1])
         active_module_id = first.id
@@ -211,9 +217,7 @@ def materialize(plan_file: str, feature_dir: str) -> int:
 
     # --- Write ---
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
-    manifest_path.write_text(
-        session.model_dump_json(indent=2) + "\n", encoding="utf-8"
-    )
+    manifest_path.write_text(session.model_dump_json(indent=2) + "\n", encoding="utf-8")
     print(f"Manifest written: {manifest_path}")
     return 0
 

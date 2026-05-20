@@ -19,6 +19,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 
 # Add models to path (same pattern as materialize-manifest.py / controller-checkpoint.py)
 sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
@@ -26,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models")
 from sdd_session import ModuleState, SddSession
 
 
-def _find_module(modules: list[ModuleState], name_or_id: str) -> ModuleState | None:
+def _find_module(modules: List[ModuleState], name_or_id: str) -> Optional[ModuleState]:
     """Locate a module by title or numeric id (string or int)."""
     for m in modules:
         if m.title == name_or_id or str(m.id) == name_or_id:
@@ -48,9 +49,9 @@ def compute_midpoint(start: int, end: int) -> int:
 
 def validate_module_completion(
     manifest: SddSession, module_name: str, git_root: str
-) -> list[str]:
+) -> List[str]:
     """Check all tasks in the completed module have required reports."""
-    errors: list[str] = []
+    errors: List[str] = []
 
     if manifest.modules is None:
         return [f"Module '{module_name}' not found in manifest"]
@@ -74,14 +75,15 @@ def validate_module_completion(
                 errors.append(f"Task {task_id}: missing or empty spec review")
 
         if pr.quality_review_mode != "skip":
-            quality_report = os.path.join(reports_dir, f"task-{padded}-quality-review.md")
+            quality_report = os.path.join(
+                reports_dir, f"task-{padded}-quality-review.md"
+            )
             quality_min = os.path.join(
                 reports_dir, f"task-{padded}-quality-review-minimum-tier.md"
             )
             has_quality = (
-                (os.path.isfile(quality_report) and os.path.getsize(quality_report) >= 50)
-                or (os.path.isfile(quality_min) and os.path.getsize(quality_min) >= 50)
-            )
+                os.path.isfile(quality_report) and os.path.getsize(quality_report) >= 50
+            ) or (os.path.isfile(quality_min) and os.path.getsize(quality_min) >= 50)
             if not has_quality:
                 errors.append(f"Task {task_id}: missing or empty quality review")
 
