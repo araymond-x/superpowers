@@ -14,45 +14,32 @@ tests:
   result: PASS
 ---
 
-# Task 17 — validate-plan.py Tier and Module Checks
+**Implementation Summary:**
 
-## What I Built
+Extended `validate-plan.py`'s `validate_plan()` function with three new enforcement-tier checks driven by parsed YAML frontmatter: `enforcement_tier_invalid` (BLOCKER when value ∉ `{"micro", "standard"}`), `enforcement_tier_appropriateness` (WARNING when `tier == "micro"` and `task_count > 3`), `micro_with_modules` (WARNING when `tier == "micro"` and frontmatter declares modules). Tier strings match `sdd_session.Tier`. YAML frontmatter is parsed in-process via `yaml.safe_load()` with the import scoped inside `validate_plan()` (`yaml` was not yet imported at module top); parse failures fall back silently to `frontmatter = None` so non-frontmatter plans continue to work. TDD trail: wrote 2 failing tests first (`test_micro_with_many_tasks_warns` failed `assert 0 == 2` as expected), then added parsing + 3 checks, then re-ran and both tests PASS.
 
-Extended `validate-plan.py`'s `validate_plan()` function with three new enforcement-tier checks driven by parsed YAML frontmatter:
+**Source Files Read:**
 
-1. **`enforcement_tier_invalid`** (BLOCKER) — fires when `enforcement_tier` is set to a value outside `{"micro", "standard"}`. Values match `sdd_session.Tier`.
-2. **`enforcement_tier_appropriateness`** (WARNING) — fires when `enforcement_tier == "micro"` AND `task_count > 3`. Suggests upgrading to `standard`.
-3. **`micro_with_modules`** (WARNING) — fires when `enforcement_tier == "micro"` AND the frontmatter declares `modules`. Multi-module plans typically need standard enforcement.
+- `skills/subagent-driven-development/scripts/validate-plan.py` — full file. `analyse_tasks` returns `(tasks, warnings, blockers)`; `check_sections` returns `sections` dict; `validate_plan()` at line 369 (NOT `validate_plan_content` as plan reference incorrectly named it); `task_count = len(tasks)` at line 400; final status `if blockers: status = "FAIL"` near line 493.
+- `tests/unit/test_validate_plan.py` — for `run_validate()` helper at line 32 and existing test class patterns (TestWithinFileDuplicates, TestCrossModuleCollisions, TestModuleHeaderDetection, TestBlockerMessages).
+- `skills/scripts/models/sdd_session.py` — confirmed `Tier = Literal["micro", "standard"]` as the canonical type (referenced via comment, not imported, to avoid added dependency).
 
-YAML frontmatter is parsed in-process via `yaml.safe_load()` with the import scoped inside `validate_plan()` (matches the pattern suggested in the task; `yaml` was not yet imported at module top). Parse failures fall back silently to `frontmatter = None` so non-frontmatter plans continue to work.
+**Deviations from Plan:**
 
-## TDD Trail
+- **Fixture correction.** The plan-reference fixture `PLAN_WITH_MICRO_TOO_MANY_TASKS` used `**Task N**` bold-markdown task markers, but the existing `TASK_HEADER_RE` regex matches `^###\s+Task\s+(\d+)`. Bold markers don't count as tasks — that would have made `task_count = 0`, and the `> 3` warning would never fire. Changed the fixture to use `### Task N` so the validator actually counts the 5 tasks. Fixture correction to match the validator's real task-detection contract — not a contract change.
+- **Plan function name correction.** The plan refers to the target function as `validate_plan_content()`, but the actual function is `validate_plan()` at line 369. Used the correct name.
+- **Step renumbering.** The plan's Step list has duplicate step numbers (Steps 1, 2, 3, 4 parsing, 5 validation, 4 run tests, 5 commit). Executed in plan order (Steps 1-7 conceptually). No structural change.
 
-1. Added `TestEnforcementTierValidation` (2 tests) to `tests/unit/test_validate_plan.py`.
-2. Ran — confirmed the `test_micro_with_many_tasks_warns` test failed (`assert 0 == 2`, no tier check existed yet). The `test_valid_micro_tier_passes` test happened to already pass (exit_code 0 was already valid per its assertion).
-3. Implemented YAML parsing block + the three tier checks (blocker/warning placement before final status computation, following the existing `blockers.append(...)` + `sections[<key>] = {...}` pattern used by `duplicate_task_numbers` and `cross_module_task_collision`).
-4. Re-ran — both new tests PASS. All 15 pre-existing `test_validate_plan.py` tests still PASS (17 total).
-5. Ran the full unit suite (`tests/unit/`) — 326 tests PASS, 0 failures, 1 unrelated pre-existing pytest collection warning.
+**Self-Review Findings:**
 
-## Deviations from Plan
-
-The plan-reference fixture `PLAN_WITH_MICRO_TOO_MANY_TASKS` used `**Task N**` bold-markdown task markers, but the existing `TASK_HEADER_RE` regex matches `^###\s+Task\s+(\d+)`. Bold markers don't count as tasks — that would have made `task_count = 0`, and the `> 3` warning would never fire. I changed the fixture to use `### Task N` so the validator actually counts the 5 tasks. This is a fixture correction to match the validator's real task-detection contract, not a contract change. No other deviations.
-
-## Files Modified
-
-- `/Users/araymond/projects/claude-custom/superpowers/skills/subagent-driven-development/scripts/validate-plan.py` — added frontmatter parsing (~10 LOC) + three tier checks (~35 LOC) inside `validate_plan()`.
-- `/Users/araymond/projects/claude-custom/superpowers/tests/unit/test_validate_plan.py` — added `TestEnforcementTierValidation` class with 2 tests + 2 fixture constants.
-
-## Type-Hint Style
-
-Matched the file's existing legacy `typing` style (`Optional[Dict]`, `List[str]`) per the task brief. Did NOT modernize to PEP-604 syntax inside this file.
-
-## Verification
-
-- `.venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v` → 17 PASS
-- `.venv/bin/python3 -m pytest tests/unit/ -q` → 326 PASS
+- 2 new tests PASS (TDD red→green confirmed).
+- 17/17 `test_validate_plan.py` tests PASS; full unit suite 326/326 PASS.
+- Three checks correctly placed BEFORE final status computation, following existing `blockers.append + sections[key]=` pattern.
+- Type hints match file's existing legacy `typing` style (`Optional[Dict]`, `List[str]`) per task brief.
+- Empty/None tier doesn't trigger any check (verified — guard `if tier is not None`).
 - Pre-existing tests unaffected (clean plans without `enforcement_tier` still PASS).
+- Pre-commit linter reformatted both files (cosmetic only, no semantic change).
 
-## Open Concerns
+**Concerns:**
 
-None.
+None — all plan-departures are minor fixture/naming corrections that preserve the contract intent.
