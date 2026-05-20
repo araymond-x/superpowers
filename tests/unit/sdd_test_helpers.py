@@ -11,22 +11,31 @@ import subprocess
 from datetime import datetime, timezone
 
 
-def make_hook_input(description: str, prompt: str = "", cwd: str = "") -> str:
+def make_hook_input(
+    description: str,
+    prompt: str = "",
+    cwd: str = "",
+    subagent_type: str = "",
+) -> str:
     """JSON payload matching Claude Code PreToolUse hook input.
 
     Args:
         description: The tool_input.description field (dispatch description).
         prompt: The tool_input.prompt field (first 500 chars used by hook).
         cwd: Working directory for the hook. Empty string if not needed.
+        subagent_type: Optional subagent_type for manifest-mode passthrough check.
 
     Returns:
         JSON string ready to pipe to the hook via stdin.
     """
+    tool_input: dict = {
+        "description": description,
+        "prompt": prompt,
+    }
+    if subagent_type:
+        tool_input["subagent_type"] = subagent_type
     payload = {
-        "tool_input": {
-            "description": description,
-            "prompt": prompt,
-        },
+        "tool_input": tool_input,
         "cwd": cwd,
     }
     return json.dumps(payload)
@@ -296,4 +305,126 @@ def setup_full_sdd_workspace(
                     f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
                 )
             with open(log_path, "a") as f:
-                f.write(f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n")
+                f.write(
+                    f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n"
+                )
+
+
+def setup_manifest_workspace(
+    tmp_path,
+    tier: str = "standard",
+    task_range: tuple = (0, 7),
+    total_tasks: int = 8,
+) -> dict:
+    """Set up a git workspace with .sdd-session.json for manifest-mode hook testing.
+
+    Initializes a git repo so that ``git rev-parse --show-toplevel`` works, which
+    the pre-dispatch hook requires for manifest-based path resolution.
+
+    The midpoint formula used here is the one adopted in Module 1 (deviation row 1):
+        range_size = end - start        (NOT end - start + 1)
+        midpoint   = start + (range_size + 1) // 2
+
+    Args:
+        tmp_path: A pathlib.Path pointing to a temporary directory (from pytest's
+            ``tmp_path`` fixture or ``Path(tmpdir)``).
+        tier: SDD enforcement tier — "micro" or "standard".
+        task_range: Inclusive ``(start, end)`` tuple of task IDs in this module.
+        total_tasks: Total number of tasks across all modules (used for the
+            Pydantic ``SddSession.total_tasks`` field; must be >= range size).
+
+    Returns:
+        A dict with keys:
+          ``root``          — pathlib.Path to the git root (tmp_path)
+          ``feat_dir``      — pathlib.Path to the feature directory
+          ``reports_dir``   — pathlib.Path to the reports directory
+          ``manifest_path`` — pathlib.Path to .sdd-session.json
+    """
+    import sys
+    from pathlib import Path
+
+    # Ensure the models directory is on sys.path (same as conftest.py)
+    _models_dir = str(
+        Path(__file__).resolve().parent.parent.parent / "skills" / "scripts" / "models"
+    )
+    if _models_dir not in sys.path:
+        sys.path.insert(0, _models_dir)
+
+    from sdd_session import TIER_PROFILES  # noqa: PLC0415
+
+    # ── Git repo setup ──────────────────────────────────────────────────────
+    subprocess.run(["git", "init"], cwd=str(tmp_path), capture_output=True, check=True)
+    subprocess.run(
+        ["git", "checkout", "-b", "test-feature"],
+        cwd=str(tmp_path),
+        capture_output=True,
+        check=True,
+    )
+
+    # ── Feature directory layout ────────────────────────────────────────────
+    feat_dir = tmp_path / "docs" / "imp-plans" / "test-feature"
+    feat_dir.mkdir(parents=True)
+    reports_dir = feat_dir / "reports"
+    reports_dir.mkdir()
+
+    # .active-feature — relative path, no trailing slash
+    feat_rel = str(feat_dir.relative_to(tmp_path))
+    (tmp_path / ".active-feature").write_text(feat_rel)
+
+    # ── Midpoint formula (Module 1 deviation row 1: range_size = end - start) ──
+    start, end = task_range
+    range_size = end - start  # NOT end - start + 1
+    midpoint = start + (range_size + 1) // 2
+
+    # ── Manifest JSON ───────────────────────────────────────────────────────
+    profile = TIER_PROFILES[tier]
+    enforcement = dict(profile["enforcement"])
+    # Standard tier leaves context_summary_at as None; fill with computed midpoint.
+    if tier == "standard" and enforcement.get("context_summary_at") is None:
+        enforcement["context_summary_at"] = midpoint
+
+    manifest: dict = {
+        "schema_version": 1,
+        "tier": tier,
+        "paths": {
+            "feature_dir": str(feat_rel),
+            "reports_dir": str(feat_dir.relative_to(tmp_path) / "reports"),
+            "dispatch_log": str(
+                feat_dir.relative_to(tmp_path) / "reports" / ".dispatch-log"
+            ),
+            "deviations_file": str(feat_dir.relative_to(tmp_path) / "deviations.md"),
+        },
+        "plan_file": str(feat_dir.relative_to(tmp_path) / "plan.md"),
+        "active_module_id": None,
+        "active_module_file": None,
+        "task_range": list(task_range),
+        "total_tasks": total_tasks,
+        "midpoint": midpoint,
+        "enforcement": enforcement,
+        "process_requirements": dict(profile["process_requirements"]),
+        "completed_modules": [],
+        "module_reports_archived": False,
+        "modules": None,
+        "dispatch_log_sentinel": False,
+    }
+
+    (feat_dir / ".sdd-session.json").write_text(json.dumps(manifest, indent=2))
+
+    # Stub supporting files
+    (feat_dir / "deviations.md").write_text(
+        "# Deviations\n\n"
+        "| Task | Category | Description | Disposition |\n"
+        "|------|----------|-------------|-------------|\n"
+    )
+    # Plan with task headers for all tasks in range (supports token estimation check)
+    plan_lines = ["# Implementation Plan\n\n**Source Contracts:** None\n\n"]
+    for i in range(start, end + 1):
+        plan_lines.append(f"### Task {i} -- Step {i}\n- [ ] Do step {i}\n\n")
+    (feat_dir / "plan.md").write_text("".join(plan_lines))
+
+    return {
+        "root": tmp_path,
+        "feat_dir": feat_dir,
+        "reports_dir": reports_dir,
+        "manifest_path": feat_dir / ".sdd-session.json",
+    }

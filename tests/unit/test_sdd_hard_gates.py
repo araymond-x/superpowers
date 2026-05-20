@@ -30,6 +30,7 @@ from sdd_test_helpers import (
     create_checkpoint_file,
     make_hook_input,
     setup_full_sdd_workspace,
+    setup_manifest_workspace,
 )
 
 # Resolve hook path relative to this test file
@@ -448,7 +449,9 @@ def _setup_feature_dir_sdd_workspace(
             )
             log_path = reports_dir / ".dispatch-log"
             with open(str(log_path), "a") as lf:
-                lf.write(f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n")
+                lf.write(
+                    f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n"
+                )
 
 
 def _write_feature_checkpoint(reports_dir: object, task_number: int) -> None:
@@ -716,4 +719,283 @@ class TestBackwardsCompatFallback:
         assert ".active-feature" not in result.stderr, (
             f"Hook should not complain about missing .active-feature on root layout. "
             f"stderr: {result.stderr}"
+        )
+
+
+# ─── Manifest-mode tests ──────────────────────────────────────────────────────
+
+
+def _write_manifest_prereqs_for_task(
+    feat_dir,
+    reports_dir,
+    task_number: int,
+    include_partner: bool = True,
+    include_dispatch_log: bool = True,
+) -> None:
+    """Write all prerequisites needed to dispatch task ``task_number`` in manifest mode.
+
+    Creates:
+    - Pre-execution audit (>50 bytes) in reports_dir/
+    - Task (task_number - 1) reports: implementer, spec, quality
+    - Dispatch log entries for task (task_number - 1) reviews (if include_dispatch_log)
+    - Checkpoint for task_number
+    - Partner review for task_number (if include_partner and task_number > 0)
+
+    Designed for standard-tier manifests with task_number > MANIFEST_TASK_START.
+
+    Args:
+        feat_dir: pathlib.Path to the feature directory.
+        reports_dir: pathlib.Path to the reports directory.
+        task_number: The implementer task being dispatched.
+        include_partner: Whether to write a partner review for task_number.
+        include_dispatch_log: Whether to write dispatch log entries for reviews.
+    """
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Pre-execution audit
+    audit_path = reports_dir / "pre-execution-audit.md"
+    audit_path.write_text(
+        "# Pre-Execution Audit\n\n"
+        "## Self-Assessment\n"
+        "All prerequisites verified. Plan ingested. Deviations register created.\n\n"
+        "## Auditor Verdict\n"
+        "CLEAR -- No remediation orders.\n"
+    )
+
+    # Task N-1 reports (implementer, spec, quality)
+    prev = task_number - 1
+    padded_prev = f"{prev:03d}"
+
+    (reports_dir / f"task-{padded_prev}-implementer-report.md").write_text(
+        f"---\nschema_version: 1\ntask_id: {prev}\nstatus: DONE\n"
+        f"files_changed:\n  - path: src/m.py\n    description: modified\n"
+        f"tests:\n  written: 1\n  passing: 1\n  command: pytest\n  result: PASS\n---\n\n"
+        f"**Implementation Summary:**\nDone.\n\n"
+        f"**Source Files Read:**\n- plan.md\n\n"
+        f"**Deviations from Plan:**\nNone\n\n"
+        f"**Self-Review Findings:**\nNone\n\n"
+        f"**Concerns:**\nNone\n"
+    )
+    (reports_dir / f"task-{padded_prev}-spec-review.md").write_text(
+        f"# Spec Review {padded_prev}\n# Verdict: PASS\nImplementation matches plan.\n"
+    )
+    (reports_dir / f"task-{padded_prev}-quality-review.md").write_text(
+        f"# Quality Review {padded_prev}\n# Verdict: PASS\nCode quality acceptable.\n"
+    )
+
+    # Dispatch log entries for task N-1 reviews
+    log_path = reports_dir / ".dispatch-log"
+    if include_dispatch_log:
+        with open(str(log_path), "a") as lf:
+            lf.write(f"{now} DISPATCH reviewer task={prev} type=spec-review\n")
+            lf.write(f"{now} DISPATCH reviewer task={prev} type=quality-review\n")
+
+    # Checkpoint for task_number
+    padded = f"{task_number:03d}"
+    checkpoint_path = reports_dir / f"checkpoint-pre-dispatch-{padded}.json"
+    checkpoint_path.write_text(
+        '{"status": "PASS", "phase": "pre-dispatch", '
+        f'"task": {task_number}, "detail": "checkpoint for pre-dispatch verification"}}'
+    )
+
+    # Partner review for task_number
+    if include_partner and task_number > 0:
+        partner_path = reports_dir / f"partner-review-{padded}.md"
+        partner_path.write_text(
+            f"# Partner Review Task {padded}\n**Status:** APPROVED\n" + "x" * 60
+        )
+        with open(str(log_path), "a") as lf:
+            lf.write(
+                f"{now} DISPATCH reviewer task={task_number} type=partner-review\n"
+            )
+
+
+class TestManifestModeDispatchDetection:
+    """Tests for manifest-mode hook behavior: tier gating, range validation, passthrough, injection."""
+
+    def test_micro_tier_skips_partner_review_check(self, tmp_path):
+        """Micro-tier manifest: dispatch task 1 with no partner review should return 0.
+
+        Micro tier sets enforcement.partner_review=false so the partner review
+        gate is skipped entirely. The test provides task 0 reports (Check 4 still
+        runs for task N > MANIFEST_TASK_START) but omits the partner review.
+        """
+        ws = setup_manifest_workspace(
+            tmp_path, tier="micro", task_range=(0, 1), total_tasks=2
+        )
+        # Provide task 0 reports and checkpoint for task 1.
+        # No partner review, no dispatch log (dispatch_provenance=false in micro).
+        # No pre-execution audit (pre_execution_audit=false in micro).
+        reports_dir = ws["reports_dir"]
+        prev = 0
+        padded_prev = f"{prev:03d}"
+        (reports_dir / f"task-{padded_prev}-implementer-report.md").write_text(
+            "---\nschema_version: 1\ntask_id: 0\nstatus: DONE\n"
+            "files_changed:\n  - path: src/m.py\n    description: modified\n"
+            "tests:\n  written: 1\n  passing: 1\n  command: pytest\n  result: PASS\n---\n\n"
+            "**Implementation Summary:**\nDone.\n\n"
+            "**Source Files Read:**\n- plan.md\n\n"
+            "**Deviations from Plan:**\nNone\n\n"
+            "**Self-Review Findings:**\nNone\n\n"
+            "**Concerns:**\nNone\n"
+        )
+        (reports_dir / f"task-{padded_prev}-spec-review.md").write_text(
+            "# Spec Review 000\n# Verdict: PASS\nImplementation matches plan.\n"
+        )
+        (reports_dir / f"task-{padded_prev}-quality-review.md").write_text(
+            "# Quality Review 000\n# Verdict: PASS\nCode quality acceptable.\n"
+        )
+        (reports_dir / "checkpoint-pre-dispatch-001.json").write_text(
+            '{"status": "PASS", "phase": "pre-dispatch", "task": 1, "detail": "checkpoint"}'
+        )
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            cwd=str(tmp_path),
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 0, (
+            f"Micro tier should not block on missing partner review. "
+            f"Exit code: {result.returncode}, stderr: {result.stderr}"
+        )
+
+    def test_standard_tier_blocks_without_partner_review(self, tmp_path):
+        """Standard-tier manifest: dispatch task 1 without partner review should return 2.
+
+        Standard tier sets enforcement.partner_review=true so the partner review
+        gate fires. The test provides all other prerequisites but omits the partner
+        review file and dispatch log entry.
+        """
+        ws = setup_manifest_workspace(
+            tmp_path, tier="standard", task_range=(0, 7), total_tasks=8
+        )
+        _write_manifest_prereqs_for_task(
+            ws["feat_dir"],
+            ws["reports_dir"],
+            task_number=1,
+            include_partner=False,
+        )
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            cwd=str(tmp_path),
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 2, (
+            f"Standard tier should block when partner review is missing. "
+            f"Exit code: {result.returncode}, stderr: {result.stderr}"
+        )
+        assert "partner" in result.stderr.lower(), (
+            f"Error should mention partner review. stderr: {result.stderr}"
+        )
+
+    def test_task_outside_range_blocked(self, tmp_path):
+        """Manifest task_range=(0,3): dispatch task 99 should be blocked with task_range in stderr."""
+        ws = setup_manifest_workspace(
+            tmp_path, tier="standard", task_range=(0, 3), total_tasks=4
+        )
+
+        hook_input = make_hook_input(
+            description="Implement task 99",
+            cwd=str(tmp_path),
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 2, (
+            f"Should block when task is outside manifest task_range. "
+            f"Exit code: {result.returncode}, stderr: {result.stderr}"
+        )
+        assert "task_range" in result.stderr, (
+            f"Error should mention task_range. stderr: {result.stderr}"
+        )
+
+    def test_explore_agent_passes_through(self, tmp_path):
+        """Manifest mode: Explore subagent_type should pass through immediately (exit 0)."""
+        _ws = setup_manifest_workspace(tmp_path)
+
+        hook_input = make_hook_input(
+            description="Search for relevant files",
+            prompt="",
+            cwd=str(tmp_path),
+            subagent_type="Explore",
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 0, (
+            f"Explore agent should pass through in manifest mode. "
+            f"Exit code: {result.returncode}, stderr: {result.stderr}"
+        )
+
+    def test_process_requirements_injected(self, tmp_path):
+        """Standard-tier manifest: on allowed dispatch, additionalContext contains SESSION CONTRACT."""
+        ws = setup_manifest_workspace(
+            tmp_path, tier="standard", task_range=(0, 7), total_tasks=8
+        )
+        _write_manifest_prereqs_for_task(
+            ws["feat_dir"],
+            ws["reports_dir"],
+            task_number=1,
+            include_partner=True,
+            include_dispatch_log=True,
+        )
+
+        hook_input = make_hook_input(
+            description="Implement task 1",
+            cwd=str(tmp_path),
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 0, (
+            f"Should allow dispatch when all prerequisites are satisfied. "
+            f"Exit code: {result.returncode}, stderr: {result.stderr}"
+        )
+        output = json.loads(result.stdout)
+        additional_context = output.get("hookSpecificOutput", {}).get(
+            "additionalContext", ""
+        )
+        assert "SESSION CONTRACT" in additional_context, (
+            f"additionalContext should contain SESSION CONTRACT. "
+            f"additionalContext: {additional_context!r}"
+        )
+
+    def test_unparseable_reviewer_skips_sentinel_write(self, tmp_path):
+        """Reviewer dispatch with no task number: sentinel NOT written (REVIEW_TASK is empty).
+
+        The hook's sentinel write is inside ``if [ -n "$REVIEW_TASK" ]``.
+        When REVIEW_TASK is empty (unparseable reviewer description), the log
+        entry is skipped and the sentinel is never written.  The subsequent
+        implementer dispatch then emits a WARNING about the missing sentinel.
+
+        This covers the carry-forward concern from the Task 9 quality reviewer.
+        """
+        ws = setup_manifest_workspace(
+            tmp_path, tier="standard", task_range=(0, 7), total_tasks=8
+        )
+        reports_dir = ws["reports_dir"]
+        log_path = reports_dir / ".dispatch-log"
+
+        # Pre-create the dispatch log with NO sentinel (simulates unparseable reviewer dispatch)
+        # Write a log entry that lacks a task number so the hook's reviewer branch
+        # produced no REVIEW_TASK and therefore wrote no sentinel.
+        from datetime import datetime, timezone
+
+        now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        log_path.write_text(f"{now} DISPATCH reviewer task= type=unknown\n")
+        # No "# sdd-hook-sentinel" line — sentinel was skipped
+
+        # Now dispatch an implementer — the hook should WARN about missing sentinel
+        hook_input = make_hook_input(
+            description="Implement task 0",
+            cwd=str(tmp_path),
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+
+        # The hook WARNs (stderr) about the missing sentinel but does not block
+        assert "warn" in result.stderr.lower() or "sentinel" in result.stderr.lower(), (
+            f"Should emit WARN about missing dispatch log sentinel. "
+            f"stderr: {result.stderr!r}"
         )
