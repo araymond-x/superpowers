@@ -1,0 +1,342 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers/02a7a511-9a20-44c5-8beb-1d7050fe767c.jsonl",
+  "extracted_at": "2026-05-20T21:14:34.767470+00:00",
+  "total_messages": 804,
+  "skills_invoked": [
+    "superpowers:subagent-driven-development",
+    "pickup"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 15,
+      "phase": "mid-execution"
+    },
+    {
+      "script": "extract-execution-trace",
+      "count": 2
+    },
+    {
+      "script": "validate-plan",
+      "count": 4
+    }
+  ],
+  "tasks": [
+    {
+      "task_number": 12,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 119
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 141
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 150
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 13,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 219
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 234
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 235
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 14,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 294
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 327
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 328
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 15,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 383
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 394
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 395
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 16,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less.  You are imple",
+        "message_index": 454
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 515
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 516
+        }
+      },
+      "deviations_logged": false,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 17,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less.  You are imple",
+        "message_index": 523
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 543
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 544
+        }
+      },
+      "deviations_logged": false,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 18,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less.  You are imple",
+        "message_index": 620
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 630
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 631
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 19,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer.  You are implementing Task 19: Writing-Plans SKILL.md Updates  ## Task Descri",
+        "message_index": 665
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 674
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 675
+        }
+      },
+      "deviations_logged": false,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 20,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "Quality review Task 20 (final task).  **Commit:** `de7ae74` (base: `928bc15`) **Implementer report:** `docs/imp-plans/20",
+        "message_index": 719
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": false,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    }
+  ],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}
