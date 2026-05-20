@@ -221,6 +221,7 @@ Every plan file must begin with a YAML frontmatter block between `---` delimiter
 ---
 schema_version: 1
 feature_archetype: greenfield  # greenfield | replacement | extension | refactor | migration
+enforcement_tier: standard  # micro | standard (default: standard)
 source_contracts: "path/to/spec.md"  # or null
 shared_constants:
   - path: "app.config.X"
@@ -234,6 +235,7 @@ modules:  # only if modular plan
   - id: 1
     title: "Core"
     task_ids: [0, 1, 2]
+    file: module-1-core.md  # path to module plan file (relative to feature dir)
 tasks:
   - id: 0
     title: "Setup"
@@ -383,6 +385,15 @@ Every step must contain the actual content an engineer needs. These are **plan f
 - Feature archetype declared in header
 - Code Footprint table with obsolete items and their dependencies
 - Obsolescence Verification task for Replacement/Refactor/Migration archetypes
+
+### Enforcement Tier Selection
+
+After decomposing tasks, select the enforcement tier:
+
+- **micro** (1-2 tasks): Bug fixes, config changes, simple additions. Self-review OK, no partner review, no real-time hook enforcement.
+- **standard** (3+ tasks): Typical features and multi-module plans. Full two-stage review, partner review, checkpoint files. Multi-module support activates when `modules` is declared.
+
+Task count is a guideline. The plan reviewer validates tier appropriateness.
 
 ## Plan Review Loop
 

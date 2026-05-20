@@ -4,6 +4,16 @@
 
 Use this template when a plan is decomposed into modules (plan exceeds 800 lines or decomposes cleanly by boundary).
 
+**Parent plan registration:** Each module is registered in the parent plan's YAML frontmatter `modules:` array. Include a `file:` field pointing to the module file path (relative to the feature dir):
+
+```yaml
+modules:
+  - id: N
+    title: "Module Name"
+    task_ids: [0, 1, 2]
+    file: module-N-name.md  # path to this module file (relative to feature dir)
+```
+
 ```markdown
 # [Feature Name] — Module N: [Module Name]
 
