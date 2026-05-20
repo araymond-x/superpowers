@@ -180,7 +180,7 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
 - **Pre-Completion Gates** (added 2026-04-21, commit `1de0a5f`): `controller-checkpoint.py` pre-completion phase blocks on three additional checks before allowing SDD completion:
-  - Honesty check log present (`reports/honesty-check.md`, 9 required questions answered)
+  - Honesty check log present (`reports/honesty-check.md`, 10 required questions answered)
   - Trace audit complete (`reports/trace-audit.md` from `extract-execution-trace.py` + `trace-auditor-prompt.md`)
   - Minimum-tier quality review ratio ≤ 20% (too many minimum-tier reviews triggers FAIL)
 - Stop hook (`sdd-stop-hook.sh`) captures honesty logs globally so trace audit can cross-reference across sessions.

@@ -36,10 +36,26 @@ Output this block exactly:
       cosmetic edits to pass re-review?
     - Did you re-dispatch the partner to verify the fixes, or
       proceed directly to the implementer?
+10. Save the COMPLETE, VERBATIM output of your answers to
+    questions 1-9 above to this feature's
+    `reports/honesty-check.md`. Do not summarize, paraphrase,
+    or omit any part of your responses.
+
+ After saving, prepare a remediation recommendation grouped by:
+ - High-priority: Must address before declaring feature complete.
+ - Medium-priority: Reduces tech debt; schedule soon.
+ - Low-priority: Hygiene improvements, no immediate risk.
+ - Inform: Context requiring no action.
+ - Warning: Risks that could cause problems in future work.
+
+ For each item, state what was found, which task or file it
+ relates to, and the recommended action. Present to the user
+ before taking action.
 ════════════════════════════════════════════════════════════════
 ```
 
 After answering honestly:
-1. Save the complete response to `reports/honesty-check-YYYY-MM-DD.md` (required by the pre-completion gate).
-2. Add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review."
-3. Proceed to the Pre-Completion Gate.
+1. Save the complete response to `reports/honesty-check.md` (required by the pre-completion gate).
+2. Prepare the prioritized remediation recommendation and present to the user.
+3. Add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review."
+4. Proceed to the Pre-Completion Gate.
