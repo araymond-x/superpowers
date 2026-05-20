@@ -441,7 +441,7 @@ git commit -m "test: add transition-module.py unit tests"
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/controller-checkpoint.py`
 
-- [ ] **Step 1: Add --manifest argument to argparse**
+- [x] **Step 1: Add --manifest argument to argparse**
 
 In the `main()` function's argument parser, add:
 
@@ -455,7 +455,7 @@ parser.add_argument(
 )
 ```
 
-- [ ] **Step 2: Add manifest reading at the top of each phase function**
+- [x] **Step 2: Add manifest reading at the top of each phase function**
 
 In the pre-execution, pre-dispatch, and pre-completion phase handlers, add manifest override logic:
 
@@ -473,7 +473,7 @@ if args.manifest:
     tier = manifest_data.get("tier", "standard")
 ```
 
-- [ ] **Step 3: Gate pre-completion checks by tier**
+- [x] **Step 3: Gate pre-completion checks by tier**
 
 In the pre-completion phase, add tier-based gating:
 
@@ -486,7 +486,7 @@ else:
     # (existing honesty check and trace audit code)
 ```
 
-- [ ] **Step 4: Run existing checkpoint tests**
+- [x] **Step 4: Run existing checkpoint tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_controller_checkpoint_stale.py tests/unit/test_pre_completion_gates.py -v
@@ -494,7 +494,7 @@ else:
 
 Expected: All existing tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py

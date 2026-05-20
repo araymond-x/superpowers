@@ -9,8 +9,8 @@ files_changed:
     description: "modified"
 tests:
   written: 0
-  passing: 24
-  command: ".venv/bin/python3 -m pytest tests/unit/test_controller_checkpoint_stale.py tests/unit/test_pre_completion_gates.py -v"
+  passing: 0
+  command: ".venv/bin/python3 -m pytest tests/unit/test_controller_checkpoint_stale.py tests/unit/test_pre_completion_gates.py -v (regression: 24/24 PASS; new tests are Task 15)"
   result: PASS
 ---
 
