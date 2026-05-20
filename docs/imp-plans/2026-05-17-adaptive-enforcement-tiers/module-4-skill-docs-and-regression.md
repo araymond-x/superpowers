@@ -394,7 +394,7 @@ git commit -m "docs: add manifest ingestion and module transition to SDD SKILL.m
 **Files:**
 - Modify: `skills/writing-plans/SKILL.md`
 
-- [ ] **Step 1: Add `enforcement_tier` to plan template**
+- [x] **Step 1: Add `enforcement_tier` to plan template**
 
 In the "YAML Frontmatter (Required)" section, add after `feature_archetype`:
 
@@ -402,7 +402,7 @@ In the "YAML Frontmatter (Required)" section, add after `feature_archetype`:
 enforcement_tier: standard  # micro | standard (default: standard)
 ```
 
-- [ ] **Step 2: Add tier selection guidance**
+- [x] **Step 2: Add tier selection guidance**
 
 In the plan writing process, after task decomposition, add:
 
@@ -417,7 +417,7 @@ After decomposing tasks, select the enforcement tier:
 Task count is a guideline. The plan reviewer validates tier appropriateness.
 ```
 
-- [ ] **Step 3: Add `file` field to module template**
+- [x] **Step 3: Add `file` field to module template**
 
 In the module template section, add `file` to the module YAML:
 
@@ -429,7 +429,7 @@ modules:
     file: module-1-core.md  # path to module plan file (relative to feature dir)
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/writing-plans/SKILL.md
