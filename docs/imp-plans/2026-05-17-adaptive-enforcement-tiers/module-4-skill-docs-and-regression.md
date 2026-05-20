@@ -79,7 +79,7 @@ tasks:
 **Pattern References:**
 - `skills/scripts/models/validators.py` — existing `plan`, `handoff`, `report` subcommand pattern
 
-- [ ] **Step 1: Add session validation function**
+- [x] **Step 1: Add session validation function**
 
 After the `validate_report` function, add:
 
@@ -116,7 +116,7 @@ def validate_session(path: str, schema_version: int | None = None) -> int:
     return 0
 ```
 
-- [ ] **Step 2: Add import and subcommand**
+- [x] **Step 2: Add import and subcommand**
 
 Add `import json` at the top (if not already present).
 
@@ -133,7 +133,7 @@ elif args.command == "session":
     sys.exit(validate_session(args.path, args.schema_version))
 ```
 
-- [ ] **Step 3: Run existing validator tests**
+- [x] **Step 3: Run existing validator tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_validators/ -v
@@ -141,7 +141,7 @@ elif args.command == "session":
 
 Expected: All existing tests PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/scripts/models/validators.py
@@ -156,7 +156,7 @@ git commit -m "feat: add session subcommand to Pydantic validators CLI"
 - Modify: `skills/subagent-driven-development/scripts/validate-plan.py`
 - Extend: `tests/unit/test_validate_plan.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `tests/unit/test_validate_plan.py`:
 
@@ -239,7 +239,7 @@ class TestEnforcementTierValidation:
         assert tier_check.get("status") == "WARNING"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_validate_plan.py::TestEnforcementTierValidation -v
@@ -247,7 +247,7 @@ class TestEnforcementTierValidation:
 
 Expected: FAIL (no `enforcement_tier_appropriateness` check exists yet)
 
-- [ ] **Step 3: Discover integration points in validate-plan.py**
+- [x] **Step 3: Discover integration points in validate-plan.py**
 
 The variables referenced below are defined inside `validate_plan_content()` (the main validation function). Run this discovery step first:
 
@@ -261,7 +261,7 @@ The output dict uses `sections` (not `checks`) and `warnings` (not `warnings_lis
 
 **Important**: `validate_plan_content()` does NOT currently parse YAML frontmatter into a dict — it delegates that to the Pydantic subprocess. The new tier check needs in-process access to the frontmatter. You must add parsing.
 
-- [ ] **Step 4: Add YAML frontmatter parsing to validate_plan_content()**
+- [x] **Step 4: Add YAML frontmatter parsing to validate_plan_content()**
 
 At the top of `validate_plan_content()`, after the `has_frontmatter` boolean check, add in-process YAML parsing:
 
@@ -280,7 +280,7 @@ if has_frontmatter:
 
 This gives you a `frontmatter` dict (or None) for the tier check below.
 
-- [ ] **Step 5: Add tier validation using the parsed frontmatter**
+- [x] **Step 5: Add tier validation using the parsed frontmatter**
 
 After the existing checks and BEFORE the final status computation (`if blockers: status = "FAIL"`), add:
 
@@ -313,7 +313,7 @@ if frontmatter and isinstance(frontmatter, dict):
             }
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v
@@ -321,7 +321,7 @@ if frontmatter and isinstance(frontmatter, dict):
 
 Expected: All tests PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/validate-plan.py tests/unit/test_validate_plan.py

@@ -1,16 +1,17 @@
 ---
 schema_version: 1
 task_id: 17
-task_title: "validate-plan.py Tier and Module Checks"
 status: DONE
+files_changed:
+  - path: "skills/subagent-driven-development/scripts/validate-plan.py"
+    description: "Added YAML frontmatter parsing + three enforcement_tier checks (invalid blocker; appropriateness + micro_with_modules warnings)."
+  - path: "tests/unit/test_validate_plan.py"
+    description: "Added TestEnforcementTierValidation class (2 tests) + 2 plan fixture constants."
 tests:
   written: 2
   passing: 2
+  command: ".venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v"
   result: PASS
-files_modified:
-  - skills/subagent-driven-development/scripts/validate-plan.py
-  - tests/unit/test_validate_plan.py
-plan_departures: []
 ---
 
 # Task 17 — validate-plan.py Tier and Module Checks
