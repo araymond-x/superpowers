@@ -508,7 +508,7 @@ git commit -m "feat: add --manifest support to controller-checkpoint.py"
 **Files:**
 - Extend: `tests/unit/test_controller_checkpoint_stale.py`
 
-- [ ] **Step 1: Add manifest-mode tests**
+- [x] **Step 1: Add manifest-mode tests**
 
 ```python
 import json
@@ -625,7 +625,7 @@ class TestManifestMode:
         assert result["exit_code"] != 3, f"Script error: {result['stderr']}"
 ```
 
-- [ ] **Step 2: Run tests**
+- [x] **Step 2: Run tests**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_controller_checkpoint_stale.py -v
@@ -633,7 +633,7 @@ class TestManifestMode:
 
 Expected: All tests PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_controller_checkpoint_stale.py
