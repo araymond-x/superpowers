@@ -80,23 +80,23 @@ Note: Tasks 6-10 are sequential edits to the same file. They MUST execute in ord
 
 ## Acceptance Criteria
 
-- [ ] Hook resolves all paths from git root when manifest present
-- [ ] Hook reads tier from manifest and conditionalizes all checks
-- [ ] Micro-tier dispatches skip partner review, checkpoint, pre-execution audit, dispatch provenance
-- [ ] Standard-tier behavior identical to current behavior
-- [ ] Process requirements injected into `additionalContext` on every allowed dispatch
-- [ ] Dispatch log sentinel written on first reviewer dispatch
-- [ ] Legacy fallback works when no manifest exists
-- [ ] All existing hook tests still pass
+- [x] Hook resolves all paths from git root when manifest present (Task 6)
+- [x] Hook reads tier from manifest and conditionalizes all checks (Task 8)
+- [x] Micro-tier dispatches skip partner review, checkpoint, pre-execution audit, dispatch provenance (Task 8 gates; verified by Task 11 `test_micro_tier_skips_partner_review_check`)
+- [x] Standard-tier behavior identical to current behavior (Task 10 verification: 35/35 regression tests pass; Task 11 `test_standard_tier_blocks_without_partner_review`)
+- [x] Process requirements injected into `additionalContext` on every allowed dispatch (Task 9; verified by Task 11 `test_process_requirements_injected`)
+- [x] Dispatch log sentinel written on first reviewer dispatch (Task 9; edge case where REVIEW_TASK is empty noted in deviations and tested by Task 11 `test_unparseable_reviewer_skips_sentinel_write`)
+- [x] Legacy fallback works when no manifest exists (Tasks 6-9 wrapping; Task 10 verification + manual smoke test)
+- [x] All existing hook tests still pass (16/16 after Tasks 6-9 each; 35/35 after Task 10; 41/41 after Task 11)
 
 ---
 
-### Task 6: Hook Path Resolution Rewrite
+### Task 6: Hook Path Resolution Rewrite ✅ (commit ede52a8)
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (lines 54-90)
 
-- [ ] **Step 1: Add manifest resolution block after CWD extraction**
+- [x] **Step 1: Add manifest resolution block after CWD extraction** (deviated: used `$GIT_ROOT/$FEAT/` for active_module_file reconstruction — see deviations.md row 3)
 
 After line 61 (`cd "$CWD" || exit 0`), insert a new block that attempts manifest-based resolution first:
 
@@ -131,7 +131,7 @@ if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
 fi
 ```
 
-- [ ] **Step 2: Wrap existing path resolution in else branch**
+- [x] **Step 2: Wrap existing path resolution in else branch**
 
 Wrap the existing `FEAT=""` / `.active-feature` / `feat_path()` block (lines 64-90) inside:
 
@@ -143,7 +143,7 @@ if [ "$MANIFEST_MODE" = false ]; then
 fi
 ```
 
-- [ ] **Step 3: Verify hook still works in legacy mode**
+- [x] **Step 3: Verify hook still works in legacy mode**
 
 Run existing tests to confirm no breakage:
 
@@ -151,9 +151,9 @@ Run existing tests to confirm no breakage:
 .venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py -v -x
 ```
 
-Expected: All existing tests PASS
+Expected: All existing tests PASS (16/16 PASS)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (`ede52a8`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -162,12 +162,12 @@ git commit -m "refactor: add manifest-based path resolution to pre-dispatch hook
 
 ---
 
-### Task 7: Hook Dispatch Detection Rewrite
+### Task 7: Hook Dispatch Detection Rewrite ✅ (commit 0888cdc)
 
 **Files:**
-- Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (lines 92-141)
+- Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (lines 92-141 → actual 133-178 post-Task 6)
 
-- [ ] **Step 1: Add manifest-mode dispatch detection**
+- [x] **Step 1: Add manifest-mode dispatch detection** (with set-u initializations — see deviations.md row 5)
 
 In manifest mode, dispatch detection changes from regex to manifest-presence. Before the existing regex block (line 94), add:
 
@@ -224,7 +224,7 @@ if [ "$MANIFEST_MODE" = true ]; then
 fi
 ```
 
-- [ ] **Step 2: Wrap existing regex detection in else branch**
+- [x] **Step 2: Wrap existing regex detection in else branch**
 
 Wrap lines 94-141 (existing regex detection) in:
 
@@ -236,7 +236,7 @@ if [ "$MANIFEST_MODE" = false ]; then
 fi
 ```
 
-- [ ] **Step 3: Run existing tests**
+- [x] **Step 3: Run existing tests** (16/16 PASS)
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py -v -x
@@ -244,7 +244,7 @@ fi
 
 Expected: All existing tests PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (`0888cdc`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -253,12 +253,12 @@ git commit -m "refactor: add manifest-mode dispatch detection to pre-dispatch ho
 
 ---
 
-### Task 8: Hook Conditional Checks by Tier
+### Task 8: Hook Conditional Checks by Tier ✅ (commit 87664e5)
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (checks 1-6b)
 
-- [ ] **Step 1: Gate each check with manifest enforcement flags**
+- [x] **Step 1: Gate each check with manifest enforcement flags** (5 NEED_* vars added at outer scope — see deviations.md row 8)
 
 For each existing check in the ERRORS accumulation section, add a manifest-mode conditional. The pattern for each check:
 
@@ -286,7 +286,7 @@ Apply this pattern to:
 - **Check 6** (token estimation): use `MANIFEST_MODULE_FILE` or `MANIFEST_PLAN_FILE` instead of glob
 - **Check 6b** (context summary): use manifest's `enforcement.context_summary_at` instead of computing midpoint
 
-- [ ] **Step 2: Update plan file resolution for token estimation**
+- [x] **Step 2: Update plan file resolution for token estimation** (Check 6 manifest mode uses MANIFEST_MODULE_FILE/MANIFEST_PLAN_FILE — see deviations row 9)
 
 Replace the glob-based plan file search (lines 468-482) in manifest mode:
 
@@ -302,7 +302,7 @@ if [ "$MANIFEST_MODE" = true ]; then
 fi
 ```
 
-- [ ] **Step 3: Update midpoint check for context summary**
+- [x] **Step 3: Update midpoint check for context summary**
 
 Replace the midpoint computation (lines 514-551) in manifest mode:
 
@@ -317,7 +317,7 @@ if [ "$MANIFEST_MODE" = true ]; then
 fi
 ```
 
-- [ ] **Step 4: Run existing tests**
+- [x] **Step 4: Run existing tests** (16/16 PASS)
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py -v -x
@@ -325,7 +325,7 @@ fi
 
 Expected: All existing tests PASS (they don't use manifests, so they hit legacy path)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** (`87664e5`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -334,12 +334,12 @@ git commit -m "refactor: conditionalize hook checks by manifest enforcement flag
 
 ---
 
-### Task 9: Hook Process Requirements Injection and Dispatch Log Sentinel
+### Task 9: Hook Process Requirements Injection and Dispatch Log Sentinel ✅ (commit c8e8d7e)
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (output section)
 
-- [ ] **Step 1: Add process requirements injection to additionalContext**
+- [x] **Step 1: Add process requirements injection to additionalContext** (12 new outer-scope vars — see deviations row 11)
 
 In the manifest-mode success path (after all checks pass), build the additionalContext string from manifest:
 
@@ -359,7 +359,7 @@ if [ "$MANIFEST_MODE" = true ]; then
 fi
 ```
 
-- [ ] **Step 2: Add dispatch log sentinel logic**
+- [x] **Step 2: Add dispatch log sentinel logic** (sentinel write replaces line 175 placeholder; WARN-only verify at enforcement entry. Task 11 should test the edge case where REVIEW_TASK is unparseable.)
 
 In the reviewer branch (Task 7's reviewer handling), after logging the dispatch:
 
@@ -393,7 +393,7 @@ if [ "$MANIFEST_MODE" = true ] && [ -f "$DISPATCH_LOG" ]; then
 fi
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** (`c8e8d7e`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -402,12 +402,12 @@ git commit -m "feat: add process requirements injection and dispatch log sentine
 
 ---
 
-### Task 10: Hook Legacy Fallback
+### Task 10: Hook Legacy Fallback ✅ (commit 1ee6a01)
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 
-- [ ] **Step 1: Verify the legacy code path is intact**
+- [x] **Step 1: Verify the legacy code path is intact** (4 structural claims confirmed)
 
 Ensure all existing code paths are inside `if [ "$MANIFEST_MODE" = false ]` blocks or duplicated in both branches. Walk through the script:
 
@@ -416,7 +416,7 @@ Ensure all existing code paths are inside `if [ "$MANIFEST_MODE" = false ]` bloc
 3. Checks 1-6b: each check has manifest + legacy branches — ✓ (Task 8)
 4. Output section: legacy output unchanged — ✓
 
-- [ ] **Step 2: Run the full existing test suite**
+- [x] **Step 2: Run the full existing test suite** (35/35 PASS across 4 test files)
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py tests/unit/test_sdd_dispatch_log.py tests/unit/test_sdd_midpoint_check.py tests/unit/test_sdd_partner_gate.py -v
@@ -424,7 +424,7 @@ Ensure all existing code paths are inside `if [ "$MANIFEST_MODE" = false ]` bloc
 
 Expected: All existing tests PASS
 
-- [ ] **Step 3: Manual smoke test**
+- [x] **Step 3: Manual smoke test** (manifest-mode workspace; both passthrough and blocked-implementer paths confirmed)
 
 Create a minimal manifest-mode workspace and pipe a test dispatch:
 
@@ -435,7 +435,7 @@ echo "feat-dir" > "$TMPDIR/.active-feature"
 # (Run hook with mock input to verify it reads manifest)
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (`1ee6a01`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -444,7 +444,7 @@ git commit -m "refactor: verify legacy fallback intact in pre-dispatch hook"
 
 ---
 
-### Task 11: Hook Rewrite Tests
+### Task 11: Hook Rewrite Tests ✅ (commit d21df59)
 
 **Files:**
 - Modify: `tests/unit/test_sdd_hard_gates.py` — add manifest-mode test class
@@ -453,7 +453,7 @@ git commit -m "refactor: verify legacy fallback intact in pre-dispatch hook"
 **Pattern References:**
 - `tests/unit/sdd_test_helpers.py` — `setup_full_sdd_workspace` pattern
 
-- [ ] **Step 1: Add manifest workspace helper to sdd_test_helpers.py**
+- [x] **Step 1: Add manifest workspace helper to sdd_test_helpers.py** (Module 1 midpoint formula — see deviations row 12)
 
 ```python
 def setup_manifest_workspace(
@@ -527,7 +527,7 @@ def setup_manifest_workspace(
     }
 ```
 
-- [ ] **Step 2: Add manifest-mode test class to test_sdd_hard_gates.py**
+- [x] **Step 2: Add manifest-mode test class to test_sdd_hard_gates.py** (6 tests: 5 required + 1 optional sentinel-edge)
 
 ```python
 class TestManifestModeDispatchDetection:
@@ -581,7 +581,7 @@ class TestManifestModeDispatchDetection:
         assert "SESSION CONTRACT" in output.get("hookSpecificOutput", {}).get("additionalContext", "")
 ```
 
-- [ ] **Step 3: Run all tests**
+- [x] **Step 3: Run all tests** (22/22 PASS in test_sdd_hard_gates.py; 41/41 across the 4-file hook test suite)
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_sdd_hard_gates.py -v
@@ -589,7 +589,7 @@ class TestManifestModeDispatchDetection:
 
 Expected: All tests PASS (existing + new)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** (`d21df59`)
 
 ```bash
 git add tests/unit/sdd_test_helpers.py tests/unit/test_sdd_hard_gates.py

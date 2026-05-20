@@ -79,7 +79,7 @@ tasks:
 **Files:**
 - Create: `skills/subagent-driven-development/scripts/transition-module.py`
 
-- [ ] **Step 1: Write the script**
+- [x] **Step 1: Write the script**
 
 ```python
 #!/usr/bin/env python3
@@ -245,13 +245,13 @@ if __name__ == "__main__":
     main()
 ```
 
-- [ ] **Step 2: Make executable**
+- [x] **Step 2: Make executable**
 
 ```bash
 chmod +x skills/subagent-driven-development/scripts/transition-module.py
 ```
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/transition-module.py
