@@ -181,10 +181,10 @@ tasks:
 - app/fix.py (modified)
 
 **Task 0** — Fix
-- [ ] Fix the bug
+- [x] Fix the bug
 
 **Task 1** — Test
-- [ ] Test the fix
+- [x] Test the fix
 """
 
 PLAN_WITH_MICRO_TOO_MANY_TASKS = """\
@@ -213,15 +213,15 @@ tasks:
 - app/thing.py
 
 **Task 0**
-- [ ] Do thing 0
+- [x] Do thing 0
 **Task 1**
-- [ ] Do thing 1
+- [x] Do thing 1
 **Task 2**
-- [ ] Do thing 2
+- [x] Do thing 2
 **Task 3**
-- [ ] Do thing 3
+- [x] Do thing 3
 **Task 4**
-- [ ] Do thing 4
+- [x] Do thing 4
 """
 
 
@@ -335,7 +335,7 @@ git commit -m "feat: add enforcement_tier validation to validate-plan.py"
 **Files:**
 - Modify: `skills/subagent-driven-development/SKILL.md`
 
-- [ ] **Step 1: Add manifest ingestion to Plan Ingestion section**
+- [x] **Step 1: Add manifest ingestion to Plan Ingestion section**
 
 In the "Plan Ingestion" flow diagram and steps, after "Read full plan document", add:
 
@@ -353,7 +353,7 @@ After reading the plan and before creating TodoWrite:
 If `.sdd-session.json` already exists (resume scenario), validate it matches the plan frontmatter.
 ```
 
-- [ ] **Step 2: Add module transition section**
+- [x] **Step 2: Add module transition section**
 
 After the task loop section, add:
 
@@ -372,7 +372,7 @@ python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/transit
 Do not manually archive reports or update the manifest — the script handles all five steps (validate, archive, update manifest, archive dispatch log, log to deviations).
 ```
 
-- [ ] **Step 3: Verify SKILL.md word count**
+- [x] **Step 3: Verify SKILL.md word count**
 
 ```bash
 wc -w skills/subagent-driven-development/SKILL.md
@@ -380,7 +380,7 @@ wc -w skills/subagent-driven-development/SKILL.md
 
 If over 5000 words, extract content to `references/` to stay under the limit.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md
