@@ -60,33 +60,74 @@ fi
 
 cd "$CWD" || exit 0
 
-# ─── Resolve active feature directory ─────────────────────────────────────
+# ─── Manifest-based path resolution (CWD-stable) ────────────────────────
+# Try git-root-relative resolution first. Falls back to legacy CWD-relative
+# resolution if no manifest exists.
+MANIFEST=""
+MANIFEST_MODE=false
+GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")
 FEAT=""
-if [ -f ".active-feature" ]; then
-  FEAT=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
-fi
+DEVIATIONS_FILE=""
+REPORTS_DIR=""
+DISPATCH_LOG=""
+MANIFEST_TIER=""
+MANIFEST_TASK_START=""
+MANIFEST_TASK_END=""
+MANIFEST_PLAN_FILE=""
+MANIFEST_MODULE_FILE=""
 
-# Helper: resolve artifact path with feature-dir prefix (falls back to root)
-feat_path() {
-  if [ -n "$FEAT" ]; then
-    echo "$FEAT/$1"
-  else
-    echo "$1"
+if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
+  FEAT_FROM_ROOT=$(cat "$GIT_ROOT/.active-feature" 2>/dev/null | tr -d '\n' | sed 's|/$||')
+  if [ -n "$FEAT_FROM_ROOT" ] && [ -f "$GIT_ROOT/$FEAT_FROM_ROOT/.sdd-session.json" ]; then
+    MANIFEST="$GIT_ROOT/$FEAT_FROM_ROOT/.sdd-session.json"
+    MANIFEST_MODE=true
+    # Read all paths from manifest — CWD-stable
+    FEAT="$FEAT_FROM_ROOT"
+    DEVIATIONS_FILE="$GIT_ROOT/$(jq -r '.paths.deviations_file' "$MANIFEST")"
+    REPORTS_DIR="$GIT_ROOT/$(jq -r '.paths.reports_dir' "$MANIFEST")"
+    DISPATCH_LOG="$GIT_ROOT/$(jq -r '.paths.dispatch_log' "$MANIFEST")"
+    # Read enforcement and tier
+    MANIFEST_TIER=$(jq -r '.tier' "$MANIFEST")
+    MANIFEST_TASK_START=$(jq -r '.task_range[0]' "$MANIFEST")
+    MANIFEST_TASK_END=$(jq -r '.task_range[1]' "$MANIFEST")
+    MANIFEST_PLAN_FILE="$GIT_ROOT/$(jq -r '.plan_file' "$MANIFEST")"
+    MANIFEST_MODULE_FILE=$(jq -r '.active_module_file // empty' "$MANIFEST")
+    if [ -n "$MANIFEST_MODULE_FILE" ]; then
+      MANIFEST_MODULE_FILE="$GIT_ROOT/$FEAT/$MANIFEST_MODULE_FILE"
+    fi
   fi
-}
-
-# Resolved artifact locations
-DEVIATIONS_FILE=$(feat_path "deviations.md")
-REPORTS_DIR=$(feat_path "reports")
-DISPATCH_LOG=$(feat_path "reports/.dispatch-log")
-# Note: when FEAT is empty, DEVIATIONS_FILE="deviations.md" which doesn't exist
-# in old layout (was "DEVIATIONS.md"). The fallback handles this:
-if [ -z "$FEAT" ] && [ ! -f "$DEVIATIONS_FILE" ] && [ -f "DEVIATIONS.md" ]; then
-  DEVIATIONS_FILE="DEVIATIONS.md"
 fi
-if [ -z "$FEAT" ] && [ ! -d "$REPORTS_DIR" ] && [ -d "reports" ]; then
-  REPORTS_DIR="reports"
-  DISPATCH_LOG="reports/.dispatch-log"
+
+if [ "$MANIFEST_MODE" = false ]; then
+  # ─── Legacy CWD-relative path resolution ─────────────────────────────
+  # ─── Resolve active feature directory ─────────────────────────────────────
+  FEAT=""
+  if [ -f ".active-feature" ]; then
+    FEAT=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
+  fi
+
+  # Helper: resolve artifact path with feature-dir prefix (falls back to root)
+  feat_path() {
+    if [ -n "$FEAT" ]; then
+      echo "$FEAT/$1"
+    else
+      echo "$1"
+    fi
+  }
+
+  # Resolved artifact locations
+  DEVIATIONS_FILE=$(feat_path "deviations.md")
+  REPORTS_DIR=$(feat_path "reports")
+  DISPATCH_LOG=$(feat_path "reports/.dispatch-log")
+  # Note: when FEAT is empty, DEVIATIONS_FILE="deviations.md" which doesn't exist
+  # in old layout (was "DEVIATIONS.md"). The fallback handles this:
+  if [ -z "$FEAT" ] && [ ! -f "$DEVIATIONS_FILE" ] && [ -f "DEVIATIONS.md" ]; then
+    DEVIATIONS_FILE="DEVIATIONS.md"
+  fi
+  if [ -z "$FEAT" ] && [ ! -d "$REPORTS_DIR" ] && [ -d "reports" ]; then
+    REPORTS_DIR="reports"
+    DISPATCH_LOG="reports/.dispatch-log"
+  fi
 fi
 
 # ─── Determine dispatch type ──────────────────────────────────────────────
