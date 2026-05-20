@@ -13,6 +13,11 @@
 
 set -uo pipefail
 
+# Task 10 (2026-05-20): Legacy fallback verified intact post-Task 9.
+# All 4 structural claims confirmed: path resolution (lines 118-148),
+# dispatch detection (lines 221-268), checks 1-6b each have manifest+legacy
+# branches, and the output section is unchanged. All 35 regression tests pass.
+
 # Minimum file size (bytes) for report files to be considered valid.
 # Prevents forgery via `touch` or `echo "PASS" > file` (0-49 bytes).
 # Real review reports are 500+ bytes.
