@@ -312,20 +312,23 @@ Key changes applied across all skills:
 
 ---
 
-## Deterministic Scripts (11 active)
+## Deterministic Scripts (14 active)
 
 All scripts live in `skills/<name>/scripts/`. Reference them via full absolute paths in skill text (bare `scripts/` paths resolve from project root, not skill directory).
 
 | Script | Skill | Purpose |
 |--------|-------|---------|
 | `subagent-driven-development/scripts/_report_utils.py` | SDD | Shared library: `extract_status()`, `find_section_headers()`, `section_is_present()`, `is_placeholder_text()`. Single source of truth — do NOT duplicate in other scripts. |
+| `subagent-driven-development/scripts/_midpoint.py` | SDD | (added 2026-05-20) Shared `compute_midpoint(start, end)` formula. Single source of truth — consolidates the previously triplicated formula in `materialize-manifest.py` and `transition-module.py`. The plan-reference midpoint bug (off-by-one for small ranges) surfaced three times before consolidation. |
 | `subagent-driven-development/scripts/estimate-task-tokens.py` | SDD | Pre-dispatch context budget check: OK / WARNING / TOO_LARGE based on task size and plan context |
 | `subagent-driven-development/scripts/validate-report.py` | SDD | Implementer report completeness: 9 required sections, non-empty content, no placeholder text |
-| `subagent-driven-development/scripts/controller-checkpoint.py` | SDD | 3-phase controller health check: pre-execution, pre-dispatch, pre-completion |
+| `subagent-driven-development/scripts/controller-checkpoint.py` | SDD | 3-phase controller health check: pre-execution, pre-dispatch, pre-completion. Supports `--manifest <path>` (added 2026-05-20, Task 14) to read plan_file, tier, enforcement from `.sdd-session.json` via `_load_manifest_config()`. Micro tier sets honesty/trace checks to SKIP. |
 | `subagent-driven-development/scripts/context-summary.py` | SDD | Compresses completed task reports into one summary file for context management |
-| `subagent-driven-development/scripts/validate-plan.py` | SDD / writing-plans | Mechanical plan structure checks: size, section presence, Task 0, task count bounds |
-| `subagent-driven-development/scripts/extract-execution-trace.py` | SDD | Parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules |
-| `subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | SDD (hook) | See Enforcement Hooks section |
+| `subagent-driven-development/scripts/validate-plan.py` | SDD / writing-plans | Mechanical plan structure checks: size, section presence, Task 0, task count bounds. Plus (added 2026-05-20, Task 17) `enforcement_tier` validation: BLOCKER on invalid tier; WARNING on micro + >3 tasks; WARNING on micro + modules. |
+| `subagent-driven-development/scripts/materialize-manifest.py` | SDD | (added 2026-05-20, Module 1) Writes `.sdd-session.json` from plan frontmatter. Reads `enforcement_tier` (default `standard`); produces tier-specific `enforcement` + `process_requirements` dicts via `TIER_PROFILES`. Computes `task_range` and `midpoint` (via `_midpoint.compute_midpoint`). For multi-module plans, sets `active_module_id`/`active_module_file` to the first module's bare filename. |
+| `subagent-driven-development/scripts/transition-module.py` | SDD | (added 2026-05-20, Module 3) Manages module boundary lifecycle. Validates completion (all tasks have reports >=50 bytes, honoring tier skip semantics), archives reports to `archive-<module>/`, updates manifest (active_module_*, task_range, midpoint, completed_modules, module_reports_archived), archives + truncates dispatch log, appends transition row to deviations.md. Exit codes: 0 (complete), 1 (validation failure), 2 (script error). |
+| `subagent-driven-development/scripts/extract-execution-trace.py` | SDD | Parses `.jsonl` session files into structured JSON with per-task records and 6 anomaly detection rules. **Known limitation** (2026-05-20): per-task dispatch-count detection is unreliable; the `anomaly_summary.total_anomalies: 0` output should NOT be trusted alone — manually verify dispatch-log timestamps for review-independence claims. |
+| `subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | SDD (hook) | See Enforcement Hooks section. Rewrote 2026-05-20 (Module 2) to be manifest-aware: reads `.sdd-session.json` via git-root-relative paths; 8 enforcement checks gated by `enforcement.*` flags; process_requirements injected into additionalContext; dispatch log sentinel prevents forgery. Legacy fallback intact when no manifest present. |
 | `subagent-driven-development/scripts/sdd-report-guard.sh` | SDD (hook) | See Enforcement Hooks section |
 | `subagent-driven-development/scripts/sdd-stop-hook.sh` | SDD (hook) | See Enforcement Hooks section |
 | `subagent-driven-development/scripts/check-safe-branch.sh` | SDD | Shared: exits non-zero when on main or master branch. Called by `sdd-pre-dispatch-hook.sh`. |
@@ -371,15 +374,16 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 ---
 
-## Test Suites (3 custom)
+## Test Suites (4 custom)
 
 | Suite | Location | Checks | Runtime | What It Tests |
 |-------|----------|--------|---------|---------------|
-| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 139 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence |
-| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 105 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
+| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 146 | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence. Bumped from 143 to 146 by adaptive-enforcement-tiers feature (new files: `sdd_session.py`, `_midpoint.py`, `materialize-manifest.py`, `transition-module.py`). |
+| Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 104 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
 | Skill invocation | `tests/ARaymond-installation/verify-skill-invocation.sh` | ~4 | ~5 min | Actual Claude behavior: symlink-installed skills load and trigger correctly via `claude -p` |
 | Skill chain | `tests/ARaymond-installation/verify-skill-chain.sh` | ~10 | ~10 min | Brainstorming → writing-plans skill handoff chain works end-to-end via symlink install |
-| Unit tests (pytest) | `tests/unit/` | 273 | ~5s | Pydantic models (implementer report, checkpoint, plan, schema), validators CLI, controller-checkpoint.py, sdd-pre-dispatch-hook.sh, sdd-report-guard.sh, sdd-stop-hook.sh |
+| Unit tests (pytest) | `tests/unit/` | 326 | ~40s | Pydantic models (implementer report, checkpoint, plan, **sdd_session**, schema), validators CLI (plan/handoff/report/**session**), controller-checkpoint.py (incl. **manifest-mode**), sdd-pre-dispatch-hook.sh (incl. **manifest-mode dispatch detection**), sdd-report-guard.sh, sdd-stop-hook.sh, **transition-module.py**. Bumped from 273 to 326 by adaptive-enforcement-tiers feature (+53 tests). |
+| Integration (e2e) | `tests/integration/sdd-e2e-test.sh` | 7 | ~3s | Composed-pipeline smoke test (added 2026-05-20): exercises `materialize-manifest.py → validators.py session → controller-checkpoint.py --manifest → transition-module.py → post-transition checkpoint`. Caught one integration bug (`_load_manifest_config` missing feature_dir join) on first run that all unit tests had missed. |
 | Behavioral API | `tests/ARaymond-skill-behavior/run-all.sh` | 21+ | ~15 min | Actual Claude behavior: skill loading, content recall, invocation triggers. Requires `claude -p` with `--verbose --max-turns 5`. |
 
 **Run schedule**:

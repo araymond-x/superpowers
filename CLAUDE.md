@@ -36,11 +36,14 @@ All v0.1 files have been promoted to active and the originals removed. The impro
 
 ### Deterministic Scripts (`skills/subagent-driven-development/scripts/`)
 - `_report_utils.py` — shared library for report parsing (single source of truth — do NOT duplicate logic)
+- `_midpoint.py` — shared `compute_midpoint(start, end)` for materialize-manifest.py and transition-module.py (added 2026-05-20; consolidates the previously triplicated formula). Future SDD scripts that need it MUST import from here.
 - `estimate-task-tokens.py` — pre-dispatch context budget check (OK/WARNING/TOO_LARGE)
 - `validate-report.py` — two-layer report validation: Pydantic frontmatter (via validators.py) then 5 prose sections
-- `controller-checkpoint.py` — 3-phase controller health (pre-execution/pre-dispatch/pre-completion)
+- `controller-checkpoint.py` — 3-phase controller health (pre-execution/pre-dispatch/pre-completion). Supports `--manifest` flag (added 2026-05-20, Task 14): reads plan_file, tier, enforcement from `.sdd-session.json` via `_load_manifest_config()`. Micro tier gates Checks 5/6 (honesty + trace audit) to SKIP.
 - `context-summary.py` — compresses completed task reports into one summary file
-- `validate-plan.py` — mechanical plan structure checks (size, sections, Task 0)
+- `validate-plan.py` — mechanical plan structure checks (size, sections, Task 0). Added `enforcement_tier` validation 2026-05-20: BLOCKER on invalid tier; WARNING on micro + >3 tasks; WARNING on micro + modules.
+- `materialize-manifest.py` — (added 2026-05-20, Module 1) writes `.sdd-session.json` from plan frontmatter. Reads `enforcement_tier` (default `standard`), produces tier-specific `enforcement` + `process_requirements` dicts via `TIER_PROFILES`. Imports `compute_midpoint` from `_midpoint.py`.
+- `transition-module.py` — (added 2026-05-20, Module 3) manages module boundary lifecycle. Validates completion, archives reports to `archive-<module>/`, updates manifest, archives + truncates dispatch log, appends transition row to deviations. Imports `compute_midpoint` from `_midpoint.py`.
 - Scripts are referenced from SKILL-v0.1.md via full paths: `~/.claude/skills/superpowers/subagent-driven-development/scripts/...`
 - **Gotcha**: bare `scripts/` paths resolve from the project working directory, not the skill directory. Always use the full `~/.claude/skills/superpowers/...` path.
 
@@ -112,14 +115,15 @@ done
 ```
 
 ## Testing
-Quick reference: 4 test layers — regression (static, 143 checks), install (static, 102 checks), unit (pytest, 273 tests), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run both static and behavioral tests for significant changes. Details below.
+Quick reference: 5 test layers — regression (static, 146 checks), install (static, 104 checks), unit (pytest, 326 tests), integration (e2e pipeline, 7 steps), behavior (API, ~15m). Structural PASS ≠ semantic PASS — run all static + integration tests for significant changes. Details below.
 
-- `tests/ARaymond-skill-regression/validate-all-skills.py` — 139-check regression test for all skill files (frontmatter, size, cross-refs, scripts, sections, Python 3.9). Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+- `tests/ARaymond-skill-regression/validate-all-skills.py` — 146-check regression test (was 143 before adaptive-enforcement-tiers feature added `_midpoint.py`, `materialize-manifest.py`, `transition-module.py`). Tests frontmatter, size, cross-refs, scripts, sections, Python 3.9 compat. Run after ANY skill edit: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 - `docs/testing.md` describes the integration test framework but references a plugin-based setup (`superpowers@superpowers-dev`) — not applicable to this fork's symlink install
 - Token analysis works standalone: `python3 tests/claude-code/analyze-token-usage.py <session.jsonl>`
-- `tests/ARaymond-installation/verify-symlink-install.sh` — 105 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
-- `tests/unit/` — 273 pytest tests: Pydantic models (implementer_report, checkpoint_result, plan, schema versioning), validators CLI (plan, handoff, report subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
-- Run both after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py`
+- `tests/ARaymond-installation/verify-symlink-install.sh` — 104 checks for symlink+command-stub architecture (no API calls). Includes a regression guard that pins `hooks/session-start`'s `EXPECTED_SKILL_COUNT`/`EXPECTED_CMD_COUNT` to the real filesystem counts so adding or removing a skill without updating the hook fails the test. Run after upstream merges or installation changes.
+- `tests/unit/` — 326 pytest tests (was 273; +53 across Modules 1-4 of adaptive-enforcement-tiers). Pydantic models (implementer_report, checkpoint_result, plan, **sdd_session**, schema versioning), validators CLI (plan, handoff, report, **session** subcommands), controller-checkpoint.py (stale artifacts, honesty check, trace audit, minimum-tier ratio, **manifest-mode**), sdd-pre-dispatch-hook.sh (dispatch provenance, hard gates, checkpoint file, partner review, **manifest-mode dispatch detection**), sdd-report-guard.sh (dispatch log protection), sdd-stop-hook.sh (honesty log capture), **transition-module.py** (validate + archive + manifest update + deviations append). Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
+- `tests/integration/sdd-e2e-test.sh` — composed-pipeline smoke test (added 2026-05-20): exercises `materialize-manifest.py → validators.py session → controller-checkpoint.py --manifest → transition-module.py → post-transition checkpoint`. Caught one integration bug (`_load_manifest_config` missing feature_dir join) on first run that all unit tests had missed. Run before declaring SDD feature work complete: `bash tests/integration/sdd-e2e-test.sh`
+- Run all static + integration after upstream merges: `bash tests/ARaymond-installation/verify-symlink-install.sh && python3 tests/ARaymond-skill-regression/validate-all-skills.py && bash tests/integration/sdd-e2e-test.sh`
 - macOS PDF reading: requires `brew install poppler` for `pdftotext` command
 - All other test suites (`tests/claude-code/`, `tests/skill-triggering/`, `tests/explicit-skill-requests/`) use `--plugin-dir` — they test plugin mode, NOT the symlink install
 - macOS has no `timeout` command — test scripts use background-process-kill pattern instead
@@ -180,23 +184,37 @@ Applied Claude 4.6 prompting best practices across all skills per `docs/plans/20
 - Full plan: `docs/plans/2026-03-24-hooks-enforcement-plan.md`
 - Research: `docs/plans/2026-03-24-deterministic-ai-agent-discipline-hooks-analysis.md` — Gemini deep research on hooks enforcement, symlink issues, advisory instruction failures, Swiss Cheese defense model, and community patterns (March 2026)
 - **Pre-Completion Gates** (added 2026-04-21, commit `1de0a5f`): `controller-checkpoint.py` pre-completion phase blocks on three additional checks before allowing SDD completion:
-  - Honesty check log present (`reports/honesty-check.md`, 10 required questions answered)
-  - Trace audit complete (`reports/trace-audit.md` from `extract-execution-trace.py` + `trace-auditor-prompt.md`)
-  - Minimum-tier quality review ratio ≤ 20% (too many minimum-tier reviews triggers FAIL)
+  - Honesty check log present (`reports/honesty-check-*.md`, 9 required questions answered)
+  - Trace audit complete (`reports/execution-trace-audit.md` from `extract-execution-trace.py` + `trace-auditor-prompt.md`)
+  - Minimum-tier quality review ratio ≤ 50% (the actual code threshold; do not assume 20% from older docs)
 - Stop hook (`sdd-stop-hook.sh`) captures honesty logs globally so trace audit can cross-reference across sessions.
 
 ## Pydantic Validation (Phase 1 + Phase 2)
 - Models at `skills/scripts/models/` — `_base.py`, `plan.py`, `handoff.py`, `errors.py`, `validators.py`
 - `implementer_report.py` — ImplementerReport model (YAML frontmatter + markdown body), 2 validators
 - `checkpoint_result.py` — CheckpointResult model (pure JSON), 3 validators
+- `sdd_session.py` — (added 2026-05-20, Module 1) `SddSession` model for `.sdd-session.json` manifests. Exports `TIER_PROFILES` dict mapping tier name to `enforcement` + `process_requirements` substructures. Tier literal: `"micro" | "standard"`. Includes `midpoint_in_range` model validator.
 - Two base classes: `StrictModel` (nested types, `extra="forbid"`) and `SchemaVersionedModel` (top-level artifacts, `schema_version` pinned)
 - CLI: `python3 validators.py plan <path>` / `python3 validators.py handoff <dir>`
 - CLI: `python3 validators.py report <path>` — validates implementer report frontmatter
+- CLI: `python3 validators.py session <path>` — (added 2026-05-20, Module 4 Task 16) validates `.sdd-session.json` manifests
 - `validate-report.py` runs Pydantic validation before prose section checks
 - Exit codes: 0 pass / 1 validation fail / 2 infrastructure
 - Bypass: `export SUPERPOWERS_VALIDATOR_BYPASS=1` (emergency unblock, stderr warning)
 - Schema version: `CURRENT_SCHEMA_VERSION = 1` in `_base.py`. Bump per `docs/plans/2026-04-24-pydantic-meta-design.md` Section 4.2.
 - Plans and reports without YAML frontmatter are hard FAILs — add frontmatter to validate.
+
+## Adaptive Enforcement Tiers (2026-05-20)
+Tier-based SDD enforcement for varying feature complexity. Plans declare `enforcement_tier: micro|standard` in YAML frontmatter; SDD ingestion materializes `.sdd-session.json` from it; hooks read manifest exclusively when present, with legacy fallback when absent.
+
+- **Tiers**:
+  - `standard` (default): full enforcement — partner reviews, checkpoint files, pre-execution audit, dispatch provenance, dispatched spec/quality reviews.
+  - `micro`: relaxed enforcement for 1-2 task changes — self-review OK, no partner review, no real-time hook enforcement. Pre-completion gate skips honesty + trace audit.
+- **Materialization**: `materialize-manifest.py --plan-file <plan.md> --feature-dir <dir>` writes the manifest from plan frontmatter. `validate-plan.py` warns on micro + >3 tasks, micro + modules.
+- **Multi-module support**: `modules:` array in plan frontmatter declares per-module task ranges + per-module plan files. `transition-module.py --manifest <manifest> --completed-module <name> --next-module <name>` archives the completed module's reports, updates manifest, truncates dispatch log, appends to deviations.
+- **Manifest is git-root-relative**: all `paths` entries (feature_dir, reports_dir, dispatch_log, deviations_file, plan_file) are relative to git root. Scripts MUST resolve via `git rev-parse --show-toplevel`. `active_module_file` is a bare filename (Module 1 convention); reconstruct as `<git_root>/<feature_dir>/<active_module_file>`.
+- **Hook integration**: `sdd-pre-dispatch-hook.sh` detects manifest mode (`.sdd-session.json` exists), reads `enforcement.*` flags, conditionalizes 8 gate checks (pre_execution_audit, partner_review, dispatch_provenance, checkpoint_files, context_summary_at). Injects `process_requirements` into `additionalContext` on every allowed dispatch.
+- **Documentation**: feature spec at `docs/imp-plans/2026-05-17-adaptive-enforcement-tiers/`. End-to-end smoke test at `tests/integration/sdd-e2e-test.sh`. 40 deviation rows in `deviations.md`.
 
 ## New Harness Support
 

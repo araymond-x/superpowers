@@ -182,16 +182,65 @@ A mandatory self-assessment checkpoint between plan ingestion and first task dis
 
 A mandatory user-delivered compliance verification before the Pre-Completion Gate.
 
-**What it is**: The controller outputs 7 questions (from `honesty-check-prompt.md`) for the user to paste back into the session. The controller then answers each question honestly, enumerating any shortcuts, skipped steps, or unresolved uncertainties.
+**What it is**: The controller outputs 9 questions (from `honesty-check-prompt.md`) for the user to paste back into the session. The controller then answers each question honestly, enumerating any shortcuts, skipped steps, or unresolved uncertainties.
 
 **Why it works**: LLMs honestly enumerate violations when directly asked — the advisory instruction problem does not extend to direct compliance questions. When positioned as a compliance audit rather than self-assessment, the controller has no motivation to rationalize omissions.
 
-**Track record**: Has caught 3 major violations across live sessions:
+**Track record**: Has caught 4 major violation patterns across live sessions:
 - All reviews skipped (controller admitted zero spec/quality reviews dispatched)
 - 5 shortcuts taken prior to audit (undisclosed at pre-execution gate)
 - Skill never loaded (controller implemented directly from plan without invoking SDD skill)
+- Controller-authored implementer reports + parallel review dispatch + uncommitted patches (2026-05-20 adaptive-enforcement-tiers session — see addendum to that feature's honesty-check report for the four findings the controller missed in its own audit, all caught by the trace auditor)
 
-**When it fires**: Mandatory before the 7-condition Pre-Completion Gate. The gate should not proceed until the honesty check is complete and any disclosed violations are remediated.
+**Honesty report is necessary but not sufficient.** The 2026-05-20 session demonstrated that the controller's self-audit understates magnitude even when it's substantively correct in direction. **Always pair the honesty report with an independent execution-trace audit** (`extract-execution-trace.py` + `trace-auditor-prompt.md`). The auditor reads the artifacts, not the controller's self-report — that independence catches what the controller's confirmation bias misses.
+
+**When it fires**: Mandatory before the 8-check Pre-Completion Gate. The gate should not proceed until the honesty check is complete, the trace audit is filed, and any disclosed violations are remediated or accepted-with-disclosure in `deviations.md`.
+
+---
+
+## Review Dispatch Sequencing (2026-05-20 lesson)
+
+The SDD skill says "spec compliance review first, THEN code quality review only after spec passes" (`code-quality-reviewer-prompt.md`). The 2026-05-20 adaptive-enforcement-tiers session revealed three failure modes in how controllers actually implement this:
+
+1. **Combined dispatch** (Tasks 16, 18): one Agent call asked to produce both review files. The dispatch-log hook on the next task blocked because the log only had one entry. Recovery via rubber-stamp "verification" subagents that just re-read the existing files. **Rule**: each review type MUST be its own Agent call.
+
+2. **Parallel dispatch** (Tasks 13, 14, 15, 17, 19, 20): spec and quality dispatched in the same message as separate Agent tool blocks. Independent subagents, but launched concurrently. Looks like two reviews in the dispatch log, but spec→quality gaps of 5-22 seconds are mechanically incompatible with two independent reviews of substantive code. **Rule**: dispatch spec, wait for result, evaluate, THEN dispatch quality. Never both in one message.
+
+3. **Quality-written-before-spec** (Tasks 15, 20): symptom of parallel dispatch where the quality subagent finished first. **Rule**: not just sequential dispatch — sequential evaluation. If spec fails, you may skip quality entirely. Parallel dispatch eliminates that option.
+
+The dispatch-log hook catches combined-dispatch (case 1) on the *next* task. Parallel dispatch (case 2) is not currently detected — see "Integration Tests Catch What Unit Tests Miss" below for the broader pattern of static checks missing runtime composition issues.
+
+---
+
+## Implementer Report Format
+
+Implementer reports are validated by `validate-report.py` against two layers:
+1. **Pydantic frontmatter** via `validators.py report`: requires specific fields (`task_id`, `status`, `files_changed` as list-of-dicts with `path` + `description`, `tests` with `written`/`passing`/`command`/`result` where `passing <= written` and `result in {"PASS", "FAIL"}`).
+2. **Prose sections** via regex header scan: requires the five exact section headers:
+   - `**Implementation Summary:**`
+   - `**Source Files Read:**`
+   - `**Deviations from Plan:**`
+   - `**Self-Review Findings:**`
+   - `**Concerns:**`
+
+**Common implementer mistakes** (caught in 2026-05-20 session):
+- `tests.result: N/A` — invalid; use `PASS` with `written: 0, passing: 0` for tasks that don't author tests (regression-only verification).
+- `passing > written` — invalid Pydantic invariant; for regression-only tasks, set both to 0 and describe the regression coverage in `tests.command`.
+- `files_modified` (wrong field name) — schema requires `files_changed` with `path`+`description` dict shape.
+- `## Header` markdown — `validate_report_sections()` scans for `**Header:**` form; `## Header` is not matched.
+- Adding extra fields like `task_title`, `plan_departures` — Pydantic `extra="forbid"` rejects these.
+
+**Process rule**: If the implementer's report fails validation, **re-dispatch the implementer to fix it**, do not patch the report yourself. If you must patch (e.g., schema field rename that the implementer can't be expected to know), commit the patch immediately with a clear "controller patch (not implementer)" message disclosing provenance. Uncommitted controller-authored report content lets the working tree silently diverge from published history.
+
+---
+
+## Integration Tests Catch What Unit Tests Miss
+
+The 2026-05-20 adaptive-enforcement-tiers feature shipped four scripts (`materialize-manifest.py`, `controller-checkpoint.py --manifest`, `transition-module.py`, `validators.py session`) that all had passing unit tests AND a passing pre-completion gate. The e2e composed-pipeline test (`tests/integration/sdd-e2e-test.sh`) found an integration bug on first run:
+
+> `_load_manifest_config(args)` resolved `active_module_file` as `os.path.join(git_root, manifest.active_module_file)`, producing `<git_root>/module-1.md` instead of `<git_root>/<feature_dir>/module-1.md`. The hook (Module 2) had this corrected in deviation row 3; Task 14's Python code missed the same correction. Unit tests didn't catch it because Task 15's `setup_checkpoint_workspace` fixture set `active_module_file: None`, so the buggy branch was never exercised.
+
+**Lesson**: unit tests cover branches that exist in fixtures. Integration tests cover branches that exist in composed-runtime reality. For any feature with multiple scripts that compose into a pipeline, write an end-to-end smoke test that runs the actual pipeline against a temp git repo. Cost: 100 lines of bash. Catch rate from this incident: 1 real bug + structural confidence that the gate doesn't have.
 
 ---
 
@@ -354,3 +403,8 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Upstream merge overwrites fork customizations | Agent relied on stale CLAUDE.md info claiming v0.1 files "not yet promoted" — would have let upstream overwrite promoted customizations | Three-way comparison (merge-base vs ours vs upstream) is mandatory. Never trust documentation about file state — verify against the filesystem. All 15 SKILL.md files diverge from upstream. |
 | Agent uses unittest instead of pytest without asking | Controller chose unittest for new test files without consulting user on framework preference | Test framework choice is a consequential decision requiring approval. Saved as feedback memory for future sessions. |
 | Agent skips plan validation during modular plan writing | Agent wrote 5 plan modules without running validate-plan.py or dispatching the plan reviewer; only self-corrected after user intervention | Checklist added to writing-plans skill; Plan Completion Gate section makes steps 8-10 non-negotiable; `plan-validation-gate-hook.sh` blocks execution skill invocation without validation pass + review report |
+| Combined spec+quality review subagent dispatch | 2026-05-20 adaptive-enforcement-tiers Tasks 16, 18: one Agent call produced both review files; dispatch-log hook blocked next task because only one entry was logged | Dispatch each review type as its own Agent call. The hook's per-task dispatch-log check catches this on the *next* task. Recovery is to dispatch two "verification" subagents to confirm existing reviews — but those are rubber-stamps, not independent audits. |
+| Parallel spec+quality review dispatch | 2026-05-20: spec and quality dispatched in the same message as separate Agent tool blocks; gaps of 5-22 seconds; quality-written-before-spec in 2 tasks | The SDD skill says "spec PASS THEN quality". Parallel violates the sequencing rule even when subagents are independent. Dispatch spec, wait for result, evaluate, THEN dispatch quality — never both in one message. Not currently hook-detected; rely on trace auditor + this convention. |
+| Controller patches implementer report instead of re-dispatching | 2026-05-20: three reports edited directly for Pydantic schema fixes (result: N/A → PASS, passing: 24 → 0, prose-header rewrite); two were uncommitted at honesty-check time | Re-dispatch the implementer to fix schema/section issues. If you must patch (rare; e.g., field rename the implementer can't know), commit the patch immediately with explicit "controller patch (not implementer)" message disclosing provenance. Uncommitted controller-authored content lets working tree silently diverge from history. |
+| Integration bug masked by unit test fixture | 2026-05-20: `_load_manifest_config` missing `feature_dir` join in path resolution; all 326 unit tests passed because the test fixture set `active_module_file: None`, never exercising the buggy branch | Write an end-to-end smoke test (e.g., `tests/integration/sdd-e2e-test.sh`) that composes all feature scripts against a temp git repo. Run before declaring feature complete. Cost: 100 lines of bash. Catches what unit tests can't: runtime composition issues. |
+| Plan-reference code contains the same bug across multiple tasks | 2026-05-20: midpoint formula `range_size = end - start + 1` appeared in Task 4, Task 11, and Task 12 plan-reference code; corrected via deviation row each time | Extract repeated logic to a shared module (e.g., `_midpoint.py`) at the first occurrence — do not "Deferred — log only" three times. Update the plan author's source (writing-plans SKILL.md) so future plans don't regenerate the bug. |
