@@ -101,9 +101,20 @@ def read_file(path: str) -> str:
         return fh.read()
 
 
+def _frontmatter_end_line(lines: List[str]) -> int:
+    """Return the index of the first line after YAML frontmatter, or 0 if none."""
+    if not lines or lines[0].strip() != "---":
+        return 0
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return i + 1
+    return 0
+
+
 def header_area(lines: List[str]) -> str:
-    """Return the first HEADER_AREA_LINES lines joined as a single string."""
-    return "\n".join(lines[:HEADER_AREA_LINES])
+    """Return the first HEADER_AREA_LINES of plan body, skipping YAML frontmatter."""
+    offset = _frontmatter_end_line(lines)
+    return "\n".join(lines[offset : offset + HEADER_AREA_LINES])
 
 
 def extract_inline_value(content: str, pattern: re.Pattern) -> Optional[str]:

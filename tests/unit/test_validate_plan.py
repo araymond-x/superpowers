@@ -442,6 +442,101 @@ tasks:
 """
 
 
+# ---------------------------------------------------------------------------
+# Tests: Frontmatter offset — header area should start after YAML frontmatter
+# ---------------------------------------------------------------------------
+
+# 35 lines of YAML frontmatter pushes section labels past line 50
+PLAN_WITH_LONG_FRONTMATTER = """\
+---
+schema_version: 1
+feature_archetype: greenfield
+enforcement_tier: standard
+source_contracts: null
+contract_constraints: null
+shared_constants: null
+pattern_references: null
+tasks:
+  - id: 0
+    title: "Contract verification"
+  - id: 1
+    title: "Write failing self-test for the CTA guard"
+  - id: 2
+    title: "Implement the CTA guard module"
+  - id: 3
+    title: "Wire CTA guard into the pipeline"
+  - id: 4
+    title: "Add integration test for CTA rendering"
+  - id: 5
+    title: "Test negative paths and edge cases"
+  - id: 6
+    title: "Update existing tests for new contract"
+  - id: 7
+    title: "Final acceptance and cleanup"
+  - id: 8
+    title: "Smoke test full pipeline"
+  - id: 9
+    title: "Documentation and handoff"
+  - id: 10
+    title: "Deploy behind feature flag"
+  - id: 11
+    title: "Monitor and validate in staging"
+  - id: 12
+    title: "Enable for beta users"
+  - id: 13
+    title: "Full rollout and cleanup"
+modules: null
+notes: |
+  This plan has intentionally verbose frontmatter to exercise
+  the header area offset logic. The YAML block consumes more
+  than 45 lines, pushing markdown section labels past the
+  original 50-line header window.
+---
+# Implementation Plan: CTA Guard
+
+## Source Contracts: None
+## Feature Archetype: Greenfield
+**Contract Constraints**: Single-pass rendering only
+
+## Code Footprint
+- app/guards/cta.py (new)
+- tests/unit/test_cta_guard.py (new)
+
+### Task 0 — Contract verification
+- [ ] Copy fixtures
+
+### Task 1 — Write failing self-test
+- [ ] Write test for guard logic
+"""
+
+
+class TestFrontmatterOffset:
+    """Header area for section detection should start after YAML frontmatter."""
+
+    def test_sections_detected_despite_long_frontmatter(self):
+        result = run_validate(PLAN_WITH_LONG_FRONTMATTER)
+        sections = result["output"].get("sections", {})
+        assert sections["source_contracts"]["present"], (
+            "Source Contracts should be detected after long frontmatter"
+        )
+        assert sections["feature_archetype"]["present"], (
+            "Feature Archetype should be detected after long frontmatter"
+        )
+        assert sections["code_footprint"]["present"], (
+            "Code Footprint should be detected after long frontmatter"
+        )
+        assert sections["contract_constraints"]["present"], (
+            "Contract Constraints should be detected after long frontmatter"
+        )
+
+    def test_no_frontmatter_unchanged(self):
+        """Plans without frontmatter should behave identically."""
+        result = run_validate(CLEAN_SINGLE_MODULE)
+        sections = result["output"].get("sections", {})
+        assert sections["code_footprint"]["present"]
+        assert sections["file_map"]["present"]
+
+
 class TestEnforcementTierValidation:
     def test_valid_micro_tier_passes(self):
         result = run_validate(PLAN_WITH_MICRO_TIER)
