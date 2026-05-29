@@ -34,5 +34,8 @@ Check 4b's `VALIDATE_EXIT -ne 0` branch now captures `VALIDATE_EXCERPT=$(echo "$
 **Deviations from Plan:**
 - None.
 
+**Self-Review Findings:**
+- RED confirmed before GREEN (test failed with the old exit-code-only message). Verified rendered stderr shows real newlines (not literal `\n`) — emission is via `echo -e` at line 616, and the `\n` markers follow the file's existing inter-error separator convention (matches line 338). Confirmed `VALIDATE_OUTPUT` is the validator's combined stdout+stderr (captured with `2>&1` at line 374), so the excerpt contains the field-error lines. Test reached Check 4b with no extra task-0 artifacts. INCOMPLETE branch untouched (grep-confirmed).
+
 **Concerns:**
 - None. INCOMPLETE (missing-sections) branch left unchanged as instructed.
