@@ -552,12 +552,12 @@ git commit -m "feat(checkpoint): exclude declared review_tier:minimum tasks from
 
 **Context:** Item 4d. Current file is ~4100 words; this adds ~200, staying well under the 5000-word soft limit. No test (docs only) — verification is a word-count check + the regression suite in Task 8.
 
-- [ ] **Step 1: Verify current word count and insertion point**
+- [x] **Step 1: Verify current word count and insertion point**
 
 Run: `wc -w skills/writing-plans/SKILL.md`
 Note the count (must remain < 5000 after the edit). Confirm the `## No Placeholders` header location with: `grep -n "^## No Placeholders" skills/writing-plans/SKILL.md`. Insert the new section immediately before it.
 
-- [ ] **Step 2: Insert the decision table**
+- [x] **Step 2: Insert the decision table**
 
 Add this section immediately before `## No Placeholders`:
 
@@ -592,13 +592,13 @@ Each task may declare `review_tier: minimum` in the plan's YAML frontmatter to s
 **Gray zone:** SQL views with business logic → full (SQL encodes rules). Contract-compliance tests (TDD-style) → full (tests are the spec). DDL + a one-line config registration as a single task → minimum is fine.
 ```
 
-- [ ] **Step 3: Verify word count and regression**
+- [x] **Step 3: Verify word count and regression**
 
 Run: `wc -w skills/writing-plans/SKILL.md` (confirm < 5000)
 Run: `.venv/bin/python3 tests/ARaymond-skill-regression/validate-all-skills.py` (confirm writing-plans SKILL.md still passes size/cross-ref checks)
 Expected: word count < 5000; regression PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/writing-plans/SKILL.md
@@ -611,5 +611,5 @@ git commit -m "docs(writing-plans): add review_tier decision table"
 - [x] `validate-plan.py` warns on review_tier:minimum + high-risk titles; not on `migration` alone
 - [x] Pre-completion ratio excludes declared-minimum from numerator AND denominator (quality + partner)
 - [x] Undeclared minimum-tier reviews still block at >50%; modular plans aggregate all module files; parse failure → WARNING fallback
-- [ ] `writing-plans/SKILL.md` has the decision table and stays < 5000 words
-- [ ] All Module 1 unit tests pass
+- [x] `writing-plans/SKILL.md` has the decision table and stays < 5000 words
+- [x] All Module 1 unit tests pass
