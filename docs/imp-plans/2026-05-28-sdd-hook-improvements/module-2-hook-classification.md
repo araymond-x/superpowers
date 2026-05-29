@@ -488,7 +488,7 @@ git commit -m "refactor(sdd-hook): remove dead legacy branches after manifest-on
 - Modify: `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` (Check 4b validation-error branch)
 - Test: `tests/unit/test_sdd_dispatch_log.py` (or `test_sdd_classification.py`) — add one focused test
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add to `tests/unit/test_sdd_classification.py`:
 
@@ -520,12 +520,12 @@ class TestValidationErrorSurfacing:
             f"Expected an inline validation excerpt naming task_id. stderr: {result.stderr}"
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py::TestValidationErrorSurfacing -v`
 Expected: FAIL — current message reports only the exit code, no field excerpt.
 
-- [ ] **Step 3: Add the excerpt to the error message**
+- [x] **Step 3: Add the excerpt to the error message**
 
 In Check 4b, the branch where `validate-report.py` exits non-zero currently reads:
 ```bash
@@ -540,12 +540,12 @@ Change it to include the first 12 lines of `$VALIDATE_OUTPUT`. **`head -n 12`, n
 ```
 Leave the INCOMPLETE branch (missing-sections) unchanged — it already surfaces section names.
 
-- [ ] **Step 4: Run the test and the full suite**
+- [x] **Step 4: Run the test and the full suite**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py -v` → PASS
 Run: `.venv/bin/python3 -m pytest tests/unit/ -v` → PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/unit/test_sdd_classification.py
@@ -609,6 +609,6 @@ git commit -m "docs(sdd): record hook classification + review_tier changes; upda
 - [x] Ad-hoc (non-reviewer/non-implementer) dispatches pass through without logging or enforcement
 - [x] First reviewer dispatch creates `reports/` + dispatch log
 - [x] No manifest + artifacts → BLOCK with a manifest-guidance message; no manifest + no artifacts → ALLOW
-- [ ] Validation errors include the first 5 lines of `validate-report.py` output
+- [x] Validation errors include the first 5 lines of `validate-report.py` output
 - [x] All legacy branches removed; residual-legacy grep is clean
 - [ ] All five test layers pass; `CLAUDE.md` + customization manifest updated with new counts and behavior
