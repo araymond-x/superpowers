@@ -65,8 +65,8 @@ fi
 cd "$CWD" || exit 0
 
 # ─── Manifest-based path resolution (CWD-stable) ────────────────────────
-# Try git-root-relative resolution first. Falls back to legacy CWD-relative
-# resolution if no manifest exists.
+# Resolve all paths git-root-relative from the manifest. No manifest → not a
+# manifest-mode SDD session (handled by the guard clause below).
 MANIFEST=""
 MANIFEST_MODE=false
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || echo "")

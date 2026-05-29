@@ -442,7 +442,7 @@ git commit -m "feat(sdd-hook): 3-stage classification, auto-create dispatch log,
 
 **Context:** After Task 6's guard clause, `MANIFEST_MODE` is always `true` in the enforcement section, so the legacy `else` branches are unreachable dead code (architectural principle: dead code must be removed). This task references code *patterns*, not line numbers, since Task 6 shifted them.
 
-- [ ] **Step 1: Remove each dead legacy branch**
+- [x] **Step 1: Remove each dead legacy branch**
 
 Work top-down through the enforcement checks; remove the dead branch and de-indent the kept manifest branch:
 
@@ -464,16 +464,16 @@ Work top-down through the enforcement checks; remove the dead branch and de-inde
 8. **Remove dead helpers/vars:** `feat_path()` (already removed with the 123-153 block) and any now-unused variable. Keep `FEAT` only if still referenced.
 9. **Update the stale top-of-file comment** (the "Legacy fallback verified intact" block, ~lines 16-19) — replace with a one-line note that the legacy non-manifest path was removed in this change.
 
-- [ ] **Step 2: Audit for residual legacy code**
+- [x] **Step 2: Audit for residual legacy code**
 
 Run: `grep -nE 'MANIFEST_MODE = false|Legacy mode|feat_path|PLAN_SEARCH_GLOB|SEARCHED_DIRS|subagent_type' skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 Expected: no functional matches.
 
-- [ ] **Step 3: Run the full suite**
+- [x] **Step 3: Run the full suite**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -v` → PASS (0 failures).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
@@ -610,5 +610,5 @@ git commit -m "docs(sdd): record hook classification + review_tier changes; upda
 - [x] First reviewer dispatch creates `reports/` + dispatch log
 - [x] No manifest + artifacts → BLOCK with a manifest-guidance message; no manifest + no artifacts → ALLOW
 - [ ] Validation errors include the first 5 lines of `validate-report.py` output
-- [ ] All legacy branches removed; residual-legacy grep is clean
+- [x] All legacy branches removed; residual-legacy grep is clean
 - [ ] All five test layers pass; `CLAUDE.md` + customization manifest updated with new counts and behavior
