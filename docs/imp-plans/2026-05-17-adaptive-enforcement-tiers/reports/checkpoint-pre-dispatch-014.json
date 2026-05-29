@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "PASS",
+  "task_number": 14,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "PASS",
+      "detail": "Task 13: 3/3 checked"
+    },
+    "previous_task_report": {
+      "status": "PASS",
+      "detail": "docs/imp-plans/2026-05-17-adaptive-enforcement-tiers/reports/task-013-implementer-report.md exists"
+    },
+    "previous_report_complete": {
+      "status": "PASS",
+      "detail": "5/5 sections present"
+    },
+    "previous_spec_review": {
+      "status": "PASS",
+      "detail": "reports/task-013-spec-review exists"
+    },
+    "previous_quality_review": {
+      "status": "PASS",
+      "detail": "reports/task-013-quality-review exists"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~87.1KB (~22,288 tokens, 16 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 4,
+    "tasks_completed": 13,
+    "checkboxes_total": 22,
+    "checkboxes_checked": 6,
+    "percentage": 27
+  }
+}
