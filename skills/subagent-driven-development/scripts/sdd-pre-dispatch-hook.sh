@@ -120,161 +120,81 @@ if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
   fi
 fi
 
+# ─── Require manifest mode (legacy non-manifest path removed) ───────────────
+# No manifest + SDD artifacts present → upstream failure, block with guidance.
+# No manifest + no artifacts → not an SDD session, allow.
 if [ "$MANIFEST_MODE" = false ]; then
-  # ─── Legacy CWD-relative path resolution ─────────────────────────────
-  # ─── Resolve active feature directory ─────────────────────────────────────
-  FEAT=""
   if [ -f ".active-feature" ]; then
-    FEAT=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
-  fi
-
-  # Helper: resolve artifact path with feature-dir prefix (falls back to root)
-  feat_path() {
-    if [ -n "$FEAT" ]; then
-      echo "$FEAT/$1"
-    else
-      echo "$1"
-    fi
-  }
-
-  # Resolved artifact locations
-  DEVIATIONS_FILE=$(feat_path "deviations.md")
-  REPORTS_DIR=$(feat_path "reports")
-  DISPATCH_LOG=$(feat_path "reports/.dispatch-log")
-  # Note: when FEAT is empty, DEVIATIONS_FILE="deviations.md" which doesn't exist
-  # in old layout (was "DEVIATIONS.md"). The fallback handles this:
-  if [ -z "$FEAT" ] && [ ! -f "$DEVIATIONS_FILE" ] && [ -f "DEVIATIONS.md" ]; then
-    DEVIATIONS_FILE="DEVIATIONS.md"
-  fi
-  if [ -z "$FEAT" ] && [ ! -d "$REPORTS_DIR" ] && [ -d "reports" ]; then
-    REPORTS_DIR="reports"
-    DISPATCH_LOG="reports/.dispatch-log"
-  fi
-fi
-
-if [ "$MANIFEST_MODE" = true ]; then
-  # ─── Manifest-mode dispatch detection ──────────────────────────────────────
-  # Any Agent dispatch when manifest exists is subject to enforcement.
-  # Passthrough: check subagent_type if available, then description patterns.
-  SUBAGENT_TYPE=""
-  IS_REVIEWER=false
-  IS_IMPLEMENTER=false
-  REVIEW_TASK=""
-  REVIEW_TYPE="unknown"
-  TASK_NUMBER=""
-
-  SUBAGENT_TYPE=$(echo "$INPUT" | jq -r '.tool_input.subagent_type // ""' 2>/dev/null)
-
-  # Known non-implementer agent types pass through
-  if echo "$SUBAGENT_TYPE" | grep -qiE '^(Explore|general-purpose|Plan|debugger|feature-dev|code-reviewer|code-simplifier)$'; then
-    exit 0
-  fi
-
-  # Reviewer detection (log to dispatch log, then allow)
-  if echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit|partner.review)'; then
-    IS_REVIEWER=true
-  fi
-
-  if [ "$IS_REVIEWER" = true ]; then
-    # Log reviewer dispatch (same as legacy) and allow
-    if [ -d "$(dirname "$DISPATCH_LOG")" ]; then
-      REVIEW_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-      REVIEW_TYPE="unknown"
-      if echo "$DESCRIPTION" | grep -qiE '(spec.compliance|spec.review)'; then REVIEW_TYPE="spec-review"
-      elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review)'; then REVIEW_TYPE="quality-review"
-      elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then REVIEW_TYPE="trace-audit"
-      elif echo "$DESCRIPTION" | grep -qiE '(partner.review|controller.partner)'; then REVIEW_TYPE="partner-review"
-      fi
-      if [ -n "$REVIEW_TASK" ]; then
-        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$REVIEW_TASK type=$REVIEW_TYPE" >> "$DISPATCH_LOG"
-      fi
-    fi
-    # Dispatch log sentinel — write on first reviewer dispatch
-    if [ -f "$DISPATCH_LOG" ]; then
-      SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
-      if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
-        # First dispatch — write sentinel
-        SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
-        SENTINEL_HASH=$(echo -n "${SESSION_ID}-$(date -u +%Y%m%d%H%M%S)" | shasum -a 256 | cut -d' ' -f1)
-        SENTINEL="# sdd-hook-sentinel $SENTINEL_HASH"
-        # Prepend sentinel to dispatch log
-        TEMP_LOG=$(mktemp)
-        echo "$SENTINEL" > "$TEMP_LOG"
-        cat "$DISPATCH_LOG" >> "$TEMP_LOG"
-        mv "$TEMP_LOG" "$DISPATCH_LOG"
-      fi
-    fi
-    exit 0
-  fi
-
-  # All other dispatches in manifest mode: treat as implementer
-  IS_IMPLEMENTER=true
-  TASK_NUMBER=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-  if [ -z "$TASK_NUMBER" ]; then
-    TASK_NUMBER=$(echo "$PROMPT" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-  fi
-
-  # Validate task number is in manifest range
-  if [ -n "$TASK_NUMBER" ]; then
-    if [ "$TASK_NUMBER" -lt "$MANIFEST_TASK_START" ] || [ "$TASK_NUMBER" -gt "$MANIFEST_TASK_END" ] 2>/dev/null; then
-      echo "BLOCKED: Task $TASK_NUMBER is outside the manifest's task_range [$MANIFEST_TASK_START, $MANIFEST_TASK_END]. Check the active module in .sdd-session.json." >&2
+    FEAT_CHECK=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
+    if [ -d "$FEAT_CHECK/reports" ] || [ -f "$FEAT_CHECK/deviations.md" ]; then
+      echo "BLOCKED: SDD artifacts found in $FEAT_CHECK/ but no .sdd-session.json manifest. Run Plan Ingestion (materialize-manifest.py) to create the session manifest before dispatching tasks." >&2
       exit 2
     fi
   fi
+  exit 0
 fi
 
-if [ "$MANIFEST_MODE" = false ]; then
-  # ─── Legacy regex-based dispatch detection ─────────────────────────────
-  # ─── Determine dispatch type ──────────────────────────────────────────────
+# ─── Manifest-mode dispatch classification (3-stage pipeline) ───────────────
+# Order is load-bearing: reviewers are logged BEFORE any passthrough so that
+# general-purpose reviewers (the post-2026-05-07 default) are recorded.
+IS_REVIEWER=false
+IS_IMPLEMENTER=false
+REVIEW_TASK=""
+REVIEW_TYPE="unknown"
+TASK_NUMBER=""
 
-  # Is this an implementer task dispatch?
-  TASK_NUMBER=""
-  IS_IMPLEMENTER=false
-  if echo "$DESCRIPTION" | grep -qiE '(implement|dispatch).*task\s*[0-9]'; then
-    TASK_NUMBER=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-    IS_IMPLEMENTER=true
-  elif echo "$PROMPT" | grep -qiE 'you are implementing task\s*[0-9]'; then
-    TASK_NUMBER=$(echo "$PROMPT" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-    IS_IMPLEMENTER=true
-  fi
-
-  # Is this a reviewer dispatch? (always allowed)
-  IS_REVIEWER=false
-  if echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit)'; then
-    IS_REVIEWER=true
-  fi
-
-  # If this is a reviewer dispatch, log it and allow
-  if [ "$IS_REVIEWER" = true ]; then
-    # ─── Dispatch provenance logging ──────────────────────────────────────
-    # Log reviewer dispatches to the dispatch log so the next implementer
-    # dispatch can verify reviews were actually dispatched (not self-written).
-    if [ -d "$REPORTS_DIR" ]; then
-      # Extract task number from description (e.g., "Review task 3 spec compliance")
-      REVIEW_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
-      # Determine review type from description
-      REVIEW_TYPE="unknown"
-      if echo "$DESCRIPTION" | grep -qiE '(spec.compliance|spec.review)'; then
-        REVIEW_TYPE="spec-review"
-      elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review)'; then
-        REVIEW_TYPE="quality-review"
-      elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then
-        REVIEW_TYPE="trace-audit"
-      elif echo "$DESCRIPTION" | grep -qiE '(partner.review|controller.partner)'; then
-        REVIEW_TYPE="partner-review"
-      fi
-
-      if [ -n "$REVIEW_TASK" ]; then
-        echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$REVIEW_TASK type=$REVIEW_TYPE" >> "$DISPATCH_LOG"
-      fi
-    fi
-    exit 0
-  fi
+# Stage 1: Reviewer detection (by description).
+if echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit|partner.review)'; then
+  IS_REVIEWER=true
 fi
 
-# If this doesn't look like an SDD dispatch at all (e.g., Explore agent, general research), allow
+if [ "$IS_REVIEWER" = true ]; then
+  # Item 3: ensure dispatch log dir + file exist (idempotent) before logging.
+  mkdir -p "$(dirname "$DISPATCH_LOG")"
+  touch "$DISPATCH_LOG"
+  REVIEW_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  if echo "$DESCRIPTION" | grep -qiE '(spec.compliance|spec.review)'; then REVIEW_TYPE="spec-review"
+  elif echo "$DESCRIPTION" | grep -qiE '(code.quality|quality.review)'; then REVIEW_TYPE="quality-review"
+  elif echo "$DESCRIPTION" | grep -qiE 'trace.audit'; then REVIEW_TYPE="trace-audit"
+  elif echo "$DESCRIPTION" | grep -qiE '(partner.review|controller.partner)'; then REVIEW_TYPE="partner-review"
+  fi
+  if [ -n "$REVIEW_TASK" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$REVIEW_TASK type=$REVIEW_TYPE" >> "$DISPATCH_LOG"
+  fi
+  # Sentinel — write on first reviewer dispatch.
+  SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
+  if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
+    SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
+    SENTINEL_HASH=$(echo -n "${SESSION_ID}-$(date -u +%Y%m%d%H%M%S)" | shasum -a 256 | cut -d' ' -f1)
+    SENTINEL="# sdd-hook-sentinel $SENTINEL_HASH"
+    TEMP_LOG=$(mktemp)
+    echo "$SENTINEL" > "$TEMP_LOG"
+    cat "$DISPATCH_LOG" >> "$TEMP_LOG"
+    mv "$TEMP_LOG" "$DISPATCH_LOG"
+  fi
+  exit 0
+fi
+
+# Stage 2: Implementer detection (by description or prompt).
+if echo "$DESCRIPTION" | grep -qiE '(implement|dispatch).*task\s*[0-9]'; then
+  TASK_NUMBER=$(echo "$DESCRIPTION" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  IS_IMPLEMENTER=true
+elif echo "$PROMPT" | grep -qiE 'you are implementing task\s*[0-9]'; then
+  TASK_NUMBER=$(echo "$PROMPT" | grep -oiE 'task\s*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  IS_IMPLEMENTER=true
+fi
+
+# Stage 3: Not a reviewer, not an implementer → allow (Explore, Plan, ad-hoc).
 if [ "$IS_IMPLEMENTER" = false ]; then
   exit 0
+fi
+
+# Validate task number is within the manifest's task range.
+if [ -n "$TASK_NUMBER" ]; then
+  if [ "$TASK_NUMBER" -lt "$MANIFEST_TASK_START" ] || [ "$TASK_NUMBER" -gt "$MANIFEST_TASK_END" ] 2>/dev/null; then
+    echo "BLOCKED: Task $TASK_NUMBER is outside the manifest's task_range [$MANIFEST_TASK_START, $MANIFEST_TASK_END]. Check the active module in .sdd-session.json." >&2
+    exit 2
+  fi
 fi
 
 # ─── Helper: format task number for report file glob ─────────────────────
