@@ -92,7 +92,7 @@ Internal hook/test changes only.
 
 Verified design fact: a root-level `feature_dir="."` (manifest at git root, `reports_dir="reports"`) activates manifest mode and keeps `reports/` at `tmpdir/reports`, so existing hardcoded paths like `os.path.join(tmpdir, "reports", ".dispatch-log")` resolve unchanged.
 
-- [ ] **Step 1: Add the shared `_write_manifest` helper**
+- [x] **Step 1: Add the shared `_write_manifest` helper**
 
 Add to `tests/unit/sdd_test_helpers.py` (it already imports `json`, `os`, `subprocess`):
 
@@ -156,7 +156,7 @@ def _write_manifest(root, feature_dir, reports_rel, deviations_rel, plan_rel,
         json.dump(manifest, f, indent=2)
 ```
 
-- [ ] **Step 2: Call it from `setup_sdd_workspace`**
+- [x] **Step 2: Call it from `setup_sdd_workspace`**
 
 In `setup_sdd_workspace`, insert the manifest write **immediately before the `git init` block** (after the plan/DEVIATIONS/audit files are written). Root layout → `feature_dir="."`:
 
@@ -174,12 +174,12 @@ In `setup_sdd_workspace`, insert the manifest write **immediately before the `gi
 
 `setup_full_sdd_workspace` calls `setup_sdd_workspace`, so it inherits the manifest automatically — no separate change.
 
-- [ ] **Step 3: Verify the migrated helpers against the UNCHANGED hook**
+- [x] **Step 3: Verify the migrated helpers against the UNCHANGED hook**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_partner_gate.py tests/unit/test_sdd_hard_gates.py::TestTokenEstimationBlocking tests/unit/test_sdd_hard_gates.py::TestContextSummaryBlocking tests/unit/test_sdd_hard_gates.py::TestCheckpointFileGate -v`
 Expected: PASS — these now run in manifest mode (manifest present) against the unchanged hook. Fix any path/expectation drift (the manifest's `context_summary_at` is the midpoint, matching the legacy midpoint these tests assumed).
 
-- [ ] **Step 4: Rewrite the bare-`reports/` reviewer tests in `test_sdd_dispatch_log.py`**
+- [x] **Step 4: Rewrite the bare-`reports/` reviewer tests in `test_sdd_dispatch_log.py`**
 
 `TestReviewerDispatchLogging::test_reviewer_dispatch_creates_log_entry` and `test_quality_reviewer_dispatch_logged` create only `os.makedirs(reports_dir)` — no manifest. Rewrite them to set up a manifest workspace first (they do NOT set `subagent_type`, so the unchanged hook's reviewer detection still fires):
 
@@ -200,7 +200,7 @@ Expected: PASS — these now run in manifest mode (manifest present) against the
 
 Apply the same pattern to `test_quality_reviewer_dispatch_logged` (description "Dispatch code quality review for task 5", assert `task=5`/`type=quality-review`). `test_non_reviewer_dispatch_does_not_add_log_entry` already uses `setup_sdd_workspace` — leave it (verify green).
 
-- [ ] **Step 5: Migrate the `feature_dir_workspace` fixture to manifest mode**
+- [x] **Step 5: Migrate the `feature_dir_workspace` fixture to manifest mode**
 
 In `test_sdd_hard_gates.py`, the `feature_dir_workspace` fixture and `_setup_feature_dir_sdd_workspace` build a feature-dir layout with `.active-feature` but **no manifest**. Add a manifest so these run in manifest mode (passing against both the unchanged hook and the post-Task-6 hook). Add to the END of `_setup_feature_dir_sdd_workspace` (it has `total_tasks` and `feat_path` in scope), importing the helper:
 
@@ -218,23 +218,23 @@ In `test_sdd_hard_gates.py`, the `feature_dir_workspace` fixture and `_setup_fea
 
 If any `TestFeatureDirLayout` test uses the bare `feature_dir_workspace` fixture WITHOUT calling `_setup_feature_dir_sdd_workspace`, add the same `_write_manifest(...)` call to the fixture itself (task_count=2, matching its 2-task plan). Verify which tests need it by running them.
 
-- [ ] **Step 6: Rework `test_sdd_midpoint_check.py` (legacy plan-globbing tests)**
+- [x] **Step 6: Rework `test_sdd_midpoint_check.py` (legacy plan-globbing tests)**
 
 This file tests the hook's **legacy** plan-globbing midpoint logic (hook lines 737-775), which Item 5 deletes. In manifest mode the midpoint comes from `enforcement.context_summary_at`. Therefore:
 - **Delete** `test_stale_plan_does_not_inflate_total_tasks` and `test_allows_before_midpoint_with_stale_plans_present` — their premise (stale plan files inflating the task count) does not exist in manifest mode; midpoint blocking is already covered by `test_sdd_hard_gates.py::TestContextSummaryBlocking`.
 - **Adapt** `test_tolerates_plan_file_with_zero_task_headers` to manifest mode: it should still assert the hook does not crash with a bash math error. With the migrated `setup_full_sdd_workspace`, this runs in manifest mode automatically; keep the "no bash math error / no syntax error" assertions, drop any assertion that depends on legacy plan-count globbing.
 - Add a module docstring note: "Legacy plan-globbing midpoint tests removed with Item 5 (legacy path removal); manifest-mode midpoint is covered by TestContextSummaryBlocking."
 
-- [ ] **Step 7: Delete `TestBackwardsCompatFallback`**
+- [x] **Step 7: Delete `TestBackwardsCompatFallback`**
 
 In `test_sdd_hard_gates.py`, delete the entire `TestBackwardsCompatFallback` class — it tests the legacy root-fallback that Item 5 removes. The new "no manifest" guard-clause behavior is covered by `test_sdd_classification.py` in Task 6.
 
-- [ ] **Step 8: Full suite green against the UNCHANGED hook**
+- [x] **Step 8: Full suite green against the UNCHANGED hook**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 Expected: PASS (0 failures). This is the task's acceptance gate. Do not proceed to Task 6 until the full unit suite is green with the hook unmodified.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add tests/unit/sdd_test_helpers.py tests/unit/test_sdd_dispatch_log.py tests/unit/test_sdd_midpoint_check.py tests/unit/test_sdd_hard_gates.py
@@ -604,7 +604,7 @@ git commit -m "docs(sdd): record hook classification + review_tier changes; upda
 
 ## Acceptance Criteria (Module 2)
 
-- [ ] Migrated helpers make `tests/unit/` green against the unchanged hook (Task 5 gate)
+- [x] Migrated helpers make `tests/unit/` green against the unchanged hook (Task 5 gate)
 - [ ] `general-purpose` reviewer dispatches are logged; `general-purpose` implementer dispatches are enforced
 - [ ] Ad-hoc (non-reviewer/non-implementer) dispatches pass through without logging or enforcement
 - [ ] First reviewer dispatch creates `reports/` + dispatch log

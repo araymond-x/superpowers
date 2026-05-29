@@ -18,6 +18,11 @@
 
 | Task 4 | PlanPredictionDivergence | Plan Step 3 predicted regression "146 PASS / 0 FAIL". Actual after the required table insertion: 145 PASS / 0 FAIL / 3 WARNING. The writing-plans word-count check flipped PASS→WARNING — the file crossed the suite's 4000-word SOFT threshold (4157 words), still well under the 5000 HARD limit (843 words headroom). Advisory WARNING only, not a FAIL; the table is required plan content. Suite result PASS. Task 9 doc reconciliation must reflect 145 PASS / 3 WARNING. | Accepted |
 
+| Task 5 | IndependentDecision | Beyond verbatim plan (architectural-principle-aligned): removed orphaned `SDD_PRE_DISPATCH_HOOK_PATH` alias (only consumer was the deleted TestBackwardsCompatFallback) — "dead code must be removed". | Accepted |
+| Task 5 | IndependentDecision | Beyond verbatim plan: added `TestMigratedHelpersActivateManifestMode` (3 guard tests) addressing the advisor's concern that a green suite against the dual-mode hook proves "migration didn't break anything" but NOT "manifest mode is active". Guard dispatches an out-of-range task and asserts the task_range error (emitted only inside the manifest-mode branch) for all 3 migrated helpers — proves the migration actually activated manifest mode (would catch a workspace silently stuck in legacy mode that passes now but breaks in Task 6). Controller-verified: hook byte-identical to main checkout + suite 345 green. | Accepted |
+| Task 5 | IndependentObservation | test_tolerates_plan_file_with_zero_task_headers is now a generic no-crash assertion (manifest mode never globs the placeholder .md). Intentional — the legacy multi-line-grep bug path dies with the legacy path in Task 6; regression value reduced until then. | Accepted |
+| Task 5 | ObservationCorrected | (Implementer concern #2 was WRONG.) feature_dir_workspace fixture's `_write_manifest(task_count=2)` is NOT redundant — quality review found it is LOAD-BEARING: six tests (test_sdd_hard_gates.py lines 494,520,553,586,615,648) consume the fixture DIRECTLY without `_setup_feature_dir_sdd_workspace`, relying on the fixture's own manifest write to activate manifest mode. Removing it would break those 6 tests. Must stay. | Resolved (kept; corrected understanding) |
+
 ## Deferred Work
 [Items deferred from plan scope]
 
