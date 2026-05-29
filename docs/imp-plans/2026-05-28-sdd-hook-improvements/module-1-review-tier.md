@@ -76,7 +76,7 @@ Tasks 2 and 3 are parallel candidates after Task 1. Task 4 is independent.
 
 Run all pytest commands from the repo root with: `.venv/bin/python3 -m pytest <path> -v`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/unit/test_models/test_plan_model.py` (the file already imports `Plan`, `Task`, `MINIMAL_PLAN`, `CURRENT_SCHEMA_VERSION`):
 
@@ -113,12 +113,12 @@ class TestReviewTier:
         assert CURRENT_SCHEMA_VERSION == 1
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py::TestReviewTier -v`
 Expected: FAIL — `Task` has no `review_tier` (the first three fail on extra_forbidden / AttributeError, `test_plan_with_review_tier_parses` fails on `extra_forbidden`).
 
-- [ ] **Step 3: Add the field**
+- [x] **Step 3: Add the field**
 
 In `skills/scripts/models/plan.py`, add `review_tier` to the `Task` class. The module already imports `Literal` from `typing`:
 
@@ -135,12 +135,12 @@ class Task(StrictModel):
 
 Do NOT modify `_base.py` or `CURRENT_SCHEMA_VERSION`.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -v`
 Expected: PASS (new `TestReviewTier` class + all pre-existing tests still green).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/scripts/models/plan.py tests/unit/test_models/test_plan_model.py
@@ -607,7 +607,7 @@ git commit -m "docs(writing-plans): add review_tier decision table"
 
 ## Acceptance Criteria (Module 1)
 
-- [ ] `Task.review_tier` defaults to `"full"`, accepts `"minimum"`, rejects others; schema version unchanged
+- [x] `Task.review_tier` defaults to `"full"`, accepts `"minimum"`, rejects others; schema version unchanged
 - [ ] `validate-plan.py` warns on review_tier:minimum + high-risk titles; not on `migration` alone
 - [ ] Pre-completion ratio excludes declared-minimum from numerator AND denominator (quality + partner)
 - [ ] Undeclared minimum-tier reviews still block at >50%; modular plans aggregate all module files; parse failure → WARNING fallback
