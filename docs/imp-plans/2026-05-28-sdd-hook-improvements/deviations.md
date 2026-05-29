@@ -26,3 +26,5 @@
 
 ## Scope Changes
 [Requirements that changed during execution]
+
+| 2026-05-29T07:44:28Z | Module transition: 1 → 2 | FYI | Accepted |

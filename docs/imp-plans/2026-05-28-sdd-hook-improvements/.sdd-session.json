@@ -8,14 +8,14 @@
     "deviations_file": "docs/imp-plans/2026-05-28-sdd-hook-improvements/deviations.md"
   },
   "plan_file": "docs/imp-plans/2026-05-28-sdd-hook-improvements/plan.md",
-  "active_module_id": 1,
-  "active_module_file": "module-1-review-tier.md",
+  "active_module_id": 2,
+  "active_module_file": "module-2-hook-classification.md",
   "task_range": [
-    1,
-    4
+    5,
+    9
   ],
   "total_tasks": 9,
-  "midpoint": 3,
+  "midpoint": 7,
   "enforcement": {
     "pre_execution_audit": true,
     "partner_review": true,
@@ -31,8 +31,10 @@
     "deviations_log": "required",
     "checkpoint_script": "required"
   },
-  "completed_modules": [],
-  "module_reports_archived": false,
+  "completed_modules": [
+    "1"
+  ],
+  "module_reports_archived": true,
   "modules": [
     {
       "id": 1,
