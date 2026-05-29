@@ -185,31 +185,70 @@ def find_all_report_files(reports_dir: str) -> list:
     return sorted(glob.glob(pattern))
 
 
-def _count_review_tiers(reports_dir, review_type):
-    # type: (str, str) -> tuple
-    """Count total and minimum-tier reviews of a given type in reports/.
+def _review_tiers_per_task(reports_dir, review_type):
+    # type: (str, str) -> list
+    """Return [(task_id:int, is_minimum:bool), ...] for the given review type.
 
-    Args:
-        reports_dir: Path to the reports directory.
-        review_type: Either "quality-review" or "partner-review".
-
-    Returns:
-        (total_count, minimum_tier_count)
+    Recognizes:
+      quality-review: task-NNN-quality-review.md / task-NNN-quality-review-minimum-tier.md
+      partner-review: partner-review-NNN.md       / partner-review-NNN-minimum-tier.md
     """
     if review_type == "quality-review":
-        full_pattern = os.path.join(reports_dir, "task-*-quality-review.md")
-        min_pattern = os.path.join(reports_dir, "task-*-quality-review-minimum-tier.md")
+        full_pat = os.path.join(reports_dir, "task-*-quality-review.md")
+        min_pat = os.path.join(reports_dir, "task-*-quality-review-minimum-tier.md")
+        id_re = re.compile(r"task-(\d+)-quality-review(?:-minimum-tier)?\.md$")
     elif review_type == "partner-review":
-        full_pattern = os.path.join(reports_dir, "partner-review-*.md")
-        min_pattern = os.path.join(reports_dir, "partner-review-*-minimum-tier.md")
+        full_pat = os.path.join(reports_dir, "partner-review-*.md")
+        min_pat = os.path.join(reports_dir, "partner-review-*-minimum-tier.md")
+        id_re = re.compile(r"partner-review-(\d+)(?:-minimum-tier)?\.md$")
     else:
-        return (0, 0)
+        return []
 
-    full_files = set(glob.glob(full_pattern))
-    min_files = set(glob.glob(min_pattern))
-    # Minimum-tier files also match the broader glob, so subtract them
-    full_only = full_files - min_files
-    return (len(full_only) + len(min_files), len(min_files))
+    min_paths = set(glob.glob(min_pat))
+    results = []
+    for path in min_paths:
+        m = id_re.search(os.path.basename(path))
+        if m:
+            results.append((int(m.group(1)), True))
+    # The full glob can also match -minimum-tier.md files (notably the partner
+    # pattern), so skip anything already captured as minimum via min_paths.
+    for path in glob.glob(full_pat):
+        if path in min_paths:
+            continue
+        m = id_re.search(os.path.basename(path))
+        if m:
+            results.append((int(m.group(1)), False))
+    return results
+
+
+def _declared_minimum_task_ids(plan_contents):
+    # type: (list) -> tuple
+    """Collect task IDs declaring review_tier=='minimum' from plan frontmatter.
+
+    Returns (set_of_ids, parsed_any:bool). Uses raw yaml.safe_load on the
+    frontmatter (NOT the strict Pydantic Plan model) so an unrelated validation
+    issue cannot take down the ratio check; reads only tasks[].review_tier/id.
+    """
+    import yaml
+    declared, parsed_any = set(), False
+    for content in plan_contents:
+        if not content or not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end == -1:
+            continue
+        try:
+            fm = yaml.safe_load(content[3:end])
+        except Exception:
+            continue
+        tasks = fm.get("tasks") if isinstance(fm, dict) else None
+        if not isinstance(tasks, list):
+            continue
+        parsed_any = True
+        for t in tasks:
+            if isinstance(t, dict) and t.get("review_tier") == "minimum" and isinstance(t.get("id"), int):
+                declared.add(t["id"])
+    return declared, parsed_any
 
 
 def validate_report_sections(report_content: str) -> dict:
@@ -895,6 +934,25 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 except OSError:
                     pass
 
+    # Item 4b: add module plan files (modular plans) to the scan, then collect
+    # declared-minimum task IDs from ALL plan contents.
+    if getattr(args, "manifest", None):
+        try:
+            from pathlib import Path as _P
+            _mp = _P(args.manifest)
+            _md = json.loads(_mp.read_text(encoding="utf-8"))
+            _gr = _resolve_git_root(_mp)
+            _feat = _md.get("paths", {}).get("feature_dir", "")
+            for _mod in (_md.get("modules") or []):
+                _full = os.path.join(_gr, _feat, _mod.get("file", ""))
+                if _mod.get("file") and os.path.isfile(_full):
+                    all_plan_contents.append(read_file(_full))
+        except Exception:
+            pass
+    declared_min, _parsed = _declared_minimum_task_ids(all_plan_contents)
+    if not _parsed:
+        warnings.append("review_tier_plan_parse_skipped")
+
     # Read deviations file
     deviations_content = ""
     if os.path.isfile(args.deviations_file):
@@ -1051,51 +1109,39 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             }
             blockers.append("trace_audit_missing")
 
-    # Check 7: Minimum-tier review ratio cap (>50% triggers blocker)
-    quality_total, quality_min = _count_review_tiers(args.reports_dir, "quality-review")
-    partner_total, partner_min = _count_review_tiers(args.reports_dir, "partner-review")
+    # Check 7: Minimum-tier review ratio cap (>50% triggers blocker), with
+    # declared-minimum tasks excluded from numerator AND denominator (Item 4b).
+    def _ratio_check(review_type, blocker_name, label):
+        considered = [
+            (t, m)
+            for (t, m) in _review_tiers_per_task(args.reports_dir, review_type)
+            if t not in declared_min
+        ]
+        total = len(considered)
+        minimum = sum(1 for (_t, m) in considered if m)
+        if total > 0 and minimum / total > 0.5:
+            checks[blocker_name] = {
+                "status": "FAIL",
+                "detail": (
+                    f"{minimum}/{total} non-declared {label} reviews are minimum-tier "
+                    f"({round(100 * minimum / total)}%). Use full reviews for tasks "
+                    "touching shared files, multi-file changes, or Pattern References. "
+                    "(Declared review_tier:minimum tasks are excluded.)"
+                ),
+            }
+            blockers.append(blocker_name)
+        else:
+            checks[blocker_name] = {
+                "status": "PASS",
+                "detail": (
+                    f"{minimum}/{total} non-declared {label} reviews are minimum-tier"
+                    if total > 0
+                    else f"No non-declared {label} reviews to ratio"
+                ),
+            }
 
-    if quality_total > 0 and quality_min / quality_total > 0.5:
-        checks["excessive_minimum_tier_quality"] = {
-            "status": "FAIL",
-            "detail": (
-                f"{quality_min}/{quality_total} quality reviews are minimum-tier "
-                f"({round(100 * quality_min / quality_total)}%). "
-                "Tasks touching shared files, multi-file changes, or Pattern References "
-                "should use full dispatched reviews."
-            ),
-        }
-        blockers.append("excessive_minimum_tier_quality")
-    else:
-        checks["excessive_minimum_tier_quality"] = {
-            "status": "PASS",
-            "detail": (
-                f"{quality_min}/{quality_total} quality reviews are minimum-tier"
-                if quality_total > 0
-                else "No quality reviews found"
-            ),
-        }
-
-    if partner_total > 0 and partner_min / partner_total > 0.5:
-        checks["excessive_minimum_tier_partner"] = {
-            "status": "FAIL",
-            "detail": (
-                f"{partner_min}/{partner_total} partner reviews are minimum-tier "
-                f"({round(100 * partner_min / partner_total)}%). "
-                "Tasks with Pattern References, Shared Constants, or multi-file changes "
-                "should have full partner dispatches."
-            ),
-        }
-        blockers.append("excessive_minimum_tier_partner")
-    else:
-        checks["excessive_minimum_tier_partner"] = {
-            "status": "PASS",
-            "detail": (
-                f"{partner_min}/{partner_total} partner reviews are minimum-tier"
-                if partner_total > 0
-                else "No partner reviews found"
-            ),
-        }
+    _ratio_check("quality-review", "excessive_minimum_tier_quality", "quality")
+    _ratio_check("partner-review", "excessive_minimum_tier_partner", "partner")
 
     pct = (
         round(100 * checkbox_counts["checked"] / checkbox_counts["total"])
