@@ -10,6 +10,8 @@
 | Pre-exec checkpoint | ToolFalsePositive | `controller-checkpoint.py --phase pre-execution` reports BLOCKER `source_contracts` FAIL on "Source Contracts: None". Documented false positive (CLAUDE.md): `validate-plan.py` accepts "None" (PASSed); the checkpoint treats the literal "None" as non-empty content. The `writing-plans` skill requires the section present and "None" is the correct value (this feature has no external contracts). Tool-improvement opportunity: checkpoint should treat "None" as valid no-contracts, matching validate-plan.py. Not patched (out of scope; untested mid-run change to enforcement system). | Accepted |
 | Pre-exec checkpoint | ToolFalsePositive | `stale_artifacts` WARNING (non-blocking) flags this session's own ingestion artifacts (deviations.md content + the 2 pre-execution-audit files just created) as "prior session" artifacts. Verified: no uppercase DEVIATIONS.md exists; workspace was clean (self-assessment Q8); baseline was 328 green. Inherent ordering tension — the audit must exist before dispatch but the check assumes reports/ empty at pre-execution. | Accepted |
 
+| Task 2 | IndependentObservation | `check_review_tier_heuristic` uses substring matching (`kw in title`) per the plan's verbatim code, so "auth"⊂"author", "data"⊂"database", "delete"⊂"deleted" could draw a false-positive WARNING on a minimum-tier task with such a title. Non-blocking (author resolves/accepts) and spec-faithful — the plan prescribed the exact keyword list + substring match. Not fixed (would diverge from plan's exact code). Candidate for a future word-boundary improvement. | Accepted |
+
 ## Deferred Work
 [Items deferred from plan scope]
 

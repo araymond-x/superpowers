@@ -157,7 +157,7 @@ git commit -m "feat(plan-model): add optional per-task review_tier field"
 
 **Pattern References:** the enforcement-tier appropriateness block in `validate-plan.py:531-563` shows the exact "read `frontmatter` dict → append to `warnings` + `sections[...]`" idiom to follow.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/unit/test_validate_plan.py`. Tests invoke `validate-plan.py` as a subprocess and parse JSON. Reuse the file's existing helper if present; otherwise use this self-contained pattern:
 
@@ -248,12 +248,12 @@ class TestReviewTierHeuristic:
         assert "review_tier" not in warns.lower()
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_validate_plan.py::TestReviewTierHeuristic -v`
 Expected: FAIL — no heuristic yet, so the "warns" assertions fail.
 
-- [ ] **Step 3: Implement the heuristic**
+- [x] **Step 3: Implement the heuristic**
 
 Add this function to `validate-plan.py` (place near the other module-level helpers, e.g. after `source_contracts_non_none` ~line 325):
 
@@ -307,12 +307,12 @@ Wire it into `validate_plan` right after the enforcement-tier appropriateness bl
 
 This appends human-readable strings to `warnings` (so the test's substring check on `warnings` passes) and surfaces a `sections` entry. Status becomes WARNING (exit 2) when only these warnings exist — acceptable; the plan author resolves or accepts them.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v`
 Expected: PASS (new class + all existing tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/validate-plan.py tests/unit/test_validate_plan.py
@@ -608,7 +608,7 @@ git commit -m "docs(writing-plans): add review_tier decision table"
 ## Acceptance Criteria (Module 1)
 
 - [x] `Task.review_tier` defaults to `"full"`, accepts `"minimum"`, rejects others; schema version unchanged
-- [ ] `validate-plan.py` warns on review_tier:minimum + high-risk titles; not on `migration` alone
+- [x] `validate-plan.py` warns on review_tier:minimum + high-risk titles; not on `migration` alone
 - [ ] Pre-completion ratio excludes declared-minimum from numerator AND denominator (quality + partner)
 - [ ] Undeclared minimum-tier reviews still block at >50%; modular plans aggregate all module files; parse failure → WARNING fallback
 - [ ] `writing-plans/SKILL.md` has the decision table and stays < 5000 words
