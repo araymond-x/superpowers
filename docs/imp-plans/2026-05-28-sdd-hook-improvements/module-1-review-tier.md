@@ -333,7 +333,7 @@ git commit -m "feat(validate-plan): warn on review_tier:minimum for high-risk ta
 
 **Context for the implementer:** `run_pre_completion` already reads `all_plan_contents = [plan_content] + additional_plan_files` (lines 888-896) and accepts `--manifest`. The current ratio block counts *every* minimum-tier review file against the total. The new logic must exclude tasks the plan *declared* as `review_tier: minimum` from both numerator and denominator. For modular plans, declared-minimum task IDs must be gathered from ALL module plan files.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Add to `tests/unit/test_pre_completion_gates.py`. `_make_reports_with_minimum_tier(task_count, quality_minimum_tasks, partner_minimum_tasks)` and `run_pre_completion(plan_content, report_files=...)` already exist. Add a frontmatter-builder and the tests:
 
@@ -405,12 +405,12 @@ class TestDeclaredMinimumExclusion:
 
 (Ensure `import pytest` is present at the top of `test_pre_completion_gates.py` for `@pytest.mark.parametrize`.)
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_pre_completion_gates.py::TestDeclaredMinimumExclusion -v`
 Expected: FAIL — declared-minimum is not yet excluded, so `test_declared_minimum_excluded_*` see a blocker that shouldn't be there.
 
-- [ ] **Step 3a: Refactor `_count_review_tiers` to per-task**
+- [x] **Step 3a: Refactor `_count_review_tiers` to per-task**
 
 Replace the function at lines 188-212 with a per-task version (keep the name's intent; rename to make the per-task contract explicit). Add `import re` is already present (line 39).
 
@@ -478,7 +478,7 @@ def _declared_minimum_task_ids(plan_contents):
     return declared, parsed_any
 ```
 
-- [ ] **Step 3b: Gather module plan contents (modular plans)**
+- [x] **Step 3b: Gather module plan contents (modular plans)**
 
 In `run_pre_completion`, after `all_plan_contents` is assembled (line ~896), add module-plan reading when a manifest with `modules` is supplied. The manifest path is `args.manifest` (may be None). Reuse `_resolve_git_root` (line 372):
 
@@ -501,7 +501,7 @@ In `run_pre_completion`, after `all_plan_contents` is assembled (line ~896), add
         warnings.append("review_tier_plan_parse_skipped")
 ```
 
-- [ ] **Step 3c: Rewrite the ratio block (lines 1054-1098)**
+- [x] **Step 3c: Rewrite the ratio block (lines 1054-1098)**
 
 Replace the ratio block with the filtered version, applied symmetrically to quality and partner:
 
@@ -531,12 +531,12 @@ Replace the ratio block with the filtered version, applied symmetrically to qual
 
 Remove the old `quality_total, quality_min = _count_review_tiers(...)` / `partner_total, partner_min = ...` lines and the two `if ... > 0.5` blocks they fed. Grep for any remaining `_count_review_tiers(` references and replace/remove them (the function is being renamed).
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_pre_completion_gates.py -v`
 Expected: PASS — new `TestDeclaredMinimumExclusion` class plus all pre-existing pre-completion tests (the undeclared-minimum cases still block exactly as before, since with no declarations `declared_min` is empty and behavior is identical).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py tests/unit/test_pre_completion_gates.py
@@ -609,7 +609,7 @@ git commit -m "docs(writing-plans): add review_tier decision table"
 
 - [x] `Task.review_tier` defaults to `"full"`, accepts `"minimum"`, rejects others; schema version unchanged
 - [x] `validate-plan.py` warns on review_tier:minimum + high-risk titles; not on `migration` alone
-- [ ] Pre-completion ratio excludes declared-minimum from numerator AND denominator (quality + partner)
-- [ ] Undeclared minimum-tier reviews still block at >50%; modular plans aggregate all module files; parse failure → WARNING fallback
+- [x] Pre-completion ratio excludes declared-minimum from numerator AND denominator (quality + partner)
+- [x] Undeclared minimum-tier reviews still block at >50%; modular plans aggregate all module files; parse failure → WARNING fallback
 - [ ] `writing-plans/SKILL.md` has the decision table and stays < 5000 words
 - [ ] All Module 1 unit tests pass

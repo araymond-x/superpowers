@@ -938,8 +938,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # declared-minimum task IDs from ALL plan contents.
     if getattr(args, "manifest", None):
         try:
-            from pathlib import Path as _P
-            _mp = _P(args.manifest)
+            _mp = Path(args.manifest)
             _md = json.loads(_mp.read_text(encoding="utf-8"))
             _gr = _resolve_git_root(_mp)
             _feat = _md.get("paths", {}).get("feature_dir", "")
