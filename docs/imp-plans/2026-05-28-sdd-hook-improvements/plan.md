@@ -23,7 +23,25 @@ modules:
     title: "Hook classification and legacy removal"
     task_ids: [5, 6, 7, 8, 9]
     file: module-2-hook-classification.md
-tasks: []
+tasks:
+  - id: 1
+    title: "Add review_tier field to Task model"
+  - id: 2
+    title: "validate-plan.py review_tier heuristic warning"
+  - id: 3
+    title: "controller-checkpoint.py declared-minimum ratio exclusion"
+  - id: 4
+    title: "writing-plans SKILL.md review_tier decision table"
+  - id: 5
+    title: "Migrate SDD test helpers to manifest mode"
+  - id: 6
+    title: "Restructure hook classification + auto-create log + remove legacy path"
+  - id: 7
+    title: "Remove dead legacy branches (Item 5 cleanup)"
+  - id: 8
+    title: "Surface validation errors inline"
+  - id: 9
+    title: "Verification and documentation"
 ---
 
 # SDD Hook Improvements — Implementation Plan (Parent)
