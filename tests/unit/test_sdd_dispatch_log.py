@@ -59,8 +59,10 @@ class TestReviewerDispatchLogging:
     def test_reviewer_dispatch_creates_log_entry(self, tmp_path):
         """A spec-review dispatch should create a .dispatch-log entry with task number and type."""
         tmpdir = str(tmp_path)
-        reports_dir = os.path.join(tmpdir, "reports")
-        os.makedirs(reports_dir)
+        setup_sdd_workspace(tmpdir, task_count=5)
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        if os.path.exists(log_path):
+            os.remove(log_path)  # prove the dispatch creates it
 
         hook_input = make_hook_input(
             description="Review task 3 spec compliance",
@@ -68,10 +70,8 @@ class TestReviewerDispatchLogging:
         )
         result = run_hook(HOOK_PATH, hook_input)
 
-        assert result.returncode == 0, f"Hook should allow reviewer dispatch, stderr: {result.stderr}"
-
-        log_path = os.path.join(reports_dir, ".dispatch-log")
-        assert os.path.isfile(log_path), "Hook should create .dispatch-log for reviewer dispatch"
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert os.path.isfile(log_path), "Hook should create .dispatch-log"
 
         log_content = open(log_path).read()
         assert "task=3" in log_content, f"Log should contain task=3, got: {log_content}"
@@ -80,8 +80,10 @@ class TestReviewerDispatchLogging:
     def test_quality_reviewer_dispatch_logged(self, tmp_path):
         """A quality-review dispatch should be logged with the correct type."""
         tmpdir = str(tmp_path)
-        reports_dir = os.path.join(tmpdir, "reports")
-        os.makedirs(reports_dir)
+        setup_sdd_workspace(tmpdir, task_count=6)
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        if os.path.exists(log_path):
+            os.remove(log_path)  # prove the dispatch creates it
 
         hook_input = make_hook_input(
             description="Dispatch code quality review for task 5",
@@ -89,10 +91,8 @@ class TestReviewerDispatchLogging:
         )
         result = run_hook(HOOK_PATH, hook_input)
 
-        assert result.returncode == 0, f"Hook should allow reviewer dispatch, stderr: {result.stderr}"
-
-        log_path = os.path.join(reports_dir, ".dispatch-log")
-        assert os.path.isfile(log_path), "Hook should create .dispatch-log for quality review dispatch"
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        assert os.path.isfile(log_path), "Hook should create .dispatch-log"
 
         log_content = open(log_path).read()
         assert "task=5" in log_content, f"Log should contain task=5, got: {log_content}"

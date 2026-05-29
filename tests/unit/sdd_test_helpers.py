@@ -112,6 +112,65 @@ Style follows project conventions. Tests are adequate.
 """
 
 
+def _write_manifest(root, feature_dir, reports_rel, deviations_rel, plan_rel,
+                    task_count, tier="standard"):
+    """Write .active-feature + .sdd-session.json for manifest-mode hook testing.
+
+    Args:
+        root: workspace root (str) — the git root / hook CWD.
+        feature_dir: feature dir relative to root ('.' or 'docs/imp-plans/x').
+        reports_rel, deviations_rel, plan_rel: git-root-relative paths.
+        task_count: number of tasks (task_range = [0, task_count-1]).
+        tier: 'standard' or 'micro'.
+    The manifest is written at <root>/<feature_dir>/.sdd-session.json.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+    _models = str(_Path(__file__).resolve().parent.parent.parent
+                  / "skills" / "scripts" / "models")
+    if _models not in _sys.path:
+        _sys.path.insert(0, _models)
+    from sdd_session import TIER_PROFILES  # noqa: PLC0415
+
+    start, end = 0, max(task_count - 1, 0)
+    range_size = end - start
+    midpoint = start + (range_size + 1) // 2  # Module 1 deviation-row-1 formula
+
+    profile = TIER_PROFILES[tier]
+    enforcement = dict(profile["enforcement"])
+    if tier == "standard" and enforcement.get("context_summary_at") is None:
+        enforcement["context_summary_at"] = midpoint
+
+    manifest = {
+        "schema_version": 1,
+        "tier": tier,
+        "paths": {
+            "feature_dir": feature_dir,
+            "reports_dir": reports_rel,
+            "dispatch_log": os.path.join(reports_rel, ".dispatch-log"),
+            "deviations_file": deviations_rel,
+        },
+        "plan_file": plan_rel,
+        "active_module_id": None,
+        "active_module_file": None,
+        "task_range": [start, end],
+        "total_tasks": max(task_count, 1),
+        "midpoint": midpoint,
+        "enforcement": enforcement,
+        "process_requirements": dict(profile["process_requirements"]),
+        "completed_modules": [],
+        "module_reports_archived": False,
+        "modules": None,
+        "dispatch_log_sentinel": False,
+    }
+    with open(os.path.join(root, ".active-feature"), "w") as f:
+        f.write(feature_dir)
+    manifest_dir = os.path.join(root, feature_dir) if feature_dir != "." else root
+    os.makedirs(manifest_dir, exist_ok=True)
+    with open(os.path.join(manifest_dir, ".sdd-session.json"), "w") as f:
+        json.dump(manifest, f, indent=2)
+
+
 def setup_sdd_workspace(tmpdir: str, task_count: int) -> None:
     """Create minimal SDD workspace: reports/, DEVIATIONS.md, pre-execution-audit, plan, git init on feature branch.
 
@@ -154,6 +213,16 @@ def setup_sdd_workspace(tmpdir: str, task_count: int) -> None:
         for i in range(task_count):
             f.write(f"### Task {i} -- Step {i}\n")
             f.write(f"- [ ] Do step {i}\n\n")
+
+    # Manifest-mode activation (root-level feature dir keeps reports/ at root)
+    _write_manifest(
+        tmpdir,
+        feature_dir=".",
+        reports_rel="reports",
+        deviations_rel="DEVIATIONS.md",
+        plan_rel=os.path.join("docs", "imp-plans", "plan.md"),
+        task_count=task_count,
+    )
 
     # Git init on feature branch
     subprocess.run(

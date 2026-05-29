@@ -6,8 +6,8 @@ Tests cover:
   - Context summary blocking past midpoint (TestContextSummaryBlocking)
   - Checkpoint file gate before dispatch (TestCheckpointFileGate)
   - Feature-dir layout support (TestFeatureDirLayout)
-  - Backwards-compat fallback without .active-feature (TestBackwardsCompatFallback)
   - Plan-validation-gate blocking without .active-feature (TestPlanValidationGate)
+  - Manifest-mode dispatch detection (TestManifestModeDispatchDetection)
 
 Expected failures (TDD red):
   - Token estimation SKIPPED is currently a WARNING, not a BLOCK
@@ -31,6 +31,7 @@ from sdd_test_helpers import (
     make_hook_input,
     setup_full_sdd_workspace,
     setup_manifest_workspace,
+    setup_sdd_workspace,
 )
 
 # Resolve hook path relative to this test file
@@ -46,9 +47,6 @@ HOOK_PATH = os.path.normpath(
         "sdd-pre-dispatch-hook.sh",
     )
 )
-
-# Alias for consistency with new test naming convention
-SDD_PRE_DISPATCH_HOOK_PATH = HOOK_PATH
 
 PLAN_VALIDATION_GATE_PATH = os.path.normpath(
     os.path.join(
@@ -331,6 +329,18 @@ def feature_dir_workspace(tmp_path):
     active_feature = tmp_path / ".active-feature"
     active_feature.write_text(feat_path)
 
+    # Manifest-mode activation (matches the fixture's 2-task plan). Tests that
+    # call _setup_feature_dir_sdd_workspace overwrite this with the real count.
+    from sdd_test_helpers import _write_manifest  # noqa: PLC0415
+    _write_manifest(
+        str(tmp_path),
+        feature_dir=feat_path,
+        reports_rel=os.path.join(feat_path, "reports"),
+        deviations_rel=os.path.join(feat_path, "deviations.md"),
+        plan_rel=os.path.join(feat_path, "plan.md"),
+        task_count=2,
+    )
+
     return tmp_path, feat_path, feat_dir, reports_dir
 
 
@@ -452,6 +462,17 @@ def _setup_feature_dir_sdd_workspace(
                 lf.write(
                     f"{now} DISPATCH reviewer task={completed_tasks} type=partner-review\n"
                 )
+
+    # Manifest-mode activation for the per-feature-directory layout
+    from sdd_test_helpers import _write_manifest  # noqa: PLC0415
+    _write_manifest(
+        str(tmp_path),
+        feature_dir=feat_path,
+        reports_rel=os.path.join(feat_path, "reports"),
+        deviations_rel=os.path.join(feat_path, "deviations.md"),
+        plan_rel=os.path.join(feat_path, "plan.md"),
+        task_count=total_tasks,
+    )
 
 
 def _write_feature_checkpoint(reports_dir: object, task_number: int) -> None:
@@ -684,41 +705,6 @@ class TestPlanValidationGate:
         )
         assert ".active-feature" in result.stderr, (
             f"Error should mention .active-feature. stderr: {result.stderr}"
-        )
-
-
-# ─── Backwards-compat fallback tests ─────────────────────────────────────────
-
-
-class TestBackwardsCompatFallback:
-    """Tests verifying that without .active-feature the hook falls back to root paths."""
-
-    def test_pre_dispatch_falls_back_to_root_without_active_feature(self, tmp_path):
-        """Without .active-feature, hook should check root-level reports/ and DEVIATIONS.md."""
-        tmpdir = str(tmp_path)
-
-        # Root-level layout (old style)
-        (tmp_path / "reports").mkdir()
-        (tmp_path / "DEVIATIONS.md").write_text("# Deviations")
-        (tmp_path / "reports" / "pre-execution-audit.md").write_text("x" * 100)
-
-        hook_input = make_hook_input(
-            description="Implement task 0",
-            prompt="you are implementing task 0",
-            cwd=tmpdir,
-        )
-        result = subprocess.run(
-            ["bash", SDD_PRE_DISPATCH_HOOK_PATH],
-            input=hook_input,
-            capture_output=True,
-            text=True,
-        )
-
-        # Should not fail on "missing .active-feature" — falls back to root paths.
-        # May fail on other checks (missing task reports, etc.) but not on path resolution.
-        assert ".active-feature" not in result.stderr, (
-            f"Hook should not complain about missing .active-feature on root layout. "
-            f"stderr: {result.stderr}"
         )
 
 
@@ -998,4 +984,65 @@ class TestManifestModeDispatchDetection:
         assert "warn" in result.stderr.lower() or "sentinel" in result.stderr.lower(), (
             f"Should emit WARN about missing dispatch log sentinel. "
             f"stderr: {result.stderr!r}"
+        )
+
+
+# ─── Manifest-mode activation guard ──────────────────────────────────────────
+
+
+class TestMigratedHelpersActivateManifestMode:
+    """Guard: every migrated SDD workspace helper must activate manifest mode.
+
+    The unchanged pre-dispatch hook supports both manifest and legacy paths, so a
+    workspace that silently failed to activate manifest mode would still pass the
+    broader suite today — then break when the legacy path is removed. These tests
+    prove activation directly using an out-of-range task: the ``task_range`` error
+    message is emitted in exactly one place in the hook, inside the manifest-mode
+    branch. Its presence is therefore proof the workspace is in manifest mode.
+    """
+
+    def test_setup_sdd_workspace_activates_manifest(self, tmp_path):
+        """setup_sdd_workspace (root layout) routes the hook through manifest mode."""
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)  # range [0, 2]
+
+        hook_input = make_hook_input(description="Implement task 9", cwd=tmpdir)
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        assert "task_range" in result.stderr, (
+            f"Workspace is not in manifest mode (no task_range error). "
+            f"stderr: {result.stderr}"
+        )
+
+    def test_setup_full_sdd_workspace_activates_manifest(self, tmp_path):
+        """setup_full_sdd_workspace (root layout) routes the hook through manifest mode."""
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=3, completed_tasks=1)  # range [0, 2]
+
+        hook_input = make_hook_input(description="Implement task 9", cwd=tmpdir)
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        assert "task_range" in result.stderr, (
+            f"Workspace is not in manifest mode (no task_range error). "
+            f"stderr: {result.stderr}"
+        )
+
+    def test_feature_dir_workspace_activates_manifest(self, feature_dir_workspace):
+        """_setup_feature_dir_sdd_workspace (per-feature layout) activates manifest mode."""
+        tmp_path, feat_path, feat_dir, reports_dir = feature_dir_workspace
+        tmpdir = str(tmp_path)
+        _setup_feature_dir_sdd_workspace(
+            tmp_path, feat_path, feat_dir, reports_dir,
+            total_tasks=3, completed_tasks=1,  # range [0, 2]
+        )
+
+        hook_input = make_hook_input(description="Implement task 9", cwd=tmpdir)
+        result = run_hook(HOOK_PATH, hook_input)
+
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        assert "task_range" in result.stderr, (
+            f"Feature-dir workspace is not in manifest mode (no task_range error). "
+            f"stderr: {result.stderr}"
         )
