@@ -13,10 +13,9 @@
 
 set -uo pipefail
 
-# Task 10 (2026-05-20): Legacy fallback verified intact post-Task 9.
-# All 4 structural claims confirmed: path resolution (lines 118-148),
-# dispatch detection (lines 221-268), checks 1-6b each have manifest+legacy
-# branches, and the output section is unchanged. All 35 regression tests pass.
+# Item 5 (2026-05-29): Legacy non-manifest enforcement path removed. The hook
+# now requires a .sdd-session.json manifest (see the guard near line 126); all
+# checks read paths and enforcement flags from it exclusively.
 
 # Minimum file size (bytes) for report files to be considered valid.
 # Prevents forgery via `touch` or `echo "PASS" > file` (0-49 bytes).
@@ -242,7 +241,7 @@ check_report_file() {
 # ─── Enforcement checks (implementer dispatches only) ─────────────────────
 
 # Check dispatch log sentinel integrity (WARN only, never blocks)
-if [ "$MANIFEST_MODE" = true ] && [ -f "$DISPATCH_LOG" ]; then
+if [ -f "$DISPATCH_LOG" ]; then
   SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
   if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
     echo "WARNING: Dispatch log exists but has no hook-written sentinel. The log may have been manually created." >&2
@@ -290,10 +289,8 @@ fi
 
 # Check 2: Pre-execution audit report must exist with substantive content
 # Gated by enforcement.pre_execution_audit in manifest mode ("false" → skip).
-if [ "$MANIFEST_MODE" = true ]; then
-  NEED_AUDIT=$(jq -r '.enforcement.pre_execution_audit' "$MANIFEST")
-fi
-if [ "$MANIFEST_MODE" = true ] && [ "$NEED_AUDIT" = "false" ]; then
+NEED_AUDIT=$(jq -r '.enforcement.pre_execution_audit' "$MANIFEST")
+if [ "$NEED_AUDIT" = "false" ]; then
   : # Skip — manifest tier does not require pre-execution audit
 else
   AUDIT_RESULT=$(check_report_file "${REPORTS_DIR}/pre-execution-audit*" "pre-execution audit")
@@ -351,7 +348,7 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   # ── Check 4 N-1 file existence: skip when current task is the first in the module ──
   # In manifest mode, the previous task's reports are archived from the prior module.
   # Wrap only this sub-block — dispatch provenance is gated separately below.
-  if [ "$MANIFEST_MODE" = true ] && [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -eq "$MANIFEST_TASK_START" ] 2>/dev/null; then
+  if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -eq "$MANIFEST_TASK_START" ] 2>/dev/null; then
     : # Skip — first task in module, N-1 reports are from a prior archived module
   else
     # Previous task implementer report
@@ -422,10 +419,8 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   # by THIS HOOK when it processes Agent calls with reviewer descriptions.
   # The controller cannot forge dispatch log entries without going through the Agent tool.
   # Gated by enforcement.dispatch_provenance in manifest mode ("false" → skip).
-  if [ "$MANIFEST_MODE" = true ]; then
-    NEED_PROV=$(jq -r '.enforcement.dispatch_provenance' "$MANIFEST")
-  fi
-  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_PROV" = "false" ]; then
+  NEED_PROV=$(jq -r '.enforcement.dispatch_provenance' "$MANIFEST")
+  if [ "$NEED_PROV" = "false" ]; then
     : # Skip — manifest tier does not require dispatch provenance
   else
     if [ -f "$DISPATCH_LOG" ]; then
@@ -464,31 +459,14 @@ fi
 # Check 5: If Task N > 0 and plan has Source Contracts, verify Task 0 completed
 # Unconditional — no enforcement flag gates this check. Required at any tier
 # when the plan declares Source Contracts (Task 0 verifies them regardless).
-# In manifest mode, check only MANIFEST_PLAN_FILE instead of glob.
+# Checks only MANIFEST_PLAN_FILE (CWD-stable absolute path).
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   HAS_SOURCE_CONTRACTS=false
-  if [ "$MANIFEST_MODE" = true ]; then
-    # Manifest mode: check only the manifest's plan file (CWD-stable absolute path)
-    if [ -f "$MANIFEST_PLAN_FILE" ]; then
-      if grep -q "Source Contracts" "$MANIFEST_PLAN_FILE" && ! grep -qiE "Source Contracts.*:.*None" "$MANIFEST_PLAN_FILE"; then
-        HAS_SOURCE_CONTRACTS=true
-      fi
+  # Check only the manifest's plan file (CWD-stable absolute path)
+  if [ -f "$MANIFEST_PLAN_FILE" ]; then
+    if grep -q "Source Contracts" "$MANIFEST_PLAN_FILE" && ! grep -qiE "Source Contracts.*:.*None" "$MANIFEST_PLAN_FILE"; then
+      HAS_SOURCE_CONTRACTS=true
     fi
-  else
-    # Legacy mode: glob across feature directory or standard plan locations
-    if [ -n "$FEAT" ]; then
-      PLAN_SEARCH_GLOB="$FEAT/*.md"
-    else
-      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-    fi
-    for plan_file in $PLAN_SEARCH_GLOB; do
-      if [ -f "$plan_file" ]; then
-        if grep -q "Source Contracts" "$plan_file" && ! grep -qiE "Source Contracts.*:.*None" "$plan_file"; then
-          HAS_SOURCE_CONTRACTS=true
-          break
-        fi
-      fi
-    done
   fi
 
   if [ "$HAS_SOURCE_CONTRACTS" = true ]; then
@@ -523,10 +501,8 @@ fi
 # a mechanical gate.
 # Gated by enforcement.checkpoint_files in manifest mode ("false" → skip).
 if [ -n "$TASK_NUMBER" ]; then
-  if [ "$MANIFEST_MODE" = true ]; then
-    NEED_CHECKPOINT=$(jq -r '.enforcement.checkpoint_files' "$MANIFEST")
-  fi
-  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_CHECKPOINT" = "false" ]; then
+  NEED_CHECKPOINT=$(jq -r '.enforcement.checkpoint_files' "$MANIFEST")
+  if [ "$NEED_CHECKPOINT" = "false" ]; then
     : # Skip — manifest tier does not require checkpoint files
   else
     TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
@@ -551,10 +527,8 @@ fi
 #
 # Gated by enforcement.partner_review in manifest mode ("false" → skip).
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
-  if [ "$MANIFEST_MODE" = true ]; then
-    NEED_PARTNER=$(jq -r '.enforcement.partner_review' "$MANIFEST")
-  fi
-  if [ "$MANIFEST_MODE" = true ] && [ "$NEED_PARTNER" = "false" ]; then
+  NEED_PARTNER=$(jq -r '.enforcement.partner_review' "$MANIFEST")
+  if [ "$NEED_PARTNER" = "false" ]; then
     : # Skip — manifest tier does not require partner review
   else
     TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
@@ -581,35 +555,14 @@ ESTIMATE_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/es
 TOKEN_WARNING=""
 
 if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
-  # Find a plan file to extract the task from
+  # Find a plan file to extract the task from.
+  # Use the module file if it exists, else fall back to the manifest plan file.
+  # These paths are absolute (set up in the manifest resolution block above).
   PLAN_FILE=""
-  SEARCHED_DIRS=""
-
-  if [ "$MANIFEST_MODE" = true ]; then
-    # Manifest mode: use module file if it exists, else fall back to plan file.
-    # These paths are absolute (set up in the manifest resolution block above).
-    if [ -n "$MANIFEST_MODULE_FILE" ] && [ -f "$MANIFEST_MODULE_FILE" ]; then
-      PLAN_FILE="$MANIFEST_MODULE_FILE"
-    elif [ -n "$MANIFEST_PLAN_FILE" ] && [ -f "$MANIFEST_PLAN_FILE" ]; then
-      PLAN_FILE="$MANIFEST_PLAN_FILE"
-    fi
-    # SEARCHED_DIRS left empty — diagnostics below will reference PLAN_FILE directly
-  else
-    # Legacy mode: glob across feature directory or standard plan locations
-    if [ -n "$FEAT" ]; then
-      PLAN_SEARCH_GLOB="$FEAT/*.md"
-    else
-      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-    fi
-    for pf in $PLAN_SEARCH_GLOB; do
-      if [ -f "$pf" ]; then
-        SEARCHED_DIRS="${SEARCHED_DIRS} $(basename "$pf")"
-        if grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
-          PLAN_FILE="$pf"
-          break
-        fi
-      fi
-    done
+  if [ -n "$MANIFEST_MODULE_FILE" ] && [ -f "$MANIFEST_MODULE_FILE" ]; then
+    PLAN_FILE="$MANIFEST_MODULE_FILE"
+  elif [ -n "$MANIFEST_PLAN_FILE" ] && [ -f "$MANIFEST_PLAN_FILE" ]; then
+    PLAN_FILE="$MANIFEST_PLAN_FILE"
   fi
 
   if [ -n "$PLAN_FILE" ]; then
@@ -628,12 +581,8 @@ if [ -n "$TASK_NUMBER" ] && [ -f "$ESTIMATE_SCRIPT" ]; then
       TOKEN_WARNING="TOKEN ESTIMATION FAILED: estimate-task-tokens.py produced no output for Task $TASK_NUMBER in $PLAN_FILE. Check script manually."
     fi
   else
-    # Diagnostic: couldn't find the task in any plan file
-    if [ -z "$SEARCHED_DIRS" ]; then
-      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — no plan files found in ${PLAN_SEARCH_GLOB:-manifest}. Create the plan file or ensure it is in the expected location.")
-    else
-      ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — task header not found in plan files (searched:${SEARCHED_DIRS}). Verify task numbering matches plan headers (expected: '### Task $TASK_NUMBER').")
-    fi
+    # Diagnostic: couldn't resolve a plan file from the manifest
+    ERRORS+=("BLOCKED: Token estimation could not run for Task $TASK_NUMBER — the manifest's plan file was not found (plan_file: ${MANIFEST_PLAN_FILE:-unset}, active_module_file: ${MANIFEST_MODULE_FILE:-unset}). Verify .sdd-session.json points at an existing plan file.")
   fi
 fi
 
@@ -643,54 +592,14 @@ fi
 # doesn't exist, inject a WARNING.
 
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 1 ]; then
-  if [ "$MANIFEST_MODE" = true ]; then
-    # Manifest mode: use enforcement.context_summary_at (int threshold or null).
-    # jq returns the literal string "null" when JSON value is null.
-    CONTEXT_SUMMARY_AT=$(jq -r '.enforcement.context_summary_at' "$MANIFEST")
-    if [ "$CONTEXT_SUMMARY_AT" = "null" ] || [ -z "$CONTEXT_SUMMARY_AT" ]; then
-      : # context_summary_at is null — this tier doesn't require a context summary
-    elif [ "$TASK_NUMBER" -ge "$CONTEXT_SUMMARY_AT" ] 2>/dev/null; then
-      if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
-        ERRORS+=("BLOCKED: Context summary required at task $CONTEXT_SUMMARY_AT threshold (enforcement.context_summary_at). You are at Task $TASK_NUMBER. Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
-      fi
-    fi
-  else
-    # Legacy mode: count tasks in THE plan file containing the current task, not across
-    # every .md file in docs/imp-plans/ + docs/plans/. Stale plans from
-    # prior features (or modular plans from unrelated sibling features) sit
-    # in these directories and would otherwise inflate TOTAL_TASKS and push
-    # the midpoint past the real halfway point.
-    #
-    # Scoping strategy: locate the plan file that contains a `### Task N`
-    # header matching the current task number. For modular plans, this
-    # correctly scopes to the module being executed (each module is its own
-    # SDD run, so "midpoint" is per-module).
-    #
-    # NOTE: `grep -c` already prints "0" on zero-match files. Use `|| true`
-    # (not `|| echo "0"`) to suppress grep's exit-1-on-no-match without
-    # appending a second "0" on a new line — see the 2026-04-10 commit for
-    # the multi-line arithmetic crash that idiom caused.
-    TOTAL_TASKS=0
-    if [ -n "$FEAT" ]; then
-      PLAN_SEARCH_GLOB="$FEAT/*.md"
-    else
-      PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-    fi
-    for pf in $PLAN_SEARCH_GLOB; do
-      if [ -f "$pf" ] && grep -qiE "^###\s+Task\s+${TASK_NUMBER}\b" "$pf"; then
-        TOTAL_TASKS=$(grep -ciE "^###\s+Task\s+[0-9]" "$pf" 2>/dev/null || true)
-        TOTAL_TASKS=${TOTAL_TASKS:-0}
-        break
-      fi
-    done
-
-    if [ "$TOTAL_TASKS" -gt 0 ]; then
-      MIDPOINT=$(( (TOTAL_TASKS + 1) / 2 ))
-      if [ "$TASK_NUMBER" -ge "$MIDPOINT" ]; then
-        if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
-          ERRORS+=("BLOCKED: Context summary required at midpoint. You are at Task $TASK_NUMBER of $TOTAL_TASKS (past midpoint $MIDPOINT). Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
-        fi
-      fi
+  # Use enforcement.context_summary_at (int threshold or null).
+  # jq returns the literal string "null" when JSON value is null.
+  CONTEXT_SUMMARY_AT=$(jq -r '.enforcement.context_summary_at' "$MANIFEST")
+  if [ "$CONTEXT_SUMMARY_AT" = "null" ] || [ -z "$CONTEXT_SUMMARY_AT" ]; then
+    : # context_summary_at is null — this tier doesn't require a context summary
+  elif [ "$TASK_NUMBER" -ge "$CONTEXT_SUMMARY_AT" ] 2>/dev/null; then
+    if [ ! -f "${REPORTS_DIR}/context-summary.md" ]; then
+      ERRORS+=("BLOCKED: Context summary required at task $CONTEXT_SUMMARY_AT threshold (enforcement.context_summary_at). You are at Task $TASK_NUMBER. Run context-summary.py before dispatching: python3 ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir $REPORTS_DIR --deviations-file $DEVIATIONS_FILE --output ${REPORTS_DIR}/context-summary.md")
     fi
   fi
 fi
@@ -715,14 +624,9 @@ CONTEXT_LOAD_WARNING=""
 if [ -d "$REPORTS_DIR" ]; then
   TOTAL_BYTES=0
 
-  # Sum plan files
-  if [ -n "$FEAT" ]; then
-    PLAN_SEARCH_GLOB="$FEAT/*.md"
-  else
-    PLAN_SEARCH_GLOB="docs/imp-plans/*.md docs/plans/*.md"
-  fi
-  for pf in $PLAN_SEARCH_GLOB; do
-    if [ -f "$pf" ]; then
+  # Sum plan files (from the manifest: plan file + active module file)
+  for pf in "$MANIFEST_PLAN_FILE" "$MANIFEST_MODULE_FILE"; do
+    if [ -n "$pf" ] && [ -f "$pf" ]; then
       PF_SIZE=$(wc -c < "$pf" 2>/dev/null | tr -d ' ')
       TOTAL_BYTES=$((TOTAL_BYTES + PF_SIZE))
     fi
@@ -754,19 +658,17 @@ fi
 # Build additionalContext with SDD reminder + optional token warning
 CONTEXT="SDD REMINDER: After this subagent completes, you must: (1) Save the implementer report to ${REPORTS_DIR}/task-N-implementer-report.md, (2) Dispatch spec compliance review and save to ${REPORTS_DIR}/task-N-spec-review.md, (3) Dispatch code quality review and save to ${REPORTS_DIR}/task-N-quality-review.md, (4) Log any DONE_WITH_CONCERNS to ${DEVIATIONS_FILE}, (5) Update plan checkboxes. The next task dispatch will be BLOCKED if these reports are missing or empty."
 
-if [ "$MANIFEST_MODE" = true ]; then
-  # Read process requirements from manifest for injection
-  PR_DISPATCH=$(jq -r '.process_requirements.subagent_dispatch' "$MANIFEST")
-  PR_SPEC=$(jq -r '.process_requirements.spec_review_mode' "$MANIFEST")
-  PR_QUALITY=$(jq -r '.process_requirements.quality_review_mode' "$MANIFEST")
-  PR_PARTNER=$(jq -r '.process_requirements.partner_review_mode' "$MANIFEST")
-  PR_DEVLOG=$(jq -r '.process_requirements.deviations_log' "$MANIFEST")
-  PR_CHECKPOINT=$(jq -r '.process_requirements.checkpoint_script' "$MANIFEST")
+# Read process requirements from manifest for injection
+PR_DISPATCH=$(jq -r '.process_requirements.subagent_dispatch' "$MANIFEST")
+PR_SPEC=$(jq -r '.process_requirements.spec_review_mode' "$MANIFEST")
+PR_QUALITY=$(jq -r '.process_requirements.quality_review_mode' "$MANIFEST")
+PR_PARTNER=$(jq -r '.process_requirements.partner_review_mode' "$MANIFEST")
+PR_DEVLOG=$(jq -r '.process_requirements.deviations_log' "$MANIFEST")
+PR_CHECKPOINT=$(jq -r '.process_requirements.checkpoint_script' "$MANIFEST")
 
-  PROCESS_CONTRACT="SDD SESSION CONTRACT (from .sdd-session.json): Tier: $MANIFEST_TIER | Subagent dispatch: $PR_DISPATCH | Spec review: $PR_SPEC | Quality review: $PR_QUALITY | Partner review: $PR_PARTNER | Deviations log: $PR_DEVLOG | Checkpoint script: $PR_CHECKPOINT"
+PROCESS_CONTRACT="SDD SESSION CONTRACT (from .sdd-session.json): Tier: $MANIFEST_TIER | Subagent dispatch: $PR_DISPATCH | Spec review: $PR_SPEC | Quality review: $PR_QUALITY | Partner review: $PR_PARTNER | Deviations log: $PR_DEVLOG | Checkpoint script: $PR_CHECKPOINT"
 
-  CONTEXT="$CONTEXT | $PROCESS_CONTRACT"
-fi
+CONTEXT="$CONTEXT | $PROCESS_CONTRACT"
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
