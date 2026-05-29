@@ -28,6 +28,7 @@ class Task(StrictModel):
     depends_on: list[int] = Field(default_factory=list)
     pattern_references: list[str] = Field(default_factory=list)
     shared_constants_used: list[str] = Field(default_factory=list)
+    review_tier: Literal["minimum", "full"] = "full"
 
 
 class Module(StrictModel):

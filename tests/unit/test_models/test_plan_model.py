@@ -230,3 +230,35 @@ class TestModuleFileField:
         }
         plan = Plan.model_validate(data)
         assert plan.modules[0].file is None
+
+
+class TestReviewTier:
+    def test_review_tier_defaults_to_full(self):
+        task = Task(id=1, title="x")
+        assert task.review_tier == "full"
+
+    def test_review_tier_accepts_minimum(self):
+        task = Task(id=1, title="x", review_tier="minimum")
+        assert task.review_tier == "minimum"
+
+    def test_review_tier_rejects_other_values(self):
+        with pytest.raises(ValidationError) as exc:
+            Task(id=1, title="x", review_tier="medium")
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+    def test_plan_with_review_tier_parses(self):
+        data = {
+            "schema_version": CURRENT_SCHEMA_VERSION,
+            "feature_archetype": "extension",
+            "tasks": [
+                {"id": 0, "title": "Setup"},
+                {"id": 1, "title": "DDL", "review_tier": "minimum"},
+            ],
+        }
+        plan = Plan.model_validate(data)
+        assert plan.tasks[0].review_tier == "full"   # default
+        assert plan.tasks[1].review_tier == "minimum"
+
+    def test_schema_version_unchanged(self):
+        """Adding review_tier is non-breaking — schema version must NOT change."""
+        assert CURRENT_SCHEMA_VERSION == 1
