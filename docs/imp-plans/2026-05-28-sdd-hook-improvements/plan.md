@@ -174,20 +174,20 @@ The execution order (migrate helpers to manifest mode first, against the *unchan
 ## Acceptance Criteria (whole feature)
 
 All criteria from `spec.md` lines 285-301, summarized:
-- [ ] Reviewer dispatches with `subagent_type: "general-purpose"` are logged (not passthrough'd)
-- [ ] Implementer dispatches with `subagent_type: "general-purpose"` are enforced
-- [ ] Non-reviewer/non-implementer dispatches during SDD are allowed without enforcement
-- [ ] Validation errors include the first 5 lines of `validate-report.py` output
-- [ ] First reviewer dispatch creates `reports/` + dispatch log if missing
-- [ ] Declared `review_tier: minimum` tasks excluded from ratio denominator (quality + partner)
-- [ ] Undeclared minimum-tier reviews still trigger the >50% blocker
-- [ ] Modular plans: all module plan files read for the exclusion set
-- [ ] Plan-parse failure → current behavior + WARNING
-- [ ] `validate-plan.py` warns on suspicious `review_tier` + high-risk keywords (not "migration" alone)
-- [ ] No manifest + SDD artifacts → BLOCKED; no manifest + no artifacts → ALLOWED
-- [ ] Dead legacy branches removed
-- [ ] All existing tests pass with updates; new tests cover changed behavior
-- [ ] `CLAUDE.md` + customization manifest updated with new test counts and behavior
+- [x] Reviewer dispatches with `subagent_type: "general-purpose"` are logged (not passthrough'd)
+- [x] Implementer dispatches with `subagent_type: "general-purpose"` are enforced
+- [x] Non-reviewer/non-implementer dispatches during SDD are allowed without enforcement
+- [x] Validation errors include the first 5 lines of `validate-report.py` output
+- [x] First reviewer dispatch creates `reports/` + dispatch log if missing
+- [x] Declared `review_tier: minimum` tasks excluded from ratio denominator (quality + partner)
+- [x] Undeclared minimum-tier reviews still trigger the >50% blocker
+- [x] Modular plans: all module plan files read for the exclusion set
+- [x] Plan-parse failure → current behavior + WARNING
+- [x] `validate-plan.py` warns on suspicious `review_tier` + high-risk keywords (not "migration" alone)
+- [x] No manifest + SDD artifacts → BLOCKED; no manifest + no artifacts → ALLOWED
+- [x] Dead legacy branches removed
+- [x] All existing tests pass with updates; new tests cover changed behavior
+- [x] `CLAUDE.md` + customization manifest updated with new test counts and behavior
 
 ## Validation Sequence (Plan Completion Gate)
 

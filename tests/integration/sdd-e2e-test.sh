@@ -248,7 +248,7 @@ $PYTHON $PROJECT/skills/subagent-driven-development/scripts/materialize-manifest
   --plan-file "$RT/plan.md" --feature-dir "$RT" > /dev/null
 
 # Quality reviews: task 0 full; tasks 1,2,3 minimum-tier (3/4 = 75% raw).
-: > "$RT/reports/task-000-quality-review.md"; printf 'x%.0s' {1..80} > "$RT/reports/task-000-quality-review.md"
+printf 'x%.0s' {1..80} > "$RT/reports/task-000-quality-review.md"
 for tid in 1 2 3; do
   padded=$(printf "%03d" $tid)
   printf 'x%.0s' {1..80} > "$RT/reports/task-${padded}-quality-review-minimum-tier.md"

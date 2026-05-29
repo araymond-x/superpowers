@@ -561,13 +561,13 @@ git commit -m "feat(sdd-hook): surface validate-report.py error excerpt inline"
 
 **Context:** Final coordination task. Depends on Tasks 6, 7, 8 AND all of Module 1. No new behavior — runs every test layer and reconciles documentation/counts.
 
-- [ ] **Step 1: Extend the e2e test for the manifest-modules review_tier path**
+- [x] **Step 1: Extend the e2e test for the manifest-modules review_tier path**
 
 The pre-completion `review_tier` exclusion has a manifest auto-resolution branch (Task 3, Step 3b) that reads module plan files via `<git_root>/<feature_dir>/<module.file>` — the same class of path-resolution glue that bit this repo before (`_load_manifest_config` missing the feature_dir join). The unit tests cover the multi-file scan via `--additional-plan-files`; this step covers the manifest auto-resolution at the integration layer.
 
 In `tests/integration/sdd-e2e-test.sh`, after the manifest is materialized, add a pre-completion invocation against a manifest that declares a `modules` array where a `review_tier: minimum` task lives in a non-active module file, and assert that task is excluded from the minimum-tier ratio (no `excessive_minimum_tier_quality` blocker). If the existing e2e fixture has no modules, add a minimal second module plan file with one declared-minimum task. Keep it a smoke-level assertion.
 
-- [ ] **Step 2: Run all static + unit + integration test layers**
+- [x] **Step 2: Run all static + unit + integration test layers**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/ -v
@@ -577,11 +577,11 @@ bash tests/integration/sdd-e2e-test.sh
 ```
 Expected: all PASS. Record the new unit test total. The pre-change baseline is **328** passing (CLAUDE.md's "326" is stale — recount from this green run). Net change = + review_tier tests (model, validate-plan, pre-completion incl. multi-file) + `test_sdd_classification.py` − removed legacy midpoint/backwards-compat tests. Fix any failure before proceeding — a gate FAIL is never "expected" (see architectural principles).
 
-- [ ] **Step 3: Manual smoke test of the classification fix**
+- [x] **Step 3: Manual smoke test of the classification fix**
 
 Verify the original bug is fixed end-to-end (general-purpose reviewer logged, implementer enforced) using a throwaway manifest workspace, or rely on `test_sdd_classification.py` if Step 2 passed. Record the result.
 
-- [ ] **Step 4: Update `CLAUDE.md`**
+- [x] **Step 4: Update `CLAUDE.md`**
 
 Update these sections to reflect the changes:
 - **Testing** block: new unit test count (recount from Step 1), mention `test_sdd_classification.py` and the manifest-mode test-helper migration.
@@ -589,11 +589,11 @@ Update these sections to reflect the changes:
 - **Adaptive Enforcement Tiers** block: note that `sdd-pre-dispatch-hook.sh` no longer has a legacy fallback.
 - **Pydantic Validation** block: note the new `Task.review_tier` field (non-breaking, no schema bump).
 
-- [ ] **Step 5: Update `docs/ARaymond-customization-manifest.md`**
+- [x] **Step 5: Update `docs/ARaymond-customization-manifest.md`**
 
 Add an entry for this feature (SDD Hook Improvements, 2026-05-28): the 5 items, files changed, and the new test file. Update any per-script inventory lines for `sdd-pre-dispatch-hook.sh`, `controller-checkpoint.py`, `validate-plan.py`, and `plan.py`.
 
-- [ ] **Step 6: Final regression re-run + commit**
+- [x] **Step 6: Final regression re-run + commit**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/ -q
@@ -611,4 +611,4 @@ git commit -m "docs(sdd): record hook classification + review_tier changes; upda
 - [x] No manifest + artifacts → BLOCK with a manifest-guidance message; no manifest + no artifacts → ALLOW
 - [x] Validation errors include the first 5 lines of `validate-report.py` output
 - [x] All legacy branches removed; residual-legacy grep is clean
-- [ ] All five test layers pass; `CLAUDE.md` + customization manifest updated with new counts and behavior
+- [x] All five test layers pass; `CLAUDE.md` + customization manifest updated with new counts and behavior

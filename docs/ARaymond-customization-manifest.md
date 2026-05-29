@@ -378,7 +378,7 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 | Suite | Location | Checks | Runtime | What It Tests |
 |-------|----------|--------|---------|---------------|
-| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 145 PASS / 3 WARN / 0 FAIL | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence. The 3 WARNINGs are advisory soft-threshold notices (writing-plans/SKILL.md 4157 words > 4000 soft / < 5000 hard, after the 2026-05-29 review_tier table; SDD SKILL word count; 2 historical bare-DEVIATIONS.md refs) — result is PASS-with-warnings. |
+| Static regression | `tests/ARaymond-skill-regression/validate-all-skills.py` | 145 PASS / 3 WARN / 0 FAIL | <1s | Frontmatter validity, skill file sizes, cross-references, Python 3.9 compatibility, section presence, script existence. The 3 WARNINGs are advisory soft-threshold notices (writing-plans/SKILL.md body 4157 words by the suite's count / `wc -w` 4183, > 4000 soft / < 5000 hard, after the 2026-05-29 review_tier table; SDD SKILL word count; 2 historical bare-DEVIATIONS.md refs) — result is PASS-with-warnings. |
 | Static installation | `tests/ARaymond-installation/verify-symlink-install.sh` | 104 | <1s | Symlink targets, command stub count/format, agent symlink, hook script existence, settings.json entries |
 | Skill invocation | `tests/ARaymond-installation/verify-skill-invocation.sh` | ~4 | ~5 min | Actual Claude behavior: symlink-installed skills load and trigger correctly via `claude -p` |
 | Skill chain | `tests/ARaymond-installation/verify-skill-chain.sh` | ~10 | ~10 min | Brainstorming → writing-plans skill handoff chain works end-to-end via symlink install |
