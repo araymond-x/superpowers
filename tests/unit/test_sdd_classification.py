@@ -71,3 +71,30 @@ def test_no_manifest_with_artifacts_blocked(tmp_path):
     result = run_hook(make_hook_input(
         description="Implement task 1", prompt="You are implementing task 1", cwd=tmpdir))
     assert result.returncode == 2 and "manifest" in result.stderr.lower(), f"stderr: {result.stderr}"
+
+
+class TestValidationErrorSurfacing:
+    def test_validation_error_excerpt_inline(self, tmp_path):
+        """When the prev task's implementer report fails validation, the hook
+        error must include excerpt lines from validate-report.py, not just the exit code."""
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        reports_dir = os.path.join(tmpdir, "reports")
+        # Task 0 report present but with BROKEN frontmatter (fails Pydantic validation),
+        # large enough to pass the size gate so validation actually runs.
+        with open(os.path.join(reports_dir, "task-000-implementer-report.md"), "w") as f:
+            f.write("---\nschema_version: 1\ntask_id: not_an_int\nstatus: BOGUS\n---\n\n"
+                    + "Body padding to exceed the 50-byte size gate. " * 5)
+        create_checkpoint_file(tmpdir, task_number=1)
+        hook_input = make_hook_input(
+            description="Implement task 1", prompt="You are implementing task 1", cwd=tmpdir,
+        )
+        result = run_hook(hook_input)
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        # The excerpt must surface the FAILING FIELD NAME, not just the banner.
+        # (task_id: not_an_int is the first failing field, at output line 6 —
+        # reachable only with head -n 12, not head -n 5.) Assert on task_id
+        # specifically: "status" would spuriously match the trailing JSON line.
+        low = result.stderr.lower()
+        assert "validation" in low and "task_id" in low, \
+            f"Expected an inline validation excerpt naming task_id. stderr: {result.stderr}"

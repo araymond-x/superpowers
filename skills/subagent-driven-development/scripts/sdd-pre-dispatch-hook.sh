@@ -374,7 +374,8 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
         VALIDATE_OUTPUT=$($PYTHON "$VALIDATE_REPORT_SCRIPT" --report-file "$IMPL_LATEST" 2>&1)
         VALIDATE_EXIT=$?
         if [ "$VALIDATE_EXIT" -ne 0 ]; then
-          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT). Re-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")
+          VALIDATE_EXCERPT=$(echo "$VALIDATE_OUTPUT" | head -n 12)
+          ERRORS+=("BLOCKED: Implementer report for Task $PREV ($IMPL_LATEST) failed validation (exit $VALIDATE_EXIT):\n${VALIDATE_EXCERPT}\n\nRe-dispatch the implementer to fix Pydantic frontmatter or complete all 5 required prose sections before proceeding.")
         else
           VALIDATE_STATUS=$(echo "$VALIDATE_OUTPUT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
           if [ "$VALIDATE_STATUS" = "INCOMPLETE" ]; then
