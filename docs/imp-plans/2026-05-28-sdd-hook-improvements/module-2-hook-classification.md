@@ -251,7 +251,7 @@ git commit -m "test(sdd): migrate hook test helpers to manifest mode (pre-legacy
 
 **Context:** Items 1, 3, and 5 are one cohesive rewrite of the dispatch-classification region. After the rewrite, `MANIFEST_MODE` is always `true` past the guard clause, so the legacy `else` branches in the enforcement checks become dead and must be removed in the same task.
 
-- [ ] **Step 1: Write the failing classification tests**
+- [x] **Step 1: Write the failing classification tests**
 
 Create `tests/unit/test_sdd_classification.py`:
 
@@ -331,12 +331,12 @@ def test_no_manifest_with_artifacts_blocked(tmp_path):
     assert result.returncode == 2 and "manifest" in result.stderr.lower(), f"stderr: {result.stderr}"
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py -v`
 Expected: FAIL — `test_general_purpose_reviewer_is_logged` fails (current line 169 passes `general-purpose` through without logging); the `test_no_manifest_*` guard tests fail (no guard clause yet).
 
-- [ ] **Step 3: Replace the dispatch-classification region (Items 1, 3, 5)**
+- [x] **Step 3: Replace the dispatch-classification region (Items 1, 3, 5)**
 
 In `sdd-pre-dispatch-hook.sh`, replace **everything from the start of the legacy resolution block through the `IS_IMPLEMENTER=false` guard** — i.e. the current lines 123-278 (the `if [ "$MANIFEST_MODE" = false ]` legacy-resolution block, the `if [ "$MANIFEST_MODE" = true ]` classification block, the second `if [ "$MANIFEST_MODE" = false ]` legacy-dispatch block, and the trailing `if [ "$IS_IMPLEMENTER" = false ]; then exit 0; fi`) — with this:
 
@@ -421,12 +421,12 @@ fi
 
 This deletes (per the Contract Constraints): the `subagent_type` passthrough (old 168-171), the unconditional `IS_IMPLEMENTER=true` (old 211), the legacy resolution + dispatch blocks, and the `IS_IMPLEMENTER=false` guard. Do not declare `SUBAGENT_TYPE` (now unused).
 
-- [ ] **Step 4: Run the classification tests and the full suite**
+- [x] **Step 4: Run the classification tests and the full suite**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py -v` → PASS
 Run: `.venv/bin/python3 -m pytest tests/unit/ -v` → PASS (0 failures). The legacy `else` branches in the enforcement checks are now unreachable (the guard clause guarantees `MANIFEST_MODE=true` past it) but still present — they are removed in Task 7. If `test_explore_agent_passes_through` or another manifest-mode classification test in `test_sdd_hard_gates.py` regressed, make the minimal fix there (serial-safe per the write-scope note).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/unit/test_sdd_classification.py
@@ -605,10 +605,10 @@ git commit -m "docs(sdd): record hook classification + review_tier changes; upda
 ## Acceptance Criteria (Module 2)
 
 - [x] Migrated helpers make `tests/unit/` green against the unchanged hook (Task 5 gate)
-- [ ] `general-purpose` reviewer dispatches are logged; `general-purpose` implementer dispatches are enforced
-- [ ] Ad-hoc (non-reviewer/non-implementer) dispatches pass through without logging or enforcement
-- [ ] First reviewer dispatch creates `reports/` + dispatch log
-- [ ] No manifest + artifacts → BLOCK with a manifest-guidance message; no manifest + no artifacts → ALLOW
+- [x] `general-purpose` reviewer dispatches are logged; `general-purpose` implementer dispatches are enforced
+- [x] Ad-hoc (non-reviewer/non-implementer) dispatches pass through without logging or enforcement
+- [x] First reviewer dispatch creates `reports/` + dispatch log
+- [x] No manifest + artifacts → BLOCK with a manifest-guidance message; no manifest + no artifacts → ALLOW
 - [ ] Validation errors include the first 5 lines of `validate-report.py` output
 - [ ] All legacy branches removed; residual-legacy grep is clean
 - [ ] All five test layers pass; `CLAUDE.md` + customization manifest updated with new counts and behavior
