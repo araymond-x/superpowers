@@ -548,3 +548,80 @@ class TestEnforcementTierValidation:
         sections = result["output"].get("sections", {})
         tier_check = sections.get("enforcement_tier_appropriateness", {})
         assert tier_check.get("status") == "WARNING"
+
+
+# ---------------------------------------------------------------------------
+# Tests: review_tier heuristic (Item 4c)
+# ---------------------------------------------------------------------------
+
+
+def _review_tier_plan(tasks_yaml: str, body_tasks: str) -> str:
+    """Build a minimal valid plan with the given frontmatter tasks + body."""
+    return (
+        "---\n"
+        "schema_version: 1\n"
+        "feature_archetype: extension\n"
+        f"{tasks_yaml}"
+        "---\n\n"
+        "# Plan\n\n"
+        "**Source Contracts:** None\n"
+        "**Contract Constraints:** None\n"
+        "**Feature Archetype:** Extension\n"
+        "## Code Footprint\n\n"
+        "## Write-Scope Partitioning\n\n"
+        f"{body_tasks}"
+    )
+
+
+class TestReviewTierHeuristic:
+    """Warn (not block) when review_tier=minimum is declared on a high-risk title."""
+
+    def test_warns_minimum_on_refactor_title(self):
+        tasks_yaml = (
+            "tasks:\n"
+            "  - id: 0\n    title: 'Refactor balance service'\n    review_tier: minimum\n"
+        )
+        body = "### Task 0 -- Refactor balance service\n- [ ] do\n"
+        result = run_validate(_review_tier_plan(tasks_yaml, body))
+        warns = " ".join(result["output"].get("warnings", []))
+        assert "review_tier" in warns.lower()
+
+    def test_no_warn_minimum_on_ddl_title(self):
+        tasks_yaml = (
+            "tasks:\n"
+            "  - id: 0\n    title: 'Create table accounts (DDL)'\n    review_tier: minimum\n"
+        )
+        body = "### Task 0 -- Create table accounts\n- [ ] do\n"
+        result = run_validate(_review_tier_plan(tasks_yaml, body))
+        warns = " ".join(result["output"].get("warnings", []))
+        assert "review_tier" not in warns.lower()
+
+    def test_no_warn_migration_alone(self):
+        tasks_yaml = (
+            "tasks:\n"
+            "  - id: 0\n    title: 'Add migration for new column'\n    review_tier: minimum\n"
+        )
+        body = "### Task 0 -- Add migration\n- [ ] do\n"
+        result = run_validate(_review_tier_plan(tasks_yaml, body))
+        warns = " ".join(result["output"].get("warnings", []))
+        assert "review_tier" not in warns.lower()
+
+    def test_warns_migration_with_backfill(self):
+        tasks_yaml = (
+            "tasks:\n"
+            "  - id: 0\n    title: 'Migration with backfill of balances'\n    review_tier: minimum\n"
+        )
+        body = "### Task 0 -- Migration with backfill\n- [ ] do\n"
+        result = run_validate(_review_tier_plan(tasks_yaml, body))
+        warns = " ".join(result["output"].get("warnings", []))
+        assert "review_tier" in warns.lower()
+
+    def test_full_tier_never_warns(self):
+        tasks_yaml = (
+            "tasks:\n"
+            "  - id: 0\n    title: 'Refactor security auth service'\n    review_tier: full\n"
+        )
+        body = "### Task 0 -- Refactor security auth service\n- [ ] do\n"
+        result = run_validate(_review_tier_plan(tasks_yaml, body))
+        warns = " ".join(result["output"].get("warnings", []))
+        assert "review_tier" not in warns.lower()

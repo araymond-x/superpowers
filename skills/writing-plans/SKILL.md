@@ -366,6 +366,35 @@ git commit -m "feat: add specific feature"
 ```
 ````
 
+## Declaring `review_tier` per Task
+
+Each task may declare `review_tier: minimum` in the plan's YAML frontmatter to signal that a full dispatched review is not warranted. Omit it (or set `full`) by default. This is **orthogonal** to `enforcement_tier` — a `standard` plan can still have individual `review_tier: minimum` tasks. The pre-completion gate excludes declared-minimum tasks from the minimum-tier ratio, so legitimately mechanical work no longer trips the >50% blocker.
+
+**Full review expected (default — omit or set `full`):**
+
+| Signal | Examples |
+|--------|----------|
+| Changes business logic | Service refactors, calculation changes, state machines |
+| Affects data integrity | Migrations with data manipulation, backfills, constraint changes |
+| Crosses architectural boundaries | Multi-file changes spanning router → service → model |
+| Modifies shared code | Utilities, base classes, shared types |
+| Changes API contracts | Endpoint signatures, request/response shapes, error codes |
+| Security-sensitive | Auth, input validation, encryption, credentials |
+| Has Pattern References or Shared Constants | Must follow existing patterns correctly |
+
+**Minimum-tier appropriate (`review_tier: minimum`):**
+
+| Signal | Examples |
+|--------|----------|
+| Pure schema DDL | CREATE TABLE, ADD COLUMN, CREATE VIEW (no data manipulation) |
+| Configuration | Env vars, settings, feature flags, migration registration |
+| Documentation | CLAUDE.md, README, inline doc fixes |
+| Test-only | Adding coverage for already-implemented and reviewed code |
+| Verification/audit | Grep for orphaned code, run the suite, consistency checks |
+| Cosmetic | Type annotations, lint fixes, import reorg, renames |
+
+**Gray zone:** SQL views with business logic → full (SQL encodes rules). Contract-compliance tests (TDD-style) → full (tests are the spec). DDL + a one-line config registration as a single task → minimum is fine.
+
 ## No Placeholders
 
 Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:

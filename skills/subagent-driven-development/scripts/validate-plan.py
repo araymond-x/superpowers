@@ -325,6 +325,43 @@ def source_contracts_non_none(content: str) -> bool:
 
 
 # -----------------------------------------------------------------------
+# review_tier heuristic (Item 4c)
+# -----------------------------------------------------------------------
+
+# Titles matching these always warrant a full review.
+_ALWAYS_FULL_KEYWORDS = ("refactor", "service", "security", "business logic", "auth")
+# "migration" only warrants full review when paired with data-manipulation terms.
+_MIGRATION_DATA_KEYWORDS = ("backfill", "update", "delete", "transform", "data")
+
+
+def check_review_tier_heuristic(frontmatter: Optional[Dict]) -> List[str]:
+    """Return warning strings for tasks declaring review_tier=minimum on high-risk titles."""
+    warnings: List[str] = []
+    if not isinstance(frontmatter, dict):
+        return warnings
+    tasks = frontmatter.get("tasks")
+    if not isinstance(tasks, list):
+        return warnings
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if task.get("review_tier") != "minimum":
+            continue
+        title = str(task.get("title", "")).lower()
+        tid = task.get("id")
+        suspicious = any(kw in title for kw in _ALWAYS_FULL_KEYWORDS)
+        if not suspicious and "migration" in title:
+            suspicious = any(kw in title for kw in _MIGRATION_DATA_KEYWORDS)
+        if suspicious:
+            warnings.append(
+                "review_tier_minimum_on_high_risk_task: Task {} ('{}') declares "
+                "review_tier: minimum but its title suggests full review is warranted. "
+                "Confirm this is genuinely mechanical.".format(tid, task.get("title", ""))
+            )
+    return warnings
+
+
+# -----------------------------------------------------------------------
 # Main validation logic
 # -----------------------------------------------------------------------
 
@@ -561,6 +598,16 @@ def validate_plan(
                         "Multi-module plans typically need standard enforcement."
                     ),
                 }
+
+    # --- review_tier heuristic (Item 4c) ---
+    rt_warnings = check_review_tier_heuristic(frontmatter)
+    for w in rt_warnings:
+        warnings.append(w)
+    if rt_warnings:
+        sections["review_tier_heuristic"] = {
+            "status": "WARNING",
+            "detail": " | ".join(rt_warnings),
+        }
 
     # --- Overall status ---
     if blockers:

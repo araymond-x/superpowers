@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 
+import pytest
+
 SCRIPT_PATH = os.path.join(
     os.path.dirname(__file__),
     "..",
@@ -386,3 +388,70 @@ class TestMinimumTierRatioCap:
         )
         assert "excessive_minimum_tier_quality" not in result["output"].get("blockers", [])
         assert "excessive_minimum_tier_partner" in result["output"].get("blockers", [])
+
+
+# ---------------------------------------------------------------------------
+# Tests: Declared review_tier:minimum exclusion from ratio denominator
+# ---------------------------------------------------------------------------
+
+
+def _plan_with_review_tiers(task_count: int, minimum_task_ids: list[int]) -> str:
+    """Plan markdown with YAML frontmatter declaring review_tier per task."""
+    lines = ["---", "schema_version: 1", "feature_archetype: extension", "tasks:"]
+    for n in range(task_count):
+        lines.append(f"  - id: {n}")
+        lines.append(f"    title: 'Task {n}'")
+        if n in minimum_task_ids:
+            lines.append("    review_tier: minimum")
+    lines.append("---")
+    lines.append("")
+    for n in range(task_count):
+        lines.append(f"### Task {n} -- Task {n}")
+        lines.append("- [x] done")
+    return "\n".join(lines) + "\n"
+
+
+class TestDeclaredMinimumExclusion:
+    # (declared_min, quality_min, partner_min, expect_quality_block, expect_partner_block)
+    @pytest.mark.parametrize("declared,q_min,p_min,q_block,p_block", [
+        ([0, 1, 2],    [0, 1, 2],    [],           False, False),  # declared-min quality excluded -> PASS
+        ([],           [0, 1, 2],    [],           True,  False),  # undeclared 3/4 min -> block
+        ([0, 1, 2],    [],           [0, 1, 2],    False, False),  # declared-min partner excluded -> PASS
+        ([0],          [0, 1, 2],    [],           True,  False),  # 1 excluded; 2/3 remaining min -> block
+        ([0, 1, 2, 3], [0, 1, 2, 3], [],           False, False),  # all declared -> zero denom -> PASS
+    ])
+    def test_declared_minimum_exclusion(self, declared, q_min, p_min, q_block, p_block):
+        plan = _plan_with_review_tiers(4, minimum_task_ids=declared)
+        reports = _make_reports_with_minimum_tier(
+            4, quality_minimum_tasks=q_min, partner_minimum_tasks=p_min)
+        blockers = run_pre_completion(plan, report_files=reports)["output"].get("blockers", [])
+        assert ("excessive_minimum_tier_quality" in blockers) == q_block
+        assert ("excessive_minimum_tier_partner" in blockers) == p_block
+
+    def test_unparseable_plan_falls_back(self):
+        """No YAML frontmatter -> empty exclusion set -> current behavior (3/4 min -> block)."""
+        plan = "# Plan no frontmatter\n### Task 0\n### Task 1\n### Task 2\n### Task 3\n"
+        reports = _make_reports_with_minimum_tier(4, quality_minimum_tasks=[0, 1, 2])
+        blockers = run_pre_completion(plan, report_files=reports)["output"].get("blockers", [])
+        assert "excessive_minimum_tier_quality" in blockers
+
+    def test_declared_minimum_across_module_files(self, tmp_path):
+        """Multi-file (acceptance 'all module plan files read'): declared-minimum
+        tasks in a SECOND plan file are excluded. Without the cross-file scan,
+        3/4 quality reviews are minimum -> block; with it -> PASS. Uses
+        --additional-plan-files (same all_plan_contents path Step 3b feeds)."""
+        (tmp_path / "plan.md").write_text(_plan_with_review_tiers(4, minimum_task_ids=[]))
+        (tmp_path / "mod-b.md").write_text(_plan_with_review_tiers(4, minimum_task_ids=[1, 2, 3]))
+        (tmp_path / "DEVIATIONS.md").write_text("")
+        rdir = tmp_path / "reports"; rdir.mkdir()
+        for name, c in _make_reports_with_minimum_tier(4, quality_minimum_tasks=[1, 2, 3]).items():
+            (rdir / name).write_text(c)
+        r = subprocess.run([sys.executable, SCRIPT_PATH, "--phase", "pre-completion",
+                            "--plan-file", str(tmp_path / "plan.md"),
+                            "--additional-plan-files", str(tmp_path / "mod-b.md"),
+                            "--deviations-file", str(tmp_path / "DEVIATIONS.md"),
+                            "--reports-dir", str(rdir)],
+                           capture_output=True, text=True, timeout=10)
+        assert r.stdout.strip(), f"checkpoint produced no output: {r.stderr}"
+        out = json.loads(r.stdout)
+        assert "excessive_minimum_tier_quality" not in out.get("blockers", [])

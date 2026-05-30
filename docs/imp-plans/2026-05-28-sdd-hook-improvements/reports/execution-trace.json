@@ -1,0 +1,312 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers--worktrees-sdd-hook-improvements/ad5cf5d3-2d14-451a-ba79-22d7b40b0936.jsonl",
+  "extracted_at": "2026-05-29T13:14:28.903342+00:00",
+  "total_messages": 1263,
+  "skills_invoked": [
+    "superpowers:subagent-driven-development",
+    "pickup"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 19,
+      "phase": "mid-execution"
+    },
+    {
+      "script": "extract-execution-trace",
+      "count": 1
+    },
+    {
+      "script": "validate-plan",
+      "count": 2
+    },
+    {
+      "script": "validate-report",
+      "count": 12
+    }
+  ],
+  "tasks": [
+    {
+      "task_number": 1,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 271
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 285
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 304
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 2,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less. When requireme",
+        "message_index": 334
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 367
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 3,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less. When requireme",
+        "message_index": 389
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 429
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 4,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less.  You are imple",
+        "message_index": 497
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 521
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 5,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "Senior code review of Task 5 (SDD Hook Improvements, test-helper manifest migration). Be efficient: read the diff, run t",
+        "message_index": 708
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 639
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 704
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 7,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "Skeptical spec review of Task 7 (remove dead legacy branches from the SDD pre-dispatch hook). The core question: did thi",
+        "message_index": 885
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 897
+        }
+      },
+      "deviations_logged": false,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 8,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "Skeptical spec review of Task 8 (surface validate-report.py error excerpt inline in the SDD hook). Verify by reading cod",
+        "message_index": 957
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 969
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 9,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "Skeptical spec review of Task 9 (final verification + documentation) of the SDD Hook Improvements feature. Verify by rea",
+        "message_index": 1145
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 1162
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    }
+  ],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}
