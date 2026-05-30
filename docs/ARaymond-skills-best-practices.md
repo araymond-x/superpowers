@@ -269,6 +269,34 @@ When the controller's context gets heavy during a long SDD execution, it may han
 
 ---
 
+## Self-Modifying Enforcement Runs (2026-05-29 lessons)
+
+The SDD Hook Improvements feature used SDD to modify the SDD enforcement hooks themselves (`sdd-pre-dispatch-hook.sh`, `controller-checkpoint.py`). Lessons from running the disciplined process *on* the thing that enforces discipline — under a transient API outage.
+
+### Worktree isolation keeps the live hook stable during a self-modifying run
+
+The enforcement hooks are symlink-installed from this repo's `main` checkout (`settings.json` → main path, via the `~/.claude/skills/superpowers` symlink). Editing them on `main` would self-modify enforcement *mid-run*. Running in a worktree means the worktree's hook diverges while the **live** hook stays the main checkout's unchanged copy — the restructure never destabilizes the session running it. Confirm before starting: the Agent-matcher hook path in `settings.json` resolves to the main checkout, not the worktree.
+
+### The no-op-hook run: when the live hook can't enforce *this* session
+
+If the bug you're fixing IS in the live hook, the live hook may not enforce your own run. Here, the live (pre-fix) hook passed all `general-purpose` dispatches straight through (the exact Item-1 bug being fixed), so with general-purpose subagents the hook was a **no-op all session** — no provenance logging, no gating. The explicit choice (made with the user) was "manual discipline": dispatch as general-purpose, accept zero hook backstop, and compensate by running `controller-checkpoint.py` at every phase by hand and dispatching every spec+quality review manually.
+
+- **Decide the dispatch `subagent_type` BEFORE Task 1** — it determines whether the hook enforces. A type the live hook gates on (not in its passthrough list) would enforce but risks deadlock on the very bugs under repair; general-purpose is the safe no-enforcement choice. Be consistent: mixing an enforced implementer type with a passed-through reviewer type deadlocks the provenance gate at Task 2 (reviewers never logged → next implementer blocked).
+- **A no-op hook does not relax the process.** The controller still runs every checkpoint + review; what's lost is the mechanical backstop, not the discipline. Disclose it prominently in the honesty check and `deviations.md`.
+
+### Verify the new enforcement code's real-dispatch seam
+
+A no-op-hook run means the new hook is exercised only by *synthetic* unit-test inputs (`make_hook_input`), never a real dispatch. Before trusting it, verify the seam between real dispatch payloads and the classifier: the final reviewer confirmed `implementer-prompt.md` carries BOTH backstops the new classifier keys on (`description: "Implement Task N"` matches the description regex; body "You are implementing Task N" lands within `head -c 500` for the prompt-path regex). Carry a **post-merge live smoke test** as an explicit follow-up — one real general-purpose reviewer + implementer dispatch from main.
+
+### Operating through API instability (long dispatches socket-closing)
+
+Mid-run, subagent dispatches began failing: first HTTP 529 overloads (cleared after a backoff), then socket-closes that dropped the connection after ~6 tool uses on *long* dispatches (~24 min) — the agent never reached its edit/commit before the drop (repo verified clean each time). Adaptations that worked:
+
+- **Lean prompts deliver; long ones don't.** Short, focused review dispatches (≤7 tool uses, ≤400-word reports) completed reliably where verbose ones socket-closed on the final response. When a long dispatch keeps failing, instruct subagents to **commit as soon as green and keep the report ≤350 words** — the committed code is the deliverable; even if the report is lost, the work persists and you recover by inspecting the repo.
+- **When a long implementer dispatch is unrecoverable, the controller may apply verbatim plan code directly** — but ONLY when the plan prescribes the exact code (here: a bash line-splice + a fixed test file), so no implementer design judgment is lost. Preserve independence by dispatching the spec + quality reviews separately (short → they succeed). Disclose controller-implementation in `deviations.md` + the honesty check. (Tasks 6 and 9 were controller-implemented this way; both independently reviewed; the trace auditor confirmed verification was adequate.)
+
+---
+
 ## Skill Frontmatter Best Practices
 
 From the Anthropic "Complete Guide to Building Skills for Claude" and our audit findings (`docs/plans/2026-03-23-final-audit-results.md`):
@@ -408,3 +436,5 @@ Observe hook behavior during real SDD executions. Every hook fire documents what
 | Controller patches implementer report instead of re-dispatching | 2026-05-20: three reports edited directly for Pydantic schema fixes (result: N/A → PASS, passing: 24 → 0, prose-header rewrite); two were uncommitted at honesty-check time | Re-dispatch the implementer to fix schema/section issues. If you must patch (rare; e.g., field rename the implementer can't know), commit the patch immediately with explicit "controller patch (not implementer)" message disclosing provenance. Uncommitted controller-authored content lets working tree silently diverge from history. |
 | Integration bug masked by unit test fixture | 2026-05-20: `_load_manifest_config` missing `feature_dir` join in path resolution; all 326 unit tests passed because the test fixture set `active_module_file: None`, never exercising the buggy branch | Write an end-to-end smoke test (e.g., `tests/integration/sdd-e2e-test.sh`) that composes all feature scripts against a temp git repo. Run before declaring feature complete. Cost: 100 lines of bash. Catches what unit tests can't: runtime composition issues. |
 | Plan-reference code contains the same bug across multiple tasks | 2026-05-20: midpoint formula `range_size = end - start + 1` appeared in Task 4, Task 11, and Task 12 plan-reference code; corrected via deviation row each time | Extract repeated logic to a shared module (e.g., `_midpoint.py`) at the first occurrence — do not "Deferred — log only" three times. Update the plan author's source (writing-plans SKILL.md) so future plans don't regenerate the bug. |
+| Multi-module pre-completion gate false-FAILs on completed modules | 2026-05-29: `transition-module.py` archives completed-module reports to `reports/archive-<module>/`, but `all_tasks_have_reports` (pre-completion) extracts task headers from ALL module plan files yet globs `reports/` flat (non-recursive) → "Missing reports for Task 1-4" after a transition | Restore the archived reports to flat `reports/` to satisfy the gate (they exist + were validated at transition; controller-applied this run). Real fix (future, BACKLOG): make `find_report_file`/`all_tasks_have_reports` archive-aware (also search `reports/archive-*/`), OR have pre-completion validate only the active module and trust transition validation for completed modules. |
+| Controller's own report omits a required section | 2026-05-29: a controller-authored implementer report (Task 8) was missing "Self-Review Findings"; a `tail -2` validation check only saw the trailing JSON and missed the INCOMPLETE status | Always read the full `validate-report.py` `status` field, not just the tail. The Task-9 pre-dispatch `previous_report_complete` check caught it — file-based gates catch controller reporting slips the controller's own spot-checks miss. |
