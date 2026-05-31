@@ -251,6 +251,30 @@ def _declared_minimum_task_ids(plan_contents):
     return declared, parsed_any
 
 
+def _verification_task_ids(plan_contents):
+    # type: (list) -> set
+    """Collect task IDs declaring task_type=='verification' from plan frontmatter."""
+    import yaml
+    result = set()
+    for content in plan_contents:
+        if not content or not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end == -1:
+            continue
+        try:
+            fm = yaml.safe_load(content[3:end])
+        except Exception:
+            continue
+        tasks = fm.get("tasks") if isinstance(fm, dict) else None
+        if not isinstance(tasks, list):
+            continue
+        for t in tasks:
+            if isinstance(t, dict) and t.get("task_type") == "verification" and isinstance(t.get("id"), int):
+                result.add(t["id"])
+    return result
+
+
 def validate_report_sections(report_content: str) -> dict:
     """
     Validate that a report has the 5 required prose sections.
@@ -1141,6 +1165,36 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
 
     _ratio_check("quality-review", "excessive_minimum_tier_quality", "quality")
     _ratio_check("partner-review", "excessive_minimum_tier_partner", "partner")
+
+    # Check 8: Verification task ratio cap (>30% triggers blocker)
+    verification_ids = _verification_task_ids(all_plan_contents)
+    all_task_ids = set(
+        int(n) for content in all_plan_contents
+        for n in TASK_HEADER_PATTERN.findall(content)
+    )
+    total_tasks = len(all_task_ids)
+    verif_count = len(verification_ids & all_task_ids)
+    if total_tasks > 0 and verif_count / total_tasks > 0.3:
+        verif_list = ", ".join(f"Task {t}" for t in sorted(verification_ids & all_task_ids))
+        checks["verification_ratio"] = {
+            "status": "FAIL",
+            "detail": (
+                f"{verif_count}/{total_tasks} tasks are verification type "
+                f"({round(100 * verif_count / total_tasks)}%). "
+                f"Maximum is 30%. Verification tasks: {verif_list}. "
+                "Consider reclassifying some as implementation."
+            ),
+        }
+        blockers.append("verification_ratio")
+    else:
+        checks["verification_ratio"] = {
+            "status": "PASS",
+            "detail": (
+                f"{verif_count}/{total_tasks} tasks are verification type"
+                if total_tasks > 0
+                else "No tasks to ratio"
+            ),
+        }
 
     pct = (
         round(100 * checkbox_counts["checked"] / checkbox_counts["total"])

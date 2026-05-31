@@ -455,3 +455,73 @@ class TestDeclaredMinimumExclusion:
         assert r.stdout.strip(), f"checkpoint produced no output: {r.stderr}"
         out = json.loads(r.stdout)
         assert "excessive_minimum_tier_quality" not in out.get("blockers", [])
+
+
+# ---------------------------------------------------------------------------
+# Tests: Verification task ratio cap (>30% triggers blocker)
+# ---------------------------------------------------------------------------
+
+
+def _plan_with_task_types(task_count: int, verification_task_ids: list[int]) -> str:
+    """Plan markdown with YAML frontmatter declaring task_type per task AND a
+    matching `### Task N` header for each task.
+
+    The frontmatter ids and the header numbers MUST agree: _verification_task_ids
+    reads task_type from frontmatter while the ratio denominator is counted from
+    `### Task N` headers (TASK_HEADER_PATTERN).
+    """
+    lines = ["---", "schema_version: 1", "feature_archetype: extension", "tasks:"]
+    for n in range(task_count):
+        lines.append(f"  - id: {n}")
+        lines.append(f"    title: 'Task {n}'")
+        if n in verification_task_ids:
+            lines.append("    task_type: verification")
+    lines.append("---")
+    lines.append("")
+    for n in range(task_count):
+        lines.append(f"### Task {n} -- Task {n}")
+        lines.append("- [x] done")
+    return "\n".join(lines) + "\n"
+
+
+class TestVerificationRatioCheck:
+    """Pre-completion verification task ratio capped at 30%."""
+
+    def test_no_verification_tasks_passes(self):
+        """Plan with all implementation tasks (no task_type) → PASS."""
+        plan = _plan_with_task_types(5, verification_task_ids=[])
+        result = run_pre_completion(plan)
+        check = result["output"].get("checks", {}).get("verification_ratio", {})
+        assert check.get("status") == "PASS", f"Expected PASS: {check}"
+
+    def test_30_percent_passes(self):
+        """7 implementation + 3 verification = 10 tasks (exactly 30%) → PASS.
+
+        30% is NOT strictly greater than 30%, so it must pass.
+        """
+        plan = _plan_with_task_types(10, verification_task_ids=[0, 1, 2])
+        result = run_pre_completion(plan)
+        check = result["output"].get("checks", {}).get("verification_ratio", {})
+        assert check.get("status") == "PASS", f"Expected PASS at exactly 30%: {check}"
+
+    def test_over_30_percent_fails(self):
+        """6 implementation + 4 verification = 10 tasks (40%) → FAIL.
+
+        The blocker detail must name the verification tasks.
+        """
+        plan = _plan_with_task_types(10, verification_task_ids=[0, 1, 2, 3])
+        result = run_pre_completion(plan)
+        check = result["output"].get("checks", {}).get("verification_ratio", {})
+        assert check.get("status") == "FAIL", f"Expected FAIL at 40%: {check}"
+        assert "verification_ratio" in result["output"].get("blockers", [])
+        detail = check.get("detail", "")
+        for tid in (0, 1, 2, 3):
+            assert f"Task {tid}" in detail, \
+                f"Blocker detail should name Task {tid}: {detail}"
+
+    def test_ratio_with_no_tasks_passes(self):
+        """Empty plan (no tasks) → PASS (no divide-by-zero)."""
+        plan = _plan_with_task_types(0, verification_task_ids=[])
+        result = run_pre_completion(plan)
+        check = result["output"].get("checks", {}).get("verification_ratio", {})
+        assert check.get("status") == "PASS", f"Expected PASS for empty plan: {check}"
