@@ -4,7 +4,12 @@ Run: .venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py -v
 import os
 import subprocess
 
-from sdd_test_helpers import create_checkpoint_file, make_hook_input, setup_sdd_workspace
+from sdd_test_helpers import (
+    create_checkpoint_file,
+    make_hook_input,
+    setup_full_sdd_workspace,
+    setup_sdd_workspace,
+)
 
 HOOK_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "..",
@@ -98,3 +103,77 @@ class TestValidationErrorSurfacing:
         low = result.stderr.lower()
         assert "validation" in low and "task_id" in low, \
             f"Expected an inline validation excerpt naming task_id. stderr: {result.stderr}"
+
+
+class TestImplementerDispatchLogging:
+    """Stage 2 implementer detection logs to the dispatch log.
+
+    The implementer log line is written in Stage 2 BEFORE the enforcement
+    checks run, so it appears even when the hook ultimately blocks (exit 2).
+    Downstream consumers (git reality check, Task 5) rely on these timestamps.
+    """
+
+    @staticmethod
+    def _log_lines(tmpdir):
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        if not os.path.exists(log_path):
+            return []
+        with open(log_path) as f:
+            return f.read().splitlines()
+
+    def test_implementer_dispatch_logged_even_when_blocked(self, tmp_path):
+        # Task 0 reports missing -> implementer for task 1 is BLOCKED (exit 2),
+        # but the Stage-2 log line must still be written before the gate fires.
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        result = run_hook(make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1", cwd=tmpdir))
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"No implementer log line written. log: {lines}"
+
+    def test_implementer_dispatch_logged_when_allowed(self, tmp_path):
+        # Full workspace: task 0 complete, all gates satisfied for task 1.
+        # Hook ALLOWS (exit 0) and the implementer line is present.
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=3, completed_tasks=1)
+        result = run_hook(make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1", cwd=tmpdir))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"No implementer log line written. log: {lines}"
+
+    def test_implementer_log_line_exact_format(self, tmp_path):
+        # The writer format is the reader contract for Task 5's git reality check:
+        #   <ISO-8601> DISPATCH implementer task=N type=implementer
+        # Assert the full shape via the exact regex the reader uses.
+        import re
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        run_hook(make_hook_input(
+            description="Implement task 2",
+            prompt="You are implementing task 2", cwd=tmpdir))
+        lines = self._log_lines(tmpdir)
+        pattern = re.compile(
+            r"^\S+\s+DISPATCH\s+implementer\s+task=2\s+type=implementer$"
+        )
+        assert any(pattern.match(line) for line in lines), \
+            f"Implementer line does not match the reader contract. log: {lines}"
+
+    def test_prompt_only_implementer_is_logged(self, tmp_path):
+        # Implementer detected via PROMPT (not description) is logged too.
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        run_hook(make_hook_input(
+            description="Run the next step",
+            prompt="You are implementing task 1 of the plan.", cwd=tmpdir))
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"Prompt-triggered implementer not logged. log: {lines}"

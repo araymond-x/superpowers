@@ -183,6 +183,18 @@ elif echo "$PROMPT" | grep -qiE 'you are implementing task\s*[0-9]'; then
   IS_IMPLEMENTER=true
 fi
 
+# Log implementer dispatch (gives git reality check reliable timestamps).
+# Written here in Stage 2 — BEFORE the enforcement gate below — so the
+# timestamp is recorded even when the dispatch is ultimately blocked.
+if [ "$IS_IMPLEMENTER" = true ] && [ -n "$TASK_NUMBER" ]; then
+  if [ -f "$DISPATCH_LOG" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH implementer task=$TASK_NUMBER type=implementer" >> "$DISPATCH_LOG"
+  elif [ -d "$(dirname "$DISPATCH_LOG")" ]; then
+    touch "$DISPATCH_LOG"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH implementer task=$TASK_NUMBER type=implementer" >> "$DISPATCH_LOG"
+  fi
+fi
+
 # Stage 3: Not a reviewer, not an implementer → allow (Explore, Plan, ad-hoc).
 if [ "$IS_IMPLEMENTER" = false ]; then
   exit 0
@@ -237,6 +249,63 @@ check_report_file() {
 
   echo "OK"
 }
+
+# ─── Helper: read task_type from plan YAML frontmatter ────────────────────
+# Uses $PYTHON (PyYAML) to parse the YAML frontmatter's tasks array.
+# Returns "implementation" (default) or "verification".
+get_task_type() {
+  local plan_file="$1"
+  local task_id="$2"
+  if [ ! -f "$plan_file" ]; then
+    echo "implementation"
+    return
+  fi
+  local result
+  result=$($PYTHON -c "
+import yaml, sys
+with open(sys.argv[1]) as f:
+    content = f.read()
+if not content.startswith('---'):
+    print('implementation')
+    sys.exit(0)
+end = content.find('---', 3)
+if end == -1:
+    print('implementation')
+    sys.exit(0)
+try:
+    fm = yaml.safe_load(content[3:end])
+except Exception:
+    print('implementation')
+    sys.exit(0)
+tasks = fm.get('tasks', []) if isinstance(fm, dict) else []
+tid = int(sys.argv[2])
+for t in tasks:
+    if isinstance(t, dict) and t.get('id') == tid:
+        print(t.get('task_type', 'implementation'))
+        sys.exit(0)
+print('implementation')
+" "$plan_file" "$task_id" 2>/dev/null)
+  echo "${result:-implementation}"
+}
+
+# ─── Resolve plan file + task types for downstream check skipping ─────────
+# get_task_type is defined above, so it is safe to call here. CURRENT_TASK_TYPE
+# and PREV_TASK_TYPE are consumed by Task 3's verification-aware check skipping.
+EFFECTIVE_PLAN_FILE=""
+if [ -n "$MANIFEST_MODULE_FILE" ] && [ -f "$MANIFEST_MODULE_FILE" ]; then
+  EFFECTIVE_PLAN_FILE="$MANIFEST_MODULE_FILE"
+elif [ -n "$MANIFEST_PLAN_FILE" ] && [ -f "$MANIFEST_PLAN_FILE" ]; then
+  EFFECTIVE_PLAN_FILE="$MANIFEST_PLAN_FILE"
+fi
+
+CURRENT_TASK_TYPE="implementation"
+PREV_TASK_TYPE="implementation"
+if [ -n "$EFFECTIVE_PLAN_FILE" ] && [ -n "$TASK_NUMBER" ]; then
+  CURRENT_TASK_TYPE=$(get_task_type "$EFFECTIVE_PLAN_FILE" "$TASK_NUMBER")
+  if [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
+    PREV_TASK_TYPE=$(get_task_type "$EFFECTIVE_PLAN_FILE" "$((TASK_NUMBER - 1))")
+  fi
+fi
 
 # ─── Enforcement checks (implementer dispatches only) ─────────────────────
 
