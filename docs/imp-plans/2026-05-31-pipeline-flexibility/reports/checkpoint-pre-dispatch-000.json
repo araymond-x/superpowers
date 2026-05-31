@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "PASS",
+  "task_number": 0,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "OK",
+      "detail": "First task (task 0) \u2014 no previous task to verify"
+    },
+    "previous_task_report": {
+      "status": "OK",
+      "detail": "First task \u2014 no previous report to verify"
+    },
+    "previous_report_complete": {
+      "status": "OK",
+      "detail": "First task \u2014 no previous report to validate"
+    },
+    "previous_spec_review": {
+      "status": "OK",
+      "detail": "First task \u2014 no previous spec review to verify"
+    },
+    "previous_quality_review": {
+      "status": "OK",
+      "detail": "First task \u2014 no previous quality review to verify"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~17.0KB (~4,350 tokens, 2 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 3,
+    "tasks_completed": 0,
+    "checkboxes_total": 20,
+    "checkboxes_checked": 0,
+    "percentage": 0
+  }
+}
