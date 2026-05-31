@@ -159,10 +159,14 @@ def detect_stale_artifacts(deviations_file: str, reports_dir: str) -> dict:
                 "{} task report file(s) in {}".format(len(task_reports), reports_dir)
             )
 
-        audit_files = sorted(glob.glob(os.path.join(reports_dir, "pre-execution-audit*")))
+        audit_files = sorted(
+            glob.glob(os.path.join(reports_dir, "pre-execution-audit*"))
+        )
         if audit_files:
             found.append(
-                "{} pre-execution audit file(s) in {}".format(len(audit_files), reports_dir)
+                "{} pre-execution audit file(s) in {}".format(
+                    len(audit_files), reports_dir
+                )
             )
 
     if not found:
@@ -230,6 +234,7 @@ def _declared_minimum_task_ids(plan_contents):
     issue cannot take down the ratio check; reads only tasks[].review_tier/id.
     """
     import yaml
+
     declared, parsed_any = set(), False
     for content in plan_contents:
         if not content or not content.startswith("---"):
@@ -246,7 +251,11 @@ def _declared_minimum_task_ids(plan_contents):
             continue
         parsed_any = True
         for t in tasks:
-            if isinstance(t, dict) and t.get("review_tier") == "minimum" and isinstance(t.get("id"), int):
+            if (
+                isinstance(t, dict)
+                and t.get("review_tier") == "minimum"
+                and isinstance(t.get("id"), int)
+            ):
                 declared.add(t["id"])
     return declared, parsed_any
 
@@ -255,6 +264,7 @@ def _verification_task_ids(plan_contents):
     # type: (list) -> set
     """Collect task IDs declaring task_type=='verification' from plan frontmatter."""
     import yaml
+
     result = set()
     for content in plan_contents:
         if not content or not content.startswith("---"):
@@ -270,9 +280,77 @@ def _verification_task_ids(plan_contents):
         if not isinstance(tasks, list):
             continue
         for t in tasks:
-            if isinstance(t, dict) and t.get("task_type") == "verification" and isinstance(t.get("id"), int):
+            if (
+                isinstance(t, dict)
+                and t.get("task_type") == "verification"
+                and isinstance(t.get("id"), int)
+            ):
                 result.add(t["id"])
     return result
+
+
+def _check_verification_git_reality(
+    verification_ids,  # type: set
+    dispatch_log_path,  # type: str
+    git_root=None,  # type: Optional[str]
+):
+    # type: (...) -> list
+    """Check whether verification tasks produced file-modifying commits.
+
+    Reads implementer dispatch timestamps from the dispatch log,
+    runs git log between consecutive task windows,
+    returns findings for any file modifications detected.
+    """
+    if not verification_ids or not os.path.isfile(dispatch_log_path):
+        return []
+
+    dispatch_times = {}  # type: dict
+    with open(dispatch_log_path) as f:
+        for line in f:
+            # Format mirrors the writer in sdd-pre-dispatch-hook.sh (~lines 191/194); keep in sync.
+            m = re.match(
+                r"(\S+)\s+DISPATCH\s+implementer\s+task=(\d+)\s+type=implementer",
+                line,
+            )
+            if m:
+                dispatch_times[int(m.group(2))] = m.group(1)
+
+    findings = []
+    sorted_tasks = sorted(dispatch_times.keys())
+    for vid in sorted(verification_ids):
+        if vid not in dispatch_times:
+            continue
+        start_ts = dispatch_times[vid]
+        idx = sorted_tasks.index(vid)
+        end_ts = (
+            dispatch_times[sorted_tasks[idx + 1]]
+            if idx + 1 < len(sorted_tasks)
+            else None
+        )
+
+        git_cmd = ["git", "log", "--oneline", f"--after={start_ts}"]
+        if end_ts:
+            git_cmd.append(f"--before={end_ts}")
+        git_cmd.extend(["--diff-filter=ACDMR", "--name-only"])
+
+        if git_root:
+            git_cmd = ["git", "-C", git_root] + git_cmd[1:]
+
+        try:
+            result = subprocess.run(git_cmd, capture_output=True, text=True, timeout=10)
+            if result.returncode == 0 and result.stdout.strip():
+                findings.append(
+                    {
+                        "task": vid,
+                        "start": start_ts,
+                        "end": end_ts or "now",
+                        "commits": result.stdout.strip(),
+                    }
+                )
+        except (subprocess.TimeoutExpired, OSError):
+            pass
+
+    return findings
 
 
 def validate_report_sections(report_content: str) -> dict:
@@ -449,18 +527,22 @@ def _resolve_git_root(manifest_path: Path) -> str:
 
     fallback = str(manifest_path.resolve().parent.parent.parent)
     print(
-        json.dumps({
-            "warning": (
-                f"git rev-parse failed for {manifest_path}; "
-                f"falling back to parent.parent.parent ({fallback})"
-            )
-        }),
+        json.dumps(
+            {
+                "warning": (
+                    f"git rev-parse failed for {manifest_path}; "
+                    f"falling back to parent.parent.parent ({fallback})"
+                )
+            }
+        ),
         file=sys.stderr,
     )
     return fallback
 
 
-def _load_manifest_config(args: argparse.Namespace) -> Tuple[Optional[str], Optional[dict]]:
+def _load_manifest_config(
+    args: argparse.Namespace,
+) -> Tuple[Optional[str], Optional[dict]]:
     """Load and validate the SDD session manifest when --manifest is provided.
 
     Side effects:
@@ -821,7 +903,9 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
     # Check 4: Previous task spec review report exists
     if task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
-        spec_review_pattern = os.path.join(args.reports_dir, "task-{}-spec-review*".format(prev_padded))
+        spec_review_pattern = os.path.join(
+            args.reports_dir, "task-{}-spec-review*".format(prev_padded)
+        )
         spec_review_files = sorted(glob.glob(spec_review_pattern))
         if spec_review_files:
             checks["previous_spec_review"] = {
@@ -831,7 +915,9 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         else:
             checks["previous_spec_review"] = {
                 "status": "FAIL",
-                "detail": "No spec review report for Task {}. Dispatch spec compliance review and save to reports/task-{}-spec-review.md".format(previous_task, prev_padded),
+                "detail": "No spec review report for Task {}. Dispatch spec compliance review and save to reports/task-{}-spec-review.md".format(
+                    previous_task, prev_padded
+                ),
             }
             blockers.append("previous_spec_review")
     else:
@@ -843,7 +929,9 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
     # Check 5: Previous task quality review report exists
     if task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
-        quality_review_pattern = os.path.join(args.reports_dir, "task-{}-quality-review*".format(prev_padded))
+        quality_review_pattern = os.path.join(
+            args.reports_dir, "task-{}-quality-review*".format(prev_padded)
+        )
         quality_review_files = sorted(glob.glob(quality_review_pattern))
         if quality_review_files:
             checks["previous_quality_review"] = {
@@ -853,7 +941,9 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         else:
             checks["previous_quality_review"] = {
                 "status": "FAIL",
-                "detail": "No quality review report for Task {}. Dispatch code quality review and save to reports/task-{}-quality-review.md (or save reports/task-{}-quality-review-minimum-tier.md if minimum tier declared)".format(previous_task, prev_padded, prev_padded),
+                "detail": "No quality review report for Task {}. Dispatch code quality review and save to reports/task-{}-quality-review.md (or save reports/task-{}-quality-review-minimum-tier.md if minimum tier declared)".format(
+                    previous_task, prev_padded, prev_padded
+                ),
             }
             blockers.append("previous_quality_review")
     else:
@@ -966,7 +1056,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             _md = json.loads(_mp.read_text(encoding="utf-8"))
             _gr = _resolve_git_root(_mp)
             _feat = _md.get("paths", {}).get("feature_dir", "")
-            for _mod in (_md.get("modules") or []):
+            for _mod in _md.get("modules") or []:
                 _full = os.path.join(_gr, _feat, _mod.get("file", ""))
                 if _mod.get("file") and os.path.isfile(_full):
                     all_plan_contents.append(read_file(_full))
@@ -1084,12 +1174,11 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             "detail": "Micro tier — honesty check skipped per manifest",
         }
     else:
-        honesty_matches = sorted(glob.glob(
-            os.path.join(args.reports_dir, "honesty-check-*.md")
-        ))
+        honesty_matches = sorted(
+            glob.glob(os.path.join(args.reports_dir, "honesty-check-*.md"))
+        )
         honesty_found = any(
-            os.path.isfile(p) and file_size_bytes(p) >= 50
-            for p in honesty_matches
+            os.path.isfile(p) and file_size_bytes(p) >= 50 for p in honesty_matches
         )
         if honesty_found:
             checks["honesty_check_missing"] = {
@@ -1169,13 +1258,16 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # Check 8: Verification task ratio cap (>30% triggers blocker)
     verification_ids = _verification_task_ids(all_plan_contents)
     all_task_ids = set(
-        int(n) for content in all_plan_contents
+        int(n)
+        for content in all_plan_contents
         for n in TASK_HEADER_PATTERN.findall(content)
     )
     total_tasks = len(all_task_ids)
     verif_count = len(verification_ids & all_task_ids)
     if total_tasks > 0 and verif_count / total_tasks > 0.3:
-        verif_list = ", ".join(f"Task {t}" for t in sorted(verification_ids & all_task_ids))
+        verif_list = ", ".join(
+            f"Task {t}" for t in sorted(verification_ids & all_task_ids)
+        )
         checks["verification_ratio"] = {
             "status": "FAIL",
             "detail": (
@@ -1194,6 +1286,49 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 if total_tasks > 0
                 else "No tasks to ratio"
             ),
+        }
+
+    # Check 9: Git reality check — verification tasks must not modify files
+    if verification_ids:
+        dispatch_log_path = ""
+        git_root_for_check = None
+        if getattr(args, "manifest", None):
+            try:
+                _mp = Path(args.manifest)
+                _md = json.loads(_mp.read_text(encoding="utf-8"))
+                _gr = _resolve_git_root(_mp)
+                git_root_for_check = _gr
+                dispatch_log_path = os.path.join(
+                    _gr, _md.get("paths", {}).get("dispatch_log", "")
+                )
+            except Exception:
+                pass
+        elif args.reports_dir:
+            dispatch_log_path = os.path.join(args.reports_dir, ".dispatch-log")
+
+        git_findings = _check_verification_git_reality(
+            verification_ids, dispatch_log_path, git_root=git_root_for_check
+        )
+        if git_findings:
+            detail_parts = [
+                f"Task {f['task']} (window {f['start']}–{f['end']}): file modifications detected"
+                for f in git_findings
+            ]
+            checks["verification_git_reality"] = {
+                "status": "FAIL",
+                "detail": "Verification task(s) produced file modifications — requires review. "
+                + "; ".join(detail_parts),
+            }
+            blockers.append("verification_git_reality")
+        else:
+            checks["verification_git_reality"] = {
+                "status": "PASS",
+                "detail": f"No file modifications during {len(verification_ids)} verification window(s)",
+            }
+    else:
+        checks["verification_git_reality"] = {
+            "status": "PASS",
+            "detail": "No verification tasks — git reality check skipped",
         }
 
     pct = (
@@ -1327,16 +1462,14 @@ def main() -> int:
     parser.add_argument(
         "--feature-dir",
         help="Active feature directory. When provided, --reports-dir and --deviations-file "
-             "are resolved relative to this path (if not explicitly set).",
+        "are resolved relative to this path (if not explicitly set).",
         default=None,
     )
     args = parser.parse_args()
 
     if args.manifest is None and args.plan_file is None:
         print(
-            json.dumps({
-                "error": "Either --plan-file or --manifest is required."
-            }),
+            json.dumps({"error": "Either --plan-file or --manifest is required."}),
             file=sys.stderr,
         )
         return 3
