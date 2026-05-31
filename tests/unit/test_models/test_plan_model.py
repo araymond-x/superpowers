@@ -262,3 +262,57 @@ class TestReviewTier:
     def test_schema_version_unchanged(self):
         """Adding review_tier is non-breaking — schema version must NOT change."""
         assert CURRENT_SCHEMA_VERSION == 1
+
+
+class TestEntryMode:
+    def test_entry_mode_defaults_to_brainstorming(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        assert plan.entry_mode == "brainstorming"
+
+    def test_entry_mode_accepts_direct(self):
+        data = {**MINIMAL_PLAN, "entry_mode": "direct"}
+        plan = Plan.model_validate(data)
+        assert plan.entry_mode == "direct"
+
+    def test_entry_mode_rejects_invalid(self):
+        data = {**MINIMAL_PLAN, "entry_mode": "handoff"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+
+class TestTaskType:
+    def test_task_type_defaults_to_implementation(self):
+        task = Task(id=1, title="x")
+        assert task.task_type == "implementation"
+
+    def test_task_type_accepts_verification(self):
+        task = Task(id=1, title="x", task_type="verification")
+        assert task.task_type == "verification"
+
+    def test_task_type_rejects_invalid(self):
+        with pytest.raises(ValidationError) as exc:
+            Task(id=1, title="x", task_type="audit")
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+    def test_plan_with_task_type_parses(self):
+        data = {
+            "schema_version": CURRENT_SCHEMA_VERSION,
+            "feature_archetype": "extension",
+            "tasks": [
+                {"id": 0, "title": "Setup"},
+                {"id": 1, "title": "Audit orphans", "task_type": "verification"},
+            ],
+        }
+        plan = Plan.model_validate(data)
+        assert plan.tasks[0].task_type == "implementation"  # default
+        assert plan.tasks[1].task_type == "verification"
+
+    def test_task_type_orthogonal_to_review_tier(self):
+        task = Task(id=1, title="x", task_type="verification", review_tier="minimum")
+        assert task.task_type == "verification"
+        assert task.review_tier == "minimum"
+
+    def test_schema_version_unchanged(self):
+        """Adding task_type is non-breaking — schema version must NOT change."""
+        assert CURRENT_SCHEMA_VERSION == 1
