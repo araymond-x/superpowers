@@ -132,6 +132,8 @@ Quick reference: 5 test layers — regression (static, 148 checks: 145 PASS / 3 
 
 ## Process Improvement Findings (`docs/process-improvement-findings/`)
 Real-world issues from using superpowers in production projects. Use these to inform fork customizations.
+- `BACKLOG.md` — **living ledger** of open/in-flight/done improvements (stable IDs B*/I*/C*/N*/P*, size estimates, sequencing). Start here for "what's left to improve and how big is it."
+- `2026-05-21-skill-evaluation.md` — Cross-repo Critical findings (plan-reference code unrun, integration bugs pass unit tests, controller skips discipline under pressure)
 - `subagent-claude-md-enforcement.md` — Subagents skip subdirectory CLAUDE.md files; prompt template fix for implementer and spec-reviewer
 - `2026-03-16-statement-reconciliation-lessons-learned.md` — Post-mortem from a large SDD session; handoff quality and context gaps
 - `2026-03-16-plan-review-findings-aws-explore.md` — Plan review gaps found during aws-explore project

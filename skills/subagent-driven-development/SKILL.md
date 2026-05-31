@@ -256,16 +256,13 @@ This prevents the "built from scratch, corrected 10 times" failure mode where ev
 
 ## Context Budget Management
 
-Before dispatching any implementer subagent, estimate the prompt size:
+The pre-dispatch hook runs `estimate-task-tokens.py` automatically for every implementer dispatch and acts on the verdict — there is no manual step for you to run:
 
-1. **Extract the task text** from the plan into a temporary file
-2. **Run the estimation script**: `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/estimate-task-tokens.py --task-file <task.txt> --constraints-file <constraints.txt>`
-3. **Act on the result:**
-   - `OK`: Proceed with dispatch
-   - `WARNING`: Proceed but note in dispatch that the task is large — instruct subagent to focus narrowly and ask questions rather than reading broadly
-   - `TOO_LARGE`: Do NOT dispatch. The task must be split before proceeding. Break it into subtasks following the plan's decomposition patterns, update the plan file, and re-estimate each subtask.
+- `OK`: dispatch proceeds.
+- `WARNING` (≥25% of the context budget): dispatch proceeds; the hook injects a note instructing the subagent to focus narrowly and ask questions rather than read broadly.
+- `TOO_LARGE` (≥50% of the budget): the hook BLOCKS the dispatch. Split the task into subtasks following the plan's decomposition patterns, update the plan file, and re-dispatch.
 
-This is a deterministic check. Do not override it based on judgment — if the script says TOO_LARGE, the task is too large. Split it.
+This is a deterministic, hook-enforced check — do not reproduce it by hand, and there is no judgment override: if the hook reports `TOO_LARGE`, the task is too large. Split it.
 
 **Context budget allocation for subagents:**
 - Implementation subagents: 200K token context budget (default)

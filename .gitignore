@@ -11,3 +11,4 @@ __pycache__/
 
 # Superpowers workspace state
 .active-feature
+.sdd-session.json
