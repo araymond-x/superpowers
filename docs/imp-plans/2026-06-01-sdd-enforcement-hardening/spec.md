@@ -52,7 +52,7 @@ Add a guard so the Check 4c dispatch-provenance block (the `task=$PREV type=spec
   - No-Task-0 single-module plan (`MANIFEST_TASK_START == 1`, task 1) → `PREV = 0 < 1` → **skip**.
   - Within a module (`TASK_NUMBER > MANIFEST_TASK_START`) → `PREV >= MANIFEST_TASK_START` → **check runs** (full provenance enforcement preserved).
   - A plan that *does* declare Task 0 (`MANIFEST_TASK_START == 0`) → task 1 has `PREV = 0`, `0 < 0` is false → **check runs** (Task 0's provenance is still verified).
-- **Placement:** inside the existing `dispatch_provenance` enforcement branch (the guard composes with the existing micro-tier `enforcement.dispatch_provenance == "false"` skip — both can short-circuit).
+- **Placement:** Check 4c already has two early short-circuits before the provenance grep — `NEED_PROV == "false"` (micro tier) and `PREV_TASK_TYPE == "verification"` (B6 verification tasks). The new `PREV < MANIFEST_TASK_START` guard composes as a **third early-skip alongside these** (a sibling `elif`/guard, not a nested condition), so the implementer doesn't bury it inside the grep logic.
 - **Cross-reference comment** naming `transition-module.py:validate_module_completion` as the place that verifies the skipped boundary provenance (D6).
 
 ### 3.2 N3b — transition-time provenance verification (`transition-module.py`)
@@ -63,6 +63,7 @@ Extend `validate_module_completion` so that, for each task in the completing mod
 - **Logic (mirrors Check 4c exactly):**
   - If `process_requirements.spec_review_mode != "skip"`: require `spec-review` provenance for the task (in addition to the existing spec-report-file existence check).
   - If `process_requirements.quality_review_mode != "skip"`: require `quality-review` provenance **unless** a `task-NNN-quality-review-minimum-tier.md` file exists in the live reports dir (the same minimum-tier exemption Check 4c applies).
+  - **Signal precision (avoid the wrong "minimum"):** Check 4c's minimum exemption keys off the *file* `task-NNN-quality-review-minimum-tier.md` being present — **not** the plan's `review_tier: minimum` frontmatter declaration (that declaration is a separate signal `controller-checkpoint.py` uses for its ratio exclusion). N3b must mirror the **file-based** signal so it agrees with Check 4c; the D6 agreement test asserts parity on that file signal, not the plan declaration.
 - **Failure mode:** a missing provenance entry is a validation failure (`return 1`, `INCOMPLETE: Task N: <review> review not provenance-logged`) — `transition` refuses to archive/truncate. This catches controller-forged boundary reviews at the choke point.
 - **Cross-reference comment** naming `sdd-pre-dispatch-hook.sh` Check 4c as the sibling enforcement (D6).
 
@@ -117,6 +118,7 @@ controller reaches completion:
 ## 5. Cross-cutting requirements (the plan must encode these)
 
 - **Consumer audit before editing** every changed function: `task_report_glob`/`check_report_file` (Check 5 path), `validate_module_completion` (transition), `find_report_file`/`find_all_report_files` (all checkpoint callers), `sdd-skill-enforcement-hook.sh` (settings.json registration).
+- **Intentionally-flat consumers (do NOT make archive-aware — name them in the plan so a future reader doesn't "fix" them):** `controller-checkpoint.py:detect_stale_artifacts` globs `reports_dir/task-*` independently to flag *stale prior-session* artifacts at pre-execution — it must stay flat (recursing into archives would defeat its purpose). The hook's Check 3b (non-standard-naming scan) and Check 7 (context-load loop) iterate `${REPORTS_DIR}/*.md` flat; archived reports correctly fall *outside* these globs after a transition — leave them. The archive-awareness change applies ONLY to `find_report_file`/`find_all_report_files` (N4) and the Check 5 Task-0 lookup (N10).
 - **SSOT drift guard (D6):** cross-referencing comments in both Check 4c and `validate_module_completion`, plus a test asserting both agree (same require/exempt decision) on a sample manifest with one full-tier and one declared-minimum task.
 - **Obsolescence:** the advisory-only path of `sdd-skill-enforcement-hook.sh` (inject + `exit 0` for the "SDD requested, not loaded" case) is *replaced* by the blocking path. The `exit 0` early-exits for non-SDD sessions, non-impl files, and skill-loaded sessions remain. No other code is removed.
 - **Docs:** update CLAUDE.md (Hooks-Based Enforcement, Hook Development Gotchas — add `SUPERPOWERS_SDD_BYPASS`, the N3a skip-guard, transition-time provenance, archive-aware checks), `docs/ARaymond-customization-manifest.md`, and mark N3/N4/N10 done in `BACKLOG.md` on completion.
@@ -131,7 +133,7 @@ controller reaches completion:
   - N4: `find_report_file`/`find_all_report_files` locate reports under `archive-*/`; pre-completion `all_tasks_have_reports` PASSes with archived reports.
   - N10: Check 5 finds an archived Task 0; no false-BLOCK for a Source-Contracts multi-module plan at module 2.
   - Skill-enforce: non-SDD session → allow; casual SDD mention → allow (no false block); SDD imperative + skill-not-loaded + impl file → `exit 2`; skill loaded → allow; `SUPERPOWERS_SDD_BYPASS` → allow + warning; non-impl file → allow. (New test file — none exists today.)
-  - SSOT agreement test (D6).
+  - SSOT agreement test (D6): on a sample manifest + reports dir with one full-tier task and one task carrying a `task-NNN-quality-review-minimum-tier.md` file, assert Check 4c and `validate_module_completion` reach the **same** require/exempt decision. The fixture must exercise the **file-based** minimum signal (the `-minimum-tier.md` file), not the plan `review_tier` declaration — that's the axis both sites actually consult.
 - **Integration (`sdd-e2e-test.sh`):** extend to drive a real 2-module pipeline that **dispatches a module-2-first-task through the hook *post-transition*** (the path whose absence let this ship green), and a Source-Contracts variant. Add a step proving transition refuses on forged provenance.
 - **Regression:** `validate-all-skills.py`, `verify-symlink-install.sh` (hook EXPECTED counts unchanged), full `tests/unit/`.
 
