@@ -270,5 +270,93 @@ echo "$RT_BLOCKERS" | grep -q "excessive_minimum_tier_quality" && {
 echo "  PASS: declared review_tier:minimum tasks (non-active module) excluded from ratio"
 
 echo ""
-echo "E2E PIPELINE PASS - 8 steps composed correctly"
+# Step 9: Verification task type — validate-plan accepts it
+echo "=== Step 9: Verification task type ==="
+
+cat > "$WORK/plan-verif.md" << 'PLAN_EOF'
+---
+schema_version: 1
+feature_archetype: extension
+enforcement_tier: standard
+tasks:
+  - id: 93
+    title: "Implement core feature"
+  - id: 94
+    title: "Audit orphaned references"
+    task_type: verification
+    depends_on: [93]
+---
+# Verification Test Plan
+
+**Source Contracts**: None
+**Feature Archetype**: Extension
+
+## Code Footprint
+- foo.py (modified)
+
+## Write-Scope Partitioning
+
+| Task | Owned Files | Read-Only | Depends On |
+|------|-------------|-----------|------------|
+| Task 93 | foo.py | — | — |
+| Task 94 | — | foo.py | Task 93 |
+
+### Task 93: Implement core feature
+- [ ] Step 1: implement
+
+### Task 94: Audit orphaned references
+- [ ] Step 1: grep for orphans
+PLAN_EOF
+
+# `|| true` REQUIRED — harness runs under `set -e`+ERR trap; validate-plan exits 2 on WARNING.
+RESULT=$($PYTHON "$PROJECT/skills/subagent-driven-development/scripts/validate-plan.py" --plan-file "$WORK/plan-verif.md" 2>&1 || true)
+STATUS=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+if [ "$STATUS" = "FAIL" ]; then
+  echo "FAIL: validate-plan.py rejected verification task plan"
+  exit 1
+fi
+echo "PASS: Step 9 — verification task validation"
+
+echo ""
+# Step 10: Verification task with write-suggesting keyword → WARNING
+echo "=== Step 10: Verification keyword WARNING ==="
+
+cat > "$WORK/plan-verif-kw.md" << 'PLAN_EOF'
+---
+schema_version: 1
+feature_archetype: extension
+tasks:
+  - id: 95
+    title: "Create cleanup script"
+    task_type: verification
+---
+# Keyword Test Plan
+
+**Source Contracts**: None
+**Feature Archetype**: Extension
+
+## Code Footprint
+- foo.py (modified)
+
+## Write-Scope Partitioning
+
+| Task | Owned Files | Read-Only | Depends On |
+|------|-------------|-----------|------------|
+| Task 95 | — | foo.py | — |
+
+### Task 95: Create cleanup script
+- [ ] Step 1: create
+PLAN_EOF
+
+# `|| true` REQUIRED — this plan intentionally triggers a WARNING (exit 2).
+RESULT=$($PYTHON "$PROJECT/skills/subagent-driven-development/scripts/validate-plan.py" --plan-file "$WORK/plan-verif-kw.md" 2>&1 || true)
+STATUS=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin).get('status',''))" 2>/dev/null)
+if [ "$STATUS" != "WARNING" ]; then
+  echo "FAIL: expected WARNING for verification task with 'Create' keyword, got $STATUS"
+  exit 1
+fi
+echo "PASS: Step 10 — verification keyword WARNING"
+
+echo ""
+echo "E2E PIPELINE PASS - 10 steps composed correctly"
 rm -rf "$WORK"

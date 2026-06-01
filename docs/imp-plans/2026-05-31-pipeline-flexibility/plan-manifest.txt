@@ -1,0 +1,4 @@
+docs/imp-plans/2026-05-31-pipeline-flexibility/plan.md
+docs/imp-plans/2026-05-31-pipeline-flexibility/module-1-model-and-validation.md
+docs/imp-plans/2026-05-31-pipeline-flexibility/module-2-enforcement.md
+docs/imp-plans/2026-05-31-pipeline-flexibility/module-3-docs-and-audit.md

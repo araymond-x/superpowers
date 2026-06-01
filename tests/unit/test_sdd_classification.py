@@ -4,7 +4,12 @@ Run: .venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py -v
 import os
 import subprocess
 
-from sdd_test_helpers import create_checkpoint_file, make_hook_input, setup_sdd_workspace
+from sdd_test_helpers import (
+    create_checkpoint_file,
+    make_hook_input,
+    setup_full_sdd_workspace,
+    setup_sdd_workspace,
+)
 
 HOOK_PATH = os.path.normpath(os.path.join(
     os.path.dirname(__file__), "..", "..",
@@ -15,6 +20,41 @@ HOOK_PATH = os.path.normpath(os.path.join(
 def run_hook(stdin_data):
     return subprocess.run(["bash", HOOK_PATH], input=stdin_data,
                           capture_output=True, text=True, timeout=10)
+
+
+def _write_frontmatter_plan(tmpdir, total_tasks, task_types):
+    """Overwrite docs/imp-plans/plan.md (the manifest's plan_file) with a YAML
+    frontmatter plan that declares task_type per task id.
+
+    The helpers' manifest points plan_file at docs/imp-plans/plan.md and leaves
+    active_module_file null, so the hook's EFFECTIVE_PLAN_FILE resolves to this
+    file and get_task_type reads its frontmatter. The default helper plans are
+    frontmatter-LESS (every task reads back as "implementation"), which would
+    make a verification test pass vacuously — this rewrite is what makes the
+    fixture actually exercise task_type.
+
+    Keeps "### Task N" markdown headers (token estimation needs them) and
+    "**Source Contracts:** None" (so the Task 0 source-contract gate stays off).
+
+    Args:
+        tmpdir: SDD workspace root (str).
+        total_tasks: number of tasks to declare (ids 0..total_tasks-1).
+        task_types: dict {task_id: "verification"|"implementation"}; ids absent
+            from the dict default to "implementation".
+    """
+    plan_path = os.path.join(tmpdir, "docs", "imp-plans", "plan.md")
+    tasks_yaml = "".join(
+        f"  - id: {i}\n    task_type: {task_types.get(i, 'implementation')}\n"
+        for i in range(total_tasks)
+    )
+    body = "".join(
+        f"### Task {i} -- Step {i}\n- [ ] Do step {i}\n\n" for i in range(total_tasks)
+    )
+    with open(plan_path, "w") as f:
+        f.write(
+            "---\nschema_version: 1\ntasks:\n" + tasks_yaml + "---\n\n"
+            "# Implementation Plan\n\n**Source Contracts:** None\n\n" + body
+        )
 
 
 def test_general_purpose_reviewer_is_logged(tmp_path):
@@ -98,3 +138,157 @@ class TestValidationErrorSurfacing:
         low = result.stderr.lower()
         assert "validation" in low and "task_id" in low, \
             f"Expected an inline validation excerpt naming task_id. stderr: {result.stderr}"
+
+
+class TestImplementerDispatchLogging:
+    """Stage 2 implementer detection logs to the dispatch log.
+
+    The implementer log line is written in Stage 2 BEFORE the enforcement
+    checks run, so it appears even when the hook ultimately blocks (exit 2).
+    Downstream consumers (git reality check, Task 5) rely on these timestamps.
+    """
+
+    @staticmethod
+    def _log_lines(tmpdir):
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        if not os.path.exists(log_path):
+            return []
+        with open(log_path) as f:
+            return f.read().splitlines()
+
+    def test_implementer_dispatch_logged_even_when_blocked(self, tmp_path):
+        # Task 0 reports missing -> implementer for task 1 is BLOCKED (exit 2),
+        # but the Stage-2 log line must still be written before the gate fires.
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        result = run_hook(make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1", cwd=tmpdir))
+        assert result.returncode == 2, f"stderr: {result.stderr}"
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"No implementer log line written. log: {lines}"
+
+    def test_implementer_dispatch_logged_when_allowed(self, tmp_path):
+        # Full workspace: task 0 complete, all gates satisfied for task 1.
+        # Hook ALLOWS (exit 0) and the implementer line is present.
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=3, completed_tasks=1)
+        result = run_hook(make_hook_input(
+            description="Implement task 1",
+            prompt="You are implementing task 1", cwd=tmpdir))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"No implementer log line written. log: {lines}"
+
+    def test_implementer_log_line_exact_format(self, tmp_path):
+        # The writer format is the reader contract for Task 5's git reality check:
+        #   <ISO-8601> DISPATCH implementer task=N type=implementer
+        # Assert the full shape via the exact regex the reader uses.
+        import re
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        run_hook(make_hook_input(
+            description="Implement task 2",
+            prompt="You are implementing task 2", cwd=tmpdir))
+        lines = self._log_lines(tmpdir)
+        pattern = re.compile(
+            r"^\S+\s+DISPATCH\s+implementer\s+task=2\s+type=implementer$"
+        )
+        assert any(pattern.match(line) for line in lines), \
+            f"Implementer line does not match the reader contract. log: {lines}"
+
+    def test_prompt_only_implementer_is_logged(self, tmp_path):
+        # Implementer detected via PROMPT (not description) is logged too.
+        tmpdir = str(tmp_path)
+        setup_sdd_workspace(tmpdir, task_count=3)
+        run_hook(make_hook_input(
+            description="Run the next step",
+            prompt="You are implementing task 1 of the plan.", cwd=tmpdir))
+        lines = self._log_lines(tmpdir)
+        assert any(
+            "DISPATCH implementer task=1 type=implementer" in line for line in lines
+        ), f"Prompt-triggered implementer not logged. log: {lines}"
+
+
+class TestVerificationTaskCheckSkipping:
+    """Task 3: a verification task is dispatched as an implementer (still logged,
+    still files an implementer report) but is exempt from the review cycle.
+
+    - Current task = verification  -> Check 5d (partner review) skipped.
+    - Previous task = verification -> Checks 4b (spec/quality review reports) and
+      4c (dispatch provenance) skipped for that prior task.
+    - Implementation tasks are completely unchanged (positive control).
+
+    Fixtures use a FULL workspace (all prerequisites met) with total_tasks=8 so the
+    midpoint (4) is past task 2 — the context-summary gate (Check 6b) does not fire.
+    The manifest's plan_file is then rewritten WITH frontmatter so get_task_type
+    reads real task_type values (see _write_frontmatter_plan). The implementation
+    positive control (identical setup, task_type implementation, flips ALLOW->BLOCK)
+    proves the fixtures are non-vacuous.
+    """
+
+    TOTAL = 8
+    COMPLETED = 2  # dispatch target is task 2; previous task is task 1
+
+    def test_current_verification_skips_partner_review(self, tmp_path):
+        # CURRENT task 2 declared verification; its partner-review file is absent.
+        # Check 5d must be skipped -> ALLOW.
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=self.TOTAL, completed_tasks=self.COMPLETED)
+        _write_frontmatter_plan(tmpdir, self.TOTAL, {2: "verification"})
+        os.remove(os.path.join(tmpdir, "reports", "partner-review-002.md"))
+        result = run_hook(make_hook_input(
+            description="Implement task 2", prompt="You are implementing task 2", cwd=tmpdir))
+        assert result.returncode == 0, f"Expected ALLOW (5d skipped). stderr: {result.stderr}"
+
+    def test_previous_verification_skips_review_reports(self, tmp_path):
+        # PREVIOUS task 1 declared verification; its spec/quality review reports AND
+        # dispatch-log provenance entries are absent (the impl report still exists).
+        # Current task 2 is not first-in-module, so 4b/4c would normally fire.
+        # Checks 4b + 4c must be skipped -> ALLOW.
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=self.TOTAL, completed_tasks=self.COMPLETED)
+        _write_frontmatter_plan(tmpdir, self.TOTAL, {1: "verification"})
+        os.remove(os.path.join(tmpdir, "reports", "task-001-spec-review.md"))
+        os.remove(os.path.join(tmpdir, "reports", "task-001-quality-review.md"))
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        kept = [
+            line for line in open(log_path).read().splitlines()
+            if "task=1 type=spec-review" not in line
+            and "task=1 type=quality-review" not in line
+        ]
+        with open(log_path, "w") as f:
+            f.write("\n".join(kept) + "\n")
+        # Sanity: task 1 implementer report is still present (verification still files one).
+        assert os.path.isfile(os.path.join(tmpdir, "reports", "task-001-implementer-report.md"))
+        result = run_hook(make_hook_input(
+            description="Implement task 2", prompt="You are implementing task 2", cwd=tmpdir))
+        assert result.returncode == 0, f"Expected ALLOW (4b/4c skipped). stderr: {result.stderr}"
+
+    def test_implementation_task_still_requires_reviews(self, tmp_path):
+        # Positive control: identical setup but every task is implementation
+        # (no task_type override). The missing partner review AND missing prior
+        # reviews/provenance must still BLOCK -> exit 2. This proves the fixture
+        # genuinely reads task_type rather than passing vacuously.
+        tmpdir = str(tmp_path)
+        setup_full_sdd_workspace(tmpdir, total_tasks=self.TOTAL, completed_tasks=self.COMPLETED)
+        _write_frontmatter_plan(tmpdir, self.TOTAL, {})  # all implementation
+        os.remove(os.path.join(tmpdir, "reports", "partner-review-002.md"))
+        os.remove(os.path.join(tmpdir, "reports", "task-001-spec-review.md"))
+        os.remove(os.path.join(tmpdir, "reports", "task-001-quality-review.md"))
+        log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+        kept = [
+            line for line in open(log_path).read().splitlines()
+            if "task=1 type=spec-review" not in line
+            and "task=1 type=quality-review" not in line
+        ]
+        with open(log_path, "w") as f:
+            f.write("\n".join(kept) + "\n")
+        result = run_hook(make_hook_input(
+            description="Implement task 2", prompt="You are implementing task 2", cwd=tmpdir))
+        assert result.returncode == 2, \
+            f"Expected BLOCK (implementation still enforces reviews). stderr: {result.stderr}"

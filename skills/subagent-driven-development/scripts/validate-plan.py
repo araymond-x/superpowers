@@ -362,6 +362,49 @@ def check_review_tier_heuristic(frontmatter: Optional[Dict]) -> List[str]:
 
 
 # -----------------------------------------------------------------------
+# verification keyword heuristic
+# -----------------------------------------------------------------------
+
+_VERIFICATION_WRITE_KEYWORDS = (
+    "create", "add", "implement", "fix", "modify",
+    "write", "update", "refactor", "migrate", "delete", "remove",
+)
+
+_VERIFICATION_KEYWORD_RE = re.compile(
+    r"\b(?:{})\b".format("|".join(_VERIFICATION_WRITE_KEYWORDS)),
+    re.IGNORECASE,
+)
+
+
+def check_verification_keyword_heuristic(frontmatter: Optional[Dict]) -> List[str]:
+    """Return warning strings for verification tasks whose titles contain write-suggesting keywords."""
+    warnings: List[str] = []
+    if not isinstance(frontmatter, dict):
+        return warnings
+    tasks = frontmatter.get("tasks")
+    if not isinstance(tasks, list):
+        return warnings
+    for task in tasks:
+        if not isinstance(task, dict):
+            continue
+        if task.get("task_type") != "verification":
+            continue
+        title = str(task.get("title", ""))
+        tid = task.get("id")
+        matched = _VERIFICATION_KEYWORD_RE.findall(title)
+        if matched:
+            warnings.append(
+                "verification_keyword_warning: Task {} ('{}') is task_type: verification "
+                "but its title contains write-suggesting keyword(s): {}. "
+                "Verification tasks must not modify files. "
+                "If this task modifies files, change it to task_type: implementation.".format(
+                    tid, task.get("title", ""), ", ".join(matched)
+                )
+            )
+    return warnings
+
+
+# -----------------------------------------------------------------------
 # Main validation logic
 # -----------------------------------------------------------------------
 
@@ -607,6 +650,16 @@ def validate_plan(
         sections["review_tier_heuristic"] = {
             "status": "WARNING",
             "detail": " | ".join(rt_warnings),
+        }
+
+    # --- verification keyword heuristic ---
+    vk_warnings = check_verification_keyword_heuristic(frontmatter)
+    for w in vk_warnings:
+        warnings.append(w)
+    if vk_warnings:
+        sections["verification_keyword_heuristic"] = {
+            "status": "WARNING",
+            "detail": " | ".join(vk_warnings),
         }
 
     # --- Overall status ---

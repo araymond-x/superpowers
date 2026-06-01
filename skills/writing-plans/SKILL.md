@@ -13,10 +13,14 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 **Announce at start:** "I'm using the writing-plans skill to create the implementation plan."
 
-**Context:** This skill is designed to follow `superpowers:brainstorming`, which produces a spec and sets up a worktree. If invoked directly (skipping brainstorming), provide:
-- Path to the spec or requirements document
-- Path to any handoff packages (verify they passed `superpowers:handoff-acceptance` first)
-- The working directory for the plan output
+**Context:** This skill has two entry paths:
+1. **After brainstorming** — `superpowers:brainstorming` produces a spec, sets up a worktree, and creates `.active-feature`. This skill reads those artifacts and writes the plan.
+2. **Direct entry** — This skill can be invoked directly with a spec, handoff package, or just conversation context. The skill handles setup guardrails (conflict detection, worktree guard, optional spec validation) that brainstorming would otherwise provide. Direct entry is a first-class path, not a fallback.
+
+For direct entry, provide any of:
+- Path to a spec or distilled spec (runs `check-distillation.sh` if distilled)
+- Path to a handoff package (verify it passed `superpowers:handoff-acceptance` first)
+- Just a description of what to build — the plan can be written from conversation context alone
 
 **Save plans to:** `<feature-dir>/plan.md` (where `<feature-dir>` is from `.active-feature`)
 - If `.active-feature` doesn't exist: prompt the user for a kebab-case feature name, create `docs/imp-plans/YYYY-MM-DD-<feature-name>/`, and write the path to `.active-feature` before proceeding
@@ -26,7 +30,21 @@ Assume they are a skilled developer, but know almost nothing about our toolset o
 
 Create a task for each of these items and complete them in order:
 
-0.5. **Resolve feature directory** — if `.active-feature` exists, read it and confirm the directory is present; if not, prompt for a feature name, create the directory, and write `.active-feature`
+0.5. **Resolve feature directory** — Check for `.active-feature` and handle all entry scenarios:
+
+**If `.active-feature` exists**, read the path and check the referenced directory:
+- Directory doesn't exist → stale reference; auto-clean `.active-feature`, proceed as new
+- Directory exists, plan has all tasks completed → prior feature completed; auto-clean, proceed as new
+- Directory exists, has incomplete work → prompt: "Active feature `<name>` has incomplete work. Resume it, or archive to `docs/imp-plans/archive/` and start fresh?"
+- Directory exists, no plan file → prompt: "Feature directory `<name>` exists but has no plan. Resume with this directory, or start fresh?"
+
+**If `.active-feature` doesn't exist** (or was just cleaned): prompt for a kebab-case feature name, create `docs/imp-plans/YYYY-MM-DD-<feature-name>/`, and write the path to `.active-feature`.
+
+**Worktree/branch guard** (after resolving feature directory): Check the current branch. If on `main` (or `master`), offer: "You're on `main`. Recommend creating a worktree via `superpowers:using-git-worktrees`. Proceed on `main` with acknowledgment?" Allow proceeding if the user confirms.
+
+**Optional spec input**: If the user provides a distilled spec, run `check-distillation.sh` to validate it. Record the spec path in the plan's `Source Contracts` field. Neither a spec nor a handoff is required — planning directly from conversation context is valid.
+
+**Entry mode recording**: If no brainstorming artifacts exist in the feature directory (no `spec.md`, no `spec-distilled.md` from a prior brainstorming run), set `entry_mode: direct` in the plan YAML frontmatter. Otherwise, default `entry_mode: brainstorming`.
 1. **Read spec / requirements** — understand what to build, identify source contracts
 2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure. **Pattern Discovery**: search for existing implementations of similar functionality (see below).
 3. **Scope check** — if spec covers multiple independent subsystems, decompose into separate plans
@@ -394,6 +412,25 @@ Each task may declare `review_tier: minimum` in the plan's YAML frontmatter to s
 | Cosmetic | Type annotations, lint fixes, import reorg, renames |
 
 **Gray zone:** SQL views with business logic → full (SQL encodes rules). Contract-compliance tests (TDD-style) → full (tests are the spec). DDL + a one-line config registration as a single task → minimum is fine.
+
+## Declaring `task_type` per Task
+
+Each task may declare `task_type: verification` in the plan's YAML frontmatter to signal that the task is read-only — it observes, audits, or reports but does not modify any files. Omit it (or set `implementation`) by default.
+
+**Bright line: if the task modifies any file in the repo, it's `implementation`.**
+
+| Appropriate for `verification` | Stay as `implementation` |
+|---|---|
+| Grep for orphaned code/stale references | Code deletion based on grep results |
+| Run test suite, report results | Fix failing tests |
+| Consistency audit (naming, imports) | Refactor to fix inconsistencies |
+| Count/inventory tasks | Anything that modifies files |
+| Smoke test / manual verification | Test-writing (creates test files) |
+| SSOT audit (compare docs vs hooks) | Documentation updates |
+
+`task_type` is orthogonal to `review_tier`. A verification task automatically gets reduced ceremony (no dispatched reviews), but you can declare both fields explicitly.
+
+`validate-plan.py` emits a WARNING when verification task titles contain write-suggesting keywords (`create`, `add`, `implement`, `fix`, `modify`, `write`, `update`, `refactor`, `migrate`, `delete`, `remove`). The plan reviewer provides the semantic check.
 
 ## No Placeholders
 

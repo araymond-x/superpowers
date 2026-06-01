@@ -29,6 +29,7 @@ class Task(StrictModel):
     pattern_references: list[str] = Field(default_factory=list)
     shared_constants_used: list[str] = Field(default_factory=list)
     review_tier: Literal["minimum", "full"] = "full"
+    task_type: Literal["implementation", "verification"] = "implementation"
 
 
 class Module(StrictModel):
@@ -41,6 +42,7 @@ class Module(StrictModel):
 class Plan(SchemaVersionedModel):
     feature_archetype: FeatureArchetype
     enforcement_tier: Tier | None = None
+    entry_mode: Literal["brainstorming", "direct"] = "brainstorming"
     source_contracts: str | None = None
     shared_constants: list[SharedConstant] = Field(default_factory=list)
     pattern_references: list[PatternReference] = Field(default_factory=list)

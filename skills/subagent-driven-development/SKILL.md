@@ -345,6 +345,25 @@ Before dispatching each implementer subagent, dispatch the controller partner to
 
 The pre-dispatch hook requires `<feature-dir>/reports/partner-review-NNN.md` (>50 bytes) before allowing implementer dispatch.
 
+## Verification Tasks
+
+Tasks with `task_type: verification` are read-only audits dispatched as subagents but exempt from the review cycle. They observe, grep, count, or report — never modify files.
+
+**Controller flow for verification tasks:**
+1. Dispatch implementer with read-only auditor prompt (see below)
+2. Read the implementer report
+3. Mark task complete — no spec review, no quality review, no partner review
+
+**Modified implementer prompt for verification tasks:**
+
+> "You are a read-only auditor. Do not create, modify, or delete any repository files. Your report text is your only output. If you discover something that needs fixing, describe it in your report — do not fix it."
+
+**Defense-in-depth:**
+- Plan-time: `validate-plan.py` warns on write-suggesting keywords in verification titles
+- Pre-completion: verification tasks capped at ≤30% of total tasks
+- Pre-completion: git log check detects file modifications during verification windows
+- Dispatch: hook skips review checks (4b, 4c, 5d) for verification tasks
+
 ## Model Selection
 
 See `references/model-selection.md` for guidance on choosing models per role (haiku for mechanical tasks, standard for integration, most capable for architecture/review).

@@ -625,3 +625,79 @@ class TestReviewTierHeuristic:
         result = run_validate(_review_tier_plan(tasks_yaml, body))
         warns = " ".join(result["output"].get("warnings", []))
         assert "review_tier" not in warns.lower()
+
+
+FRONTMATTER_PLAN = """\
+---
+schema_version: 1
+feature_archetype: extension
+{tasks}
+---
+# Implementation Plan
+
+**Source Contracts**: None
+**Contract Constraints**: None
+**Feature Archetype**: Extension
+
+## Code Footprint
+- app/services/foo.py (modified)
+
+## Write-Scope Partitioning
+
+| Task | Owned Files | Read-Only | Depends On |
+|------|-------------|-----------|------------|
+| Task 91 | foo.py | — | — |
+
+### Task 91: Test task
+
+- [ ] Step 1: Do something
+"""
+
+
+class TestVerificationKeywordWarning:
+    """Verification tasks with write-suggesting titles get a WARNING."""
+
+    def test_verification_task_with_create_warns(self):
+        plan = FRONTMATTER_PLAN.format(
+            tasks='tasks:\n  - id: 1\n    title: "Create orphan cleanup script"\n    task_type: verification'
+        )
+        result = run_validate(plan)
+        assert result["exit_code"] == 2  # WARNING
+        warnings = result["output"].get("warnings", [])
+        assert any("verification_keyword" in w for w in warnings)
+
+    def test_verification_task_with_verify_no_warning(self):
+        plan = FRONTMATTER_PLAN.format(
+            tasks='tasks:\n  - id: 1\n    title: "Verify orphaned code is removed"\n    task_type: verification'
+        )
+        result = run_validate(plan)
+        warnings = result["output"].get("warnings", [])
+        assert not any("verification_keyword" in w for w in warnings)
+
+    def test_implementation_task_with_create_no_warning(self):
+        plan = FRONTMATTER_PLAN.format(
+            tasks='tasks:\n  - id: 1\n    title: "Create new service"'
+        )
+        result = run_validate(plan)
+        warnings = result["output"].get("warnings", [])
+        assert not any("verification_keyword" in w for w in warnings)
+
+    def test_verification_task_default_type_no_warning(self):
+        """Default task_type is implementation — no keyword check triggered."""
+        plan = FRONTMATTER_PLAN.format(
+            tasks='tasks:\n  - id: 1\n    title: "Create new service"'
+        )
+        result = run_validate(plan)
+        warnings = result["output"].get("warnings", [])
+        assert not any("verification_keyword" in w for w in warnings)
+
+    def test_multiple_keywords_all_reported(self):
+        plan = FRONTMATTER_PLAN.format(
+            tasks='tasks:\n  - id: 1\n    title: "Create and update config"\n    task_type: verification'
+        )
+        result = run_validate(plan)
+        warnings = result["output"].get("warnings", [])
+        kw_warnings = [w for w in warnings if "verification_keyword" in w]
+        assert len(kw_warnings) == 1
+        assert "create" in kw_warnings[0].lower()
+        assert "update" in kw_warnings[0].lower()

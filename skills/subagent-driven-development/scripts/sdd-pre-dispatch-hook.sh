@@ -183,6 +183,18 @@ elif echo "$PROMPT" | grep -qiE 'you are implementing task\s*[0-9]'; then
   IS_IMPLEMENTER=true
 fi
 
+# Log implementer dispatch (gives git reality check reliable timestamps).
+# Written here in Stage 2 — BEFORE the enforcement gate below — so the
+# timestamp is recorded even when the dispatch is ultimately blocked.
+if [ "$IS_IMPLEMENTER" = true ] && [ -n "$TASK_NUMBER" ]; then
+  if [ -f "$DISPATCH_LOG" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH implementer task=$TASK_NUMBER type=implementer" >> "$DISPATCH_LOG"
+  elif [ -d "$(dirname "$DISPATCH_LOG")" ]; then
+    touch "$DISPATCH_LOG"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH implementer task=$TASK_NUMBER type=implementer" >> "$DISPATCH_LOG"
+  fi
+fi
+
 # Stage 3: Not a reviewer, not an implementer → allow (Explore, Plan, ad-hoc).
 if [ "$IS_IMPLEMENTER" = false ]; then
   exit 0
@@ -237,6 +249,63 @@ check_report_file() {
 
   echo "OK"
 }
+
+# ─── Helper: read task_type from plan YAML frontmatter ────────────────────
+# Uses $PYTHON (PyYAML) to parse the YAML frontmatter's tasks array.
+# Returns "implementation" (default) or "verification".
+get_task_type() {
+  local plan_file="$1"
+  local task_id="$2"
+  if [ ! -f "$plan_file" ]; then
+    echo "implementation"
+    return
+  fi
+  local result
+  result=$($PYTHON -c "
+import yaml, sys
+with open(sys.argv[1]) as f:
+    content = f.read()
+if not content.startswith('---'):
+    print('implementation')
+    sys.exit(0)
+end = content.find('---', 3)
+if end == -1:
+    print('implementation')
+    sys.exit(0)
+try:
+    fm = yaml.safe_load(content[3:end])
+except Exception:
+    print('implementation')
+    sys.exit(0)
+tasks = fm.get('tasks', []) if isinstance(fm, dict) else []
+tid = int(sys.argv[2])
+for t in tasks:
+    if isinstance(t, dict) and t.get('id') == tid:
+        print(t.get('task_type', 'implementation'))
+        sys.exit(0)
+print('implementation')
+" "$plan_file" "$task_id" 2>/dev/null)
+  echo "${result:-implementation}"
+}
+
+# ─── Resolve plan file + task types for downstream check skipping ─────────
+# get_task_type is defined above, so it is safe to call here. CURRENT_TASK_TYPE
+# and PREV_TASK_TYPE are consumed by Task 3's verification-aware check skipping.
+EFFECTIVE_PLAN_FILE=""
+if [ -n "$MANIFEST_MODULE_FILE" ] && [ -f "$MANIFEST_MODULE_FILE" ]; then
+  EFFECTIVE_PLAN_FILE="$MANIFEST_MODULE_FILE"
+elif [ -n "$MANIFEST_PLAN_FILE" ] && [ -f "$MANIFEST_PLAN_FILE" ]; then
+  EFFECTIVE_PLAN_FILE="$MANIFEST_PLAN_FILE"
+fi
+
+CURRENT_TASK_TYPE="implementation"
+PREV_TASK_TYPE="implementation"
+if [ -n "$EFFECTIVE_PLAN_FILE" ] && [ -n "$TASK_NUMBER" ]; then
+  CURRENT_TASK_TYPE=$(get_task_type "$EFFECTIVE_PLAN_FILE" "$TASK_NUMBER")
+  if [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
+    PREV_TASK_TYPE=$(get_task_type "$EFFECTIVE_PLAN_FILE" "$((TASK_NUMBER - 1))")
+  fi
+fi
 
 # ─── Enforcement checks (implementer dispatches only) ─────────────────────
 
@@ -386,33 +455,41 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
       fi
     fi
 
-    # Previous task spec review report
-    SPEC_GLOB=$(task_report_glob "$PREV" "spec-review")
-    RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
-    case "$RESULT" in
-      MISSING)
-        ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
-        ;;
-      TOO_SMALL*)
-        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-        FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-        ERRORS+=("BLOCKED: Spec review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
-        ;;
-    esac
+    # Previous task spec + quality review reports.
+    # Skipped when the previous task was a verification task — verification
+    # tasks file an implementer report (checked above) but undergo no spec/quality
+    # review cycle, so there are no review reports to require here.
+    if [ "$PREV_TASK_TYPE" = "verification" ]; then
+      : # Previous task was verification — no spec/quality reviews to check
+    else
+      # Previous task spec review report
+      SPEC_GLOB=$(task_report_glob "$PREV" "spec-review")
+      RESULT=$(check_report_file "$SPEC_GLOB" "spec review")
+      case "$RESULT" in
+        MISSING)
+          ERRORS+=("BLOCKED: No spec review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-spec-review.md). Dispatch spec compliance review and save the report.")
+          ;;
+        TOO_SMALL*)
+          FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+          FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+          ERRORS+=("BLOCKED: Spec review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
+          ;;
+      esac
 
-    # Previous task quality review report
-    QUAL_GLOB=$(task_report_glob "$PREV" "quality-review")
-    RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
-    case "$RESULT" in
-      MISSING)
-        ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
-        ;;
-      TOO_SMALL*)
-        FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
-        FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
-        ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
-        ;;
-    esac
+      # Previous task quality review report
+      QUAL_GLOB=$(task_report_glob "$PREV" "quality-review")
+      RESULT=$(check_report_file "$QUAL_GLOB" "quality review")
+      case "$RESULT" in
+        MISSING)
+          ERRORS+=("BLOCKED: No quality review found for Task $PREV (expected: ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review.md). Dispatch code quality review, or save ${REPORTS_DIR}/task-${PREV_PADDED}-quality-review-minimum-tier.md if minimum tier declared.")
+          ;;
+        TOO_SMALL*)
+          FILE_SIZE=$(echo "$RESULT" | cut -d: -f2)
+          FILE_NAME=$(echo "$RESULT" | cut -d: -f3-)
+          ERRORS+=("BLOCKED: Quality review for Task $PREV ($FILE_NAME) is only $FILE_SIZE bytes — save the actual reviewer output.")
+          ;;
+      esac
+    fi
   fi
 
   # Check 4c: Dispatch provenance — verify reviewers were actually dispatched
@@ -423,6 +500,8 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   NEED_PROV=$(jq -r '.enforcement.dispatch_provenance' "$MANIFEST")
   if [ "$NEED_PROV" = "false" ]; then
     : # Skip — manifest tier does not require dispatch provenance
+  elif [ "$PREV_TASK_TYPE" = "verification" ]; then
+    : # Previous task was verification — no dispatch provenance to verify
   else
     if [ -f "$DISPATCH_LOG" ]; then
       # Check for spec-review dispatch entry for previous task
@@ -529,7 +608,9 @@ fi
 # Gated by enforcement.partner_review in manifest mode ("false" → skip).
 if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   NEED_PARTNER=$(jq -r '.enforcement.partner_review' "$MANIFEST")
-  if [ "$NEED_PARTNER" = "false" ]; then
+  if [ "$CURRENT_TASK_TYPE" = "verification" ]; then
+    : # Current task is verification — no partner review required
+  elif [ "$NEED_PARTNER" = "false" ]; then
     : # Skip — manifest tier does not require partner review
   else
     TASK_PADDED=$(printf "%03d" "$TASK_NUMBER" 2>/dev/null || echo "$TASK_NUMBER")
