@@ -506,4 +506,7 @@ Files with no expected conflicts (fork-only additions):
 | Iteration 5 final scorecard | `docs/plans/2026-03-23-sdd-improvement-results-iteration-5-final.md` | 14 PREVENTED / 5 SUBSTANTIAL / 0 NOT ADDRESSED across 20 issues |
 | Prompt optimization plan | `docs/plans/2026-03-23-PromptingBestPracticesImprovementPlan.md` | 171 changes across 8 areas for Claude 4.6 prompting best practices |
 | Scenario-based tests plan | `docs/plans/2026-03-24-scenario-based-behavioral-tests.md` | 18 planned decision-making tests (not yet implemented) |
+| Improvements backlog | `docs/process-improvement-findings/BACKLOG.md` | Living ledger of open/in-flight/done process & tooling improvements (stable IDs B/I/C/N/P) — start here for "what's left to improve" |
+| SSOT audit (2026-05-31) | `docs/process-improvement-findings/2026-05-31-ssot-audit.md` | SKILL.md-vs-hook single-source-of-truth audit; sources BACKLOG N2–N9 |
+| Pipeline Flexibility feature | `docs/imp-plans/2026-05-31-pipeline-flexibility/` | `task_type: verification` + `entry_mode: direct` SDD execution record (plan, deviations, reports) |
 | CLAUDE.md | `CLAUDE.md` (project root) | Session-level reference: architecture, gotchas, editing workflow, verification |
