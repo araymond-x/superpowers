@@ -10,7 +10,13 @@
 # defense model — injecting compliance reminders at the exact moment of action.
 #
 # Exit codes:
-#   0 — Always (advisory injection via additionalContext, never blocks Write/Edit)
+#   0 — Allow the Write/Edit (skill loaded, non-SDD session, casual mention,
+#       non-implementation file, or SUPERPOWERS_SDD_BYPASS set)
+#   2 — Block the Write/Edit (explicit SDD imperative + implementation file +
+#       skill NOT loaded; error message on stderr fed to Claude)
+#
+# Bypass: set SUPERPOWERS_SDD_BYPASS (mirrors SUPERPOWERS_VALIDATOR_BYPASS) to
+# allow with a stderr warning instead of blocking.
 #
 # Performance: Early exits for non-SDD sessions (<10ms). Transcript grep
 # only runs when the file path matches implementation directories.
@@ -52,8 +58,10 @@ fi
 # User messages have "role":"user" in the JSONL
 SDD_REQUESTED=false
 if grep -q '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null; then
-  # Check if any user message mentions SDD by name
-  if grep '"role":"user"' "$TRANSCRIPT_PATH" | grep -qiE '(subagent-driven-development|SDD|superpowers:subagent-driven|invoke.*sdd|use.*sdd|follow.*sdd)' 2>/dev/null; then
+  # Require an explicit SDD imperative (not a bare mention) to avoid false blocks.
+  # Verified under ugrep 7.5 and stock /usr/bin/grep -iE (BSD): imperatives match,
+  # casual mentions ("reading about subagent-driven-development", "the SDD hook") do not.
+  if grep '"role":"user"' "$TRANSCRIPT_PATH" | grep -qiE "(invoke|use|run|follow|start|let'?s use)\b.{0,20}(subagent-driven-development|sdd)" 2>/dev/null; then
     SDD_REQUESTED=true
   fi
 fi
@@ -75,21 +83,14 @@ if [ "$SKILL_LOADED" = true ]; then
   exit 0
 fi
 
-# ─── SDD requested but skill NOT loaded — inject warning ─────────────────
+# ─── SDD requested but skill NOT loaded — bypass or block ─────────────────
+WARNING_MSG="BLOCKED: The user requested subagent-driven-development but you have not loaded the skill via the Skill tool. You are writing implementation code directly, bypassing the SDD review cycle, enforcement hooks, and quality gates. Load the skill now: invoke superpowers:subagent-driven-development. Direct implementation without the skill means zero spec reviews, zero code quality reviews, and no hook enforcement."
 
-# The agent is writing implementation code in an SDD session without
-# having loaded the skill. Inject a point-of-decision reminder.
-CONTEXT_MSG="WARNING: The user requested subagent-driven-development but you have not loaded the skill via the Skill tool. You are writing implementation code directly, bypassing the SDD review cycle, enforcement hooks, and quality gates. Load the skill now: invoke superpowers:subagent-driven-development. Direct implementation without the skill means zero spec reviews, zero code quality reviews, and no hook enforcement."
+# Emergency escape hatch (mirrors SUPERPOWERS_VALIDATOR_BYPASS): allow + warn.
+if [ -n "${SUPERPOWERS_SDD_BYPASS:-}" ]; then
+  echo "WARNING: $WARNING_MSG (bypassed via SUPERPOWERS_SDD_BYPASS)" >&2
+  exit 0
+fi
 
-ENCODED=$(python3 -c "import json,sys; print(json.dumps(sys.argv[1]))" "$CONTEXT_MSG" 2>/dev/null || echo "\"$CONTEXT_MSG\"")
-
-cat << HOOKJSON
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "additionalContext": $ENCODED
-  }
-}
-HOOKJSON
-
-exit 0
+echo "$WARNING_MSG" >&2
+exit 2
