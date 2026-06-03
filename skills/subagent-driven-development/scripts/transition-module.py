@@ -35,6 +35,55 @@ def _find_module(modules: List[ModuleState], name_or_id: str) -> Optional[Module
     return None
 
 
+def _has_dispatch_provenance(dispatch_log_path: str, task_id: int, review_type: str) -> bool:
+    """True if the live log has a `task=<id> type=<type>` line (mirrors hook Check 4c).
+
+    Called at transition Step 1, before the Step 5 truncation — live log intact.
+    """
+    if not os.path.isfile(dispatch_log_path):
+        return False
+    needle = f"task={task_id} type={review_type}"
+    try:
+        with open(dispatch_log_path, encoding="utf-8") as fh:
+            return any(needle in line for line in fh)
+    except OSError:
+        return False
+
+
+def _verification_task_ids_from_file(plan_file: str) -> set:
+    """task_type=='verification' IDs from a plan file's frontmatter.
+
+    Mirrors controller-checkpoint.py:_verification_task_ids (single-file variant).
+    """
+    import yaml  # PyYAML available via the .venv python the hook/tests use
+
+    if not os.path.isfile(plan_file):
+        return set()
+    try:
+        content = Path(plan_file).read_text(encoding="utf-8")
+    except OSError:
+        return set()
+    if not content.startswith("---"):
+        return set()
+    end = content.find("---", 3)
+    if end == -1:
+        return set()
+    try:
+        fm = yaml.safe_load(content[3:end])
+    except Exception:
+        return set()
+    tasks = fm.get("tasks") if isinstance(fm, dict) else None
+    if not isinstance(tasks, list):
+        return set()
+    return {
+        t["id"]
+        for t in tasks
+        if isinstance(t, dict)
+        and t.get("task_type") == "verification"
+        and isinstance(t.get("id"), int)
+    }
+
+
 from _midpoint import compute_midpoint  # noqa: E402  (single source of truth)
 
 
@@ -52,7 +101,15 @@ def validate_module_completion(
         return [f"Module '{module_name}' not found in manifest"]
 
     reports_dir = os.path.join(git_root, manifest.paths.reports_dir)
+    dispatch_log = os.path.join(git_root, manifest.paths.dispatch_log)
     pr = manifest.process_requirements
+
+    # Per-task verification exemption (mirrors sdd-pre-dispatch-hook.sh): read the
+    # completing module's own plan file for task_type declarations.
+    verif_ids: set = set()
+    if module.file:
+        module_plan = os.path.join(git_root, manifest.paths.feature_dir, module.file)
+        verif_ids = _verification_task_ids_from_file(module_plan)
 
     for task_id in module.task_ids:
         padded = f"{task_id:03d}"
@@ -60,10 +117,15 @@ def validate_module_completion(
         if not os.path.isfile(impl_report) or os.path.getsize(impl_report) < 50:
             errors.append(f"Task {task_id}: missing or empty implementer report")
 
+        if task_id in verif_ids:
+            continue  # verification task: implementer report only; no spec/quality/provenance
+
         if pr.spec_review_mode != "skip":
             spec_report = os.path.join(reports_dir, f"task-{padded}-spec-review.md")
             if not os.path.isfile(spec_report) or os.path.getsize(spec_report) < 50:
                 errors.append(f"Task {task_id}: missing or empty spec review")
+            elif not _has_dispatch_provenance(dispatch_log, task_id, "spec-review"):
+                errors.append(f"Task {task_id}: spec review not provenance-logged")
 
         if pr.quality_review_mode != "skip":
             quality_report = os.path.join(
@@ -72,11 +134,18 @@ def validate_module_completion(
             quality_min = os.path.join(
                 reports_dir, f"task-{padded}-quality-review-minimum-tier.md"
             )
-            has_quality = (
+            has_full = (
                 os.path.isfile(quality_report) and os.path.getsize(quality_report) >= 50
-            ) or (os.path.isfile(quality_min) and os.path.getsize(quality_min) >= 50)
-            if not has_quality:
+            )
+            has_min = (
+                os.path.isfile(quality_min) and os.path.getsize(quality_min) >= 50
+            )
+            if not (has_full or has_min):
                 errors.append(f"Task {task_id}: missing or empty quality review")
+            elif has_min:
+                pass  # file-based minimum signal waives quality-review provenance
+            elif not _has_dispatch_provenance(dispatch_log, task_id, "quality-review"):
+                errors.append(f"Task {task_id}: quality review not provenance-logged")
 
     return errors
 
@@ -155,6 +224,11 @@ def transition(manifest_path: str, completed_module: str, next_module: str) -> i
     data["active_module_file"] = next_mod.file
     data["task_range"] = [next_mod.task_ids[0], next_mod.task_ids[-1]]
     data["midpoint"] = compute_midpoint(next_mod.task_ids[0], next_mod.task_ids[-1])
+    # N11: recompute context_summary_at for the new module's range. Without this
+    # it stays pinned to the completed module's midpoint and Check 6b fires early
+    # in later modules. Only when the tier uses it (non-null; micro leaves None).
+    if data.get("enforcement", {}).get("context_summary_at") is not None:
+        data["enforcement"]["context_summary_at"] = data["midpoint"]
     if completed_module not in data.get("completed_modules", []):
         data.setdefault("completed_modules", []).append(completed_module)
     data["module_reports_archived"] = True

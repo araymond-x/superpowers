@@ -61,7 +61,7 @@ def create_manifest(tmp_path, tier="standard"):
         "task_range": [0, 3],
         "total_tasks": 8,
         "midpoint": 2,
-        "enforcement": profile["enforcement"],
+        "enforcement": {**profile["enforcement"], "context_summary_at": 2},
         "process_requirements": profile["process_requirements"],
         "completed_modules": [],
         "module_reports_archived": False,
@@ -82,12 +82,17 @@ def create_manifest(tmp_path, tier="standard"):
 
 
 def create_task_reports(reports_dir, task_ids):
-    """Create implementer, spec-review, and quality-review reports for given tasks."""
+    """Create implementer, spec-review, quality-review reports AND dispatch-log
+    provenance for each task (N3b requires provenance at transition time)."""
+    log = reports_dir / ".dispatch-log"
     for tid in task_ids:
         padded = f"{tid:03d}"
         for report_type in ["implementer-report", "spec-review", "quality-review"]:
-            path = reports_dir / f"task-{padded}-{report_type}.md"
-            path.write_text(f"# {report_type} for task {tid}\n" + "x" * 100)
+            (reports_dir / f"task-{padded}-{report_type}.md").write_text(
+                f"# {report_type} for task {tid}\n" + "x" * 100)
+        with open(log, "a") as f:
+            f.write(f"2026-06-01T00:00:00Z DISPATCH reviewer task={tid} type=spec-review\n")
+            f.write(f"2026-06-01T00:00:00Z DISPATCH reviewer task={tid} type=quality-review\n")
 
 
 def run_transition(manifest_path, completed, next_mod):
@@ -125,6 +130,7 @@ class TestTransitionModule:
         assert updated["active_module_id"] == 2
         assert updated["task_range"] == [4, 7]
         assert "Core" in updated["completed_modules"]
+        assert updated["enforcement"]["context_summary_at"] == 6
 
     def test_reports_archived(self, tmp_path):
         manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
@@ -164,3 +170,47 @@ class TestTransitionModule:
         run_transition(manifest_path, "Core", "API")
         devs = (feat_dir / "deviations.md").read_text()
         assert "Module transition" in devs
+
+
+def test_blocks_when_provenance_missing(tmp_path):
+    manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
+    # Reports present but NO provenance lines (log only has the sentinel).
+    for tid in [0, 1, 2, 3]:
+        padded = f"{tid:03d}"
+        for rt in ["implementer-report", "spec-review", "quality-review"]:
+            (reports_dir / f"task-{padded}-{rt}.md").write_text(f"# {rt}\n" + "x" * 100)
+    result = run_transition(manifest_path, "Core", "API")
+    assert result.returncode == 1
+    # Assert BOTH review types are caught — isolates the quality-provenance branch
+    # so deleting it does not silently pass on the spec-review error alone.
+    assert "spec review not provenance-logged" in result.stderr
+    assert "quality review not provenance-logged" in result.stderr
+
+
+def test_minimum_tier_file_waives_quality_provenance(tmp_path):
+    manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
+    log = reports_dir / ".dispatch-log"
+    for tid in [0, 1, 2, 3]:
+        padded = f"{tid:03d}"
+        (reports_dir / f"task-{padded}-implementer-report.md").write_text("# impl\n" + "x" * 100)
+        (reports_dir / f"task-{padded}-spec-review.md").write_text("# spec\n" + "x" * 100)
+        # Quality via the FILE signal (minimum-tier), NOT a full quality review.
+        (reports_dir / f"task-{padded}-quality-review-minimum-tier.md").write_text("# min\n" + "x" * 100)
+        with open(log, "a") as f:
+            f.write(f"2026-06-01T00:00:00Z DISPATCH reviewer task={tid} type=spec-review\n")
+            # NO quality-review provenance line — the file signal must waive it.
+    result = run_transition(manifest_path, "Core", "API")
+    assert result.returncode == 0, f"stderr={result.stderr}"
+
+
+def test_verification_task_exempt_from_reviews(tmp_path):
+    manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
+    # Declare task 3 as verification in the completing module's plan file.
+    (feat_dir / "m1.md").write_text(
+        "---\nschema_version: 1\ntasks:\n"
+        "  - id: 0\n  - id: 1\n  - id: 2\n  - id: 3\n    task_type: verification\n---\n# M1\n")
+    # Tasks 0-2 full (reports + provenance); task 3 implementer report ONLY.
+    create_task_reports(reports_dir, [0, 1, 2])
+    (reports_dir / "task-003-implementer-report.md").write_text("# impl\n" + "x" * 100)
+    result = run_transition(manifest_path, "Core", "API")
+    assert result.returncode == 0, f"stderr={result.stderr}"
