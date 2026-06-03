@@ -146,7 +146,7 @@ The spec scopes archive-awareness to **exactly two** lookups (N4's `find_report_
 
 **Context:** Today this hook emits `additionalContext` and `exit 0` (advisory). The spec promotes it to blocking: explicit SDD imperative + impl-file + skill-not-loaded + no bypass ⇒ `exit 2`. The detection regex `(invoke|use|run|follow|start|let'?s use)\b.{0,20}(subagent-driven-development|sdd)` has been **verified to work and discriminate correctly under both ugrep 7.5 and stock `/usr/bin/grep -iE`** (BSD) — imperatives match, casual mentions ("reading about subagent-driven-development", "the SDD hook") do not. Keep the `SKILL_LOADED` allow, the impl-file path filter, and all early exits.
 
-- [ ] **Step 1: Write the failing tests** in `tests/unit/test_sdd_skill_enforcement.py`
+- [x] **Step 1: Write the failing tests** in `tests/unit/test_sdd_skill_enforcement.py`
 
 ```python
 """C5: sdd-skill-enforcement-hook.sh promoted to blocking.
@@ -231,12 +231,12 @@ def test_no_sdd_request_allows(tmp_path):
     assert r.returncode == 0
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_skill_enforcement.py -v`
 Expected: `test_blocks_*` FAILS (current hook returns 0, not 2); `test_bypass_*` FAILS (no bypass handling yet); `test_casual_mention_*` likely FAILS (current bare-mention regex matches it but current hook returns 0 anyway, so it may pass vacuously — the block tests are the real RED).
 
-- [ ] **Step 3: Tighten the detection regex.** In `sdd-skill-enforcement-hook.sh`, replace the SDD-request grep (currently `grep ... | grep -qiE '(subagent-driven-development|SDD|superpowers:subagent-driven|invoke.*sdd|use.*sdd|follow.*sdd)'`) with the imperative-only pattern:
+- [x] **Step 3: Tighten the detection regex.** In `sdd-skill-enforcement-hook.sh`, replace the SDD-request grep (currently `grep ... | grep -qiE '(subagent-driven-development|SDD|superpowers:subagent-driven|invoke.*sdd|use.*sdd|follow.*sdd)'`) with the imperative-only pattern:
 
 ```bash
   # Require an explicit SDD imperative (not a bare mention) to avoid false blocks.
@@ -247,7 +247,7 @@ Expected: `test_blocks_*` FAILS (current hook returns 0, not 2); `test_bypass_*`
   fi
 ```
 
-- [ ] **Step 4: Add the bypass + block.** Replace the advisory `additionalContext` JSON emission (the final `cat << HOOKJSON ... HOOKJSON; exit 0` block) with a `SUPERPOWERS_SDD_BYPASS` check followed by a blocking exit. Keep the same warning text on stderr:
+- [x] **Step 4: Add the bypass + block.** Replace the advisory `additionalContext` JSON emission (the final `cat << HOOKJSON ... HOOKJSON; exit 0` block) with a `SUPERPOWERS_SDD_BYPASS` check followed by a blocking exit. Keep the same warning text on stderr:
 
 ```bash
 # ─── SDD requested but skill NOT loaded — bypass or block ─────────────────
@@ -265,12 +265,12 @@ exit 2
 
 > Note: this hook uses `set -o pipefail` but **not** `set -u` today; `${SUPERPOWERS_SDD_BYPASS:-}` is written defensively regardless. Do not add `set -u` (jq pipe chains produce empty vars — see CLAUDE.md Hook Development Gotchas).
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_skill_enforcement.py -v`
 Expected: all 6 PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh tests/unit/test_sdd_skill_enforcement.py
@@ -287,7 +287,7 @@ git commit -m "feat(sdd): promote skill-enforcement hook to blocking with bypass
 
 **Context (N4):** After a module transition, the completed module's reports live under `reports/archive-<module>/`. The pre-completion gate (Check 3 `all_tasks_have_reports`, Check 4 `all_reports_complete`) calls these two functions and currently only globs the flat `reports_dir`, so it FAILs once a module is archived. Make exactly these two functions recurse into `archive-*/`. **Read the "Intentionally Flat" section above — do not touch any other lookup.** `sorted(matches)[-1]` makes the **live** copy win when a report exists in both (`reports/task-000-...` sorts after `reports/archive-*/task-000-...`).
 
-- [ ] **Step 1: Write the failing tests** in `tests/unit/test_checkpoint_archive_aware.py`
+- [x] **Step 1: Write the failing tests** in `tests/unit/test_checkpoint_archive_aware.py`
 
 ```python
 """N4: controller-checkpoint.py find_report_file/find_all_report_files recurse into archive-*/.
@@ -345,12 +345,12 @@ def test_detect_stale_artifacts_stays_flat(tmp_path):
     assert result["status"] == "OK", result
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_checkpoint_archive_aware.py -v`
 Expected: `test_find_report_file_in_archive` and `test_find_all_report_files_includes_archive` FAIL (flat glob misses archive); the other two PASS (already correct).
 
-- [ ] **Step 3: Make the two lookups archive-aware.** Replace `find_report_file` and `find_all_report_files`:
+- [x] **Step 3: Make the two lookups archive-aware.** Replace `find_report_file` and `find_all_report_files`:
 
 ```python
 def find_report_file(reports_dir: str, task_number: int) -> str:
@@ -373,17 +373,17 @@ def find_all_report_files(reports_dir: str) -> list:
     return sorted(matches)
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_checkpoint_archive_aware.py -v`
 Expected: all 4 PASS.
 
-- [ ] **Step 5: Confirm no regression in the existing pre-completion suite**
+- [x] **Step 5: Confirm no regression in the existing pre-completion suite**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_pre_completion_gates.py tests/unit/test_controller_checkpoint_stale.py -v`
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py tests/unit/test_checkpoint_archive_aware.py
@@ -404,7 +404,7 @@ git commit -m "feat(sdd): archive-aware implementer-report lookups in controller
 
 Skip-guard truth table (verified against the code): module-first-task (`TASK_NUMBER==MANIFEST_TASK_START` ⇒ `PREV=START-1<START`) → skip; no-Task-0 plan (start=1, task 1, `PREV=0<1`) → skip; within-module (`PREV>=START`) → check runs; Task-0 plan (start=0, task 1, `PREV=0`, `0<0` false) → check runs.
 
-- [ ] **Step 1: Write the failing tests** in `tests/unit/test_sdd_hook_hardening.py`
+- [x] **Step 1: Write the failing tests** in `tests/unit/test_sdd_hook_hardening.py`
 
 ```python
 """N3a (Check 4c skip-guard) + N10 (Check 5 archive glob) for sdd-pre-dispatch-hook.sh.
@@ -513,12 +513,12 @@ def test_check5_finds_archived_task0(tmp_path):
 
 > Note for the implementer: `setup_manifest_workspace` initializes git on a feature branch and writes `.active-feature` + manifest + a plan with `### Task N` headers and `**Source Contracts:** None`. `make_hook_input` is imported from `sdd_test_helpers` (already on `sys.path` via `conftest.py`).
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_hook_hardening.py -v`
 Expected: `test_check4c_skipped_for_module_first_task`, `test_check4c_skipped_for_no_task0_single_module`, and `test_check5_finds_archived_task0` FAIL (hook blocks); `test_check4c_enforced_within_module` PASSES (already enforced). (4 tests total.)
 
-- [ ] **Step 3: Add the Check 4c skip-guard (N3a).** In `sdd-pre-dispatch-hook.sh`, extend the existing short-circuit chain in Check 4c. After the `elif [ "$PREV_TASK_TYPE" = "verification" ]; then` branch and before the final `else`, insert a sibling `elif`:
+- [x] **Step 3: Add the Check 4c skip-guard (N3a).** In `sdd-pre-dispatch-hook.sh`, extend the existing short-circuit chain in Check 4c. After the `elif [ "$PREV_TASK_TYPE" = "verification" ]; then` branch and before the final `else`, insert a sibling `elif`:
 
 ```bash
   elif [ "$PREV" -lt "$MANIFEST_TASK_START" ] 2>/dev/null; then
@@ -530,7 +530,7 @@ Expected: `test_check4c_skipped_for_module_first_task`, `test_check4c_skipped_fo
     : # Skip — boundary provenance verified at transition, not here
 ```
 
-- [ ] **Step 4: Make Check 5's Task-0 lookup archive-aware (N10).** In Check 5, replace the `T0_GLOB=$(task_report_glob "0" "implementer-report")` line with a local glob covering live + archive (do NOT modify the shared `task_report_glob` helper):
+- [x] **Step 4: Make Check 5's Task-0 lookup archive-aware (N10).** In Check 5, replace the `T0_GLOB=$(task_report_glob "0" "implementer-report")` line with a local glob covering live + archive (do NOT modify the shared `task_report_glob` helper):
 
 ```bash
     # N10: cover both the live reports dir and archived module dirs. A multi-
@@ -540,17 +540,17 @@ Expected: `test_check4c_skipped_for_module_first_task`, `test_check4c_skipped_fo
     T0_GLOB="${REPORTS_DIR}/task-000-implementer-report* ${REPORTS_DIR}/archive-*/task-000-implementer-report*"
 ```
 
-- [ ] **Step 5: Run to verify pass**
+- [x] **Step 5: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_hook_hardening.py -v`
 Expected: all 3 PASS.
 
-- [ ] **Step 6: Confirm no regression in the existing hook suites**
+- [x] **Step 6: Confirm no regression in the existing hook suites**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_sdd_classification.py tests/unit/test_sdd_hard_gates.py tests/unit/test_sdd_partner_gate.py tests/unit/test_sdd_dispatch_log.py -v`
 Expected: all PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/unit/test_sdd_hook_hardening.py
@@ -569,7 +569,7 @@ git commit -m "feat(sdd): Check 4c skip-guard (N3a) + Check 5 archive glob (N10)
 
 **Context (N3b + verification exemption + N11):** `validate_module_completion` runs at transition **Step 1**, while the live dispatch log is still intact. Extend it so that, for each completing-module task, it verifies dispatch-log provenance (the same `task=<id> type=<review>` substring Check 4c greps) — refusing to archive/truncate when provenance is missing. Quality-review provenance is **waived when the file `task-NNN-quality-review-minimum-tier.md` exists** (the *file* signal — NOT the `review_tier:minimum` plan declaration). A per-task **`task_type: verification`** exemption (mirroring the hook) skips spec/quality/provenance for verification tasks — they file an implementer report only. **N11 (folded in):** `transition()` also recomputes `enforcement.context_summary_at` for the next module so Check 6b does not fire early in later modules.
 
-- [ ] **Step 1: Write/adjust the failing tests** in `tests/unit/test_transition_module.py`.
+- [x] **Step 1: Write/adjust the failing tests** in `tests/unit/test_transition_module.py`.
 
 First, update the existing `create_task_reports` helper so existing tests keep passing (it must now also write provenance to the live log, since N3b requires it):
 
@@ -634,12 +634,12 @@ def test_verification_task_exempt_from_reviews(tmp_path):
 
 > **N11 test seed (also in Step 1):** in `create_manifest`, change `"enforcement": profile["enforcement"]` to `"enforcement": {**profile["enforcement"], "context_summary_at": 2}` (a fresh dict so the shared `TIER_PROFILES` is never mutated; `2` = module-1 midpoint). Then add to the **existing** `test_manifest_updated_after_transition`: `assert updated["enforcement"]["context_summary_at"] == 6` (module-2 midpoint — proves the N11 recompute). The verification test writes `m1.md`; the other tests leave it absent, so `_verification_task_ids_from_file` returns an empty set — backward compatible.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_transition_module.py -v`
 Expected: the three new tests FAIL (no provenance enforcement yet; the verification test fails because reviews are still demanded). Existing tests PASS (helper now writes provenance).
 
-- [ ] **Step 3: Add the two helpers** to `transition-module.py` (near `_find_module`):
+- [x] **Step 3: Add the two helpers** to `transition-module.py` (near `_find_module`):
 
 ```python
 def _has_dispatch_provenance(dispatch_log_path: str, task_id: int, review_type: str) -> bool:
@@ -687,7 +687,7 @@ def _verification_task_ids_from_file(plan_file: str) -> set:
     }
 ```
 
-- [ ] **Step 4: Wire provenance + exemption into `validate_module_completion`.** Inside the function, after resolving `module` and `reports_dir`, add the dispatch log path and the verification-id set, then extend the per-task loop:
+- [x] **Step 4: Wire provenance + exemption into `validate_module_completion`.** Inside the function, after resolving `module` and `reports_dir`, add the dispatch log path and the verification-id set, then extend the per-task loop:
 
 ```python
     reports_dir = os.path.join(git_root, manifest.paths.reports_dir)
@@ -734,7 +734,7 @@ def _verification_task_ids_from_file(plan_file: str) -> set:
 
 Replace the existing per-task loop body with the above (it supersedes the old spec/quality file-only checks).
 
-- [ ] **Step 5: Recompute `context_summary_at` on transition (N11).** In `transition()`'s Step 4 manifest-update block, immediately after the `data["midpoint"] = compute_midpoint(...)` line, add:
+- [x] **Step 5: Recompute `context_summary_at` on transition (N11).** In `transition()`'s Step 4 manifest-update block, immediately after the `data["midpoint"] = compute_midpoint(...)` line, add:
 
 ```python
     # N11: recompute context_summary_at for the new module's range. Without this
@@ -744,12 +744,12 @@ Replace the existing per-task loop body with the above (it supersedes the old sp
         data["enforcement"]["context_summary_at"] = data["midpoint"]
 ```
 
-- [ ] **Step 6: Run to verify pass**
+- [x] **Step 6: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_transition_module.py -v`
 Expected: all tests PASS (existing + the 3 new provenance/verification tests + the N11 assertion on `test_manifest_updated_after_transition`).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/transition-module.py tests/unit/test_transition_module.py
@@ -767,7 +767,7 @@ git commit -m "feat(sdd): transition provenance + verification exemption (N3b) +
 
 **Context (D6):** Two enforcement sites consult the **file-based** minimum signal (`task-NNN-quality-review-minimum-tier.md`) to decide whether quality-review dispatch provenance is required: the hook's **Check 4c** (per-dispatch, on PREV) and `transition-module.py:validate_module_completion` (per-task, at transition). This test asserts both sites reach the **same require/exempt decision** across the matrix (minimum-file present/absent × quality-provenance present/absent), keyed strictly on the file signal. It compares the *decision*, not the two invocation contexts — each side is driven via subprocess and we check for its own quality-provenance error string.
 
-- [ ] **Step 1: Write the test** in `tests/unit/test_ssot_minimum_agreement.py`
+- [x] **Step 1: Write the test** in `tests/unit/test_ssot_minimum_agreement.py`
 
 ```python
 """D6: SSOT agreement on the FILE-based minimum signal between
@@ -885,12 +885,12 @@ def test_minimum_signal_agreement(tmp_path, min_file, provenance):
     assert hook == (not min_file and not provenance)
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_ssot_minimum_agreement.py -v`
 Expected: all 4 parametrized cases PASS (depends on Task 2's Check 4c and Task 3's validate_module_completion both being in place).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add tests/unit/test_ssot_minimum_agreement.py
@@ -906,7 +906,7 @@ git commit -m "test(sdd): SSOT agreement on file-based minimum signal (D6)"
 
 **Context:** Two changes. (a) Step 4 must append dispatch-log provenance for the Module 1 tasks, or the Step 5 transition now FAILs under N3b. (b) A new step dispatches the **module-2 first task (task 2) through the live hook after the transition** and asserts it is allowed — the live proof of BOTH the N3a skip-guard (pre-fix, Check 4c looks for `task=1` provenance in the truncated/empty log and blocks) AND the N11 recompute (pre-fix, `context_summary_at` stays 1 and Check 6b blocks task 2; the step also asserts the manifest recomputed it to 3). N10's archived-Task-0 path is covered by Task 2's unit test (`test_check5_finds_archived_task0`).
 
-- [ ] **Step 1: Add provenance to Step 4.** In the Module-1 report-creation loop (the `for tid in 0 1; do ... done` block around the existing Step 4), append provenance lines to the dispatch log so the transition validator passes:
+- [x] **Step 1: Add provenance to Step 4.** In the Module-1 report-creation loop (the `for tid in 0 1; do ... done` block around the existing Step 4), append provenance lines to the dispatch log so the transition validator passes:
 
 ```bash
 for tid in 0 1; do
@@ -920,7 +920,7 @@ for tid in 0 1; do
 done
 ```
 
-- [ ] **Step 2: Add the post-transition module-2-first-task step.** After the existing Step 7 (post-transition checkpoint) — before the rt-feature Step 8 block — insert a new step that drives the live hook. Keep the existing `=== STEP N ===` numbering style; renumber subsequent steps' echo labels if you prefer, or label this `STEP 7b`:
+- [x] **Step 2: Add the post-transition module-2-first-task step.** After the existing Step 7 (post-transition checkpoint) — before the rt-feature Step 8 block — insert a new step that drives the live hook. Keep the existing `=== STEP N ===` numbering style; renumber subsequent steps' echo labels if you prefer, or label this `STEP 7b`:
 
 ```bash
 echo ""
@@ -952,14 +952,14 @@ echo "  PASS: task 2 dispatched post-transition — skip-guard (N3a) + recompute
 
 > Note: the hook no-ops (exit 0) if `jq` is missing — this step assumes `jq` is installed (it is on the dev machine; the hook depends on it). The `set +e/-e` dance is required because the harness runs under `set -e` + an ERR trap.
 
-- [ ] **Step 3: Update the final banner.** Change the closing `echo "E2E PIPELINE PASS - 10 steps composed correctly"` to reflect the new count (11 steps).
+- [x] **Step 3: Update the final banner.** Change the closing `echo "E2E PIPELINE PASS - 10 steps composed correctly"` to reflect the new count (11 steps).
 
-- [ ] **Step 4: Run the e2e**
+- [x] **Step 4: Run the e2e**
 
 Run: `bash tests/integration/sdd-e2e-test.sh`
 Expected: `E2E PIPELINE PASS - 11 steps composed correctly`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/integration/sdd-e2e-test.sh
@@ -979,7 +979,7 @@ git commit -m "test(sdd): e2e provenance in transition + module-2-first-task pos
 
 **Context:** Document the five components (plus the folded-in N11 recompute) so a future session knows they exist. Per CLAUDE.md "Documentation Maintenance," update the affected sections and refresh test counts. Read each target section first; add (do not rewrite) the facts below.
 
-- [ ] **Step 1: CLAUDE.md — "Hooks-Based Enforcement" section.** Add bullets recording:
+- [x] **Step 1: CLAUDE.md — "Hooks-Based Enforcement" section.** Add bullets recording:
   - N3a: Check 4c now skips when `PREV < MANIFEST_TASK_START` (module-first task, or no-Task-0 plan); boundary provenance is re-verified at transition time.
   - N10: Check 5's Task-0 lookup now globs `archive-*/` (a Source-Contracts plan finds an archived Task 0 at module 2). Local glob only — `task_report_glob` unchanged.
   - N3b: `transition-module.py:validate_module_completion` verifies dispatch-log provenance for each completing-module task before truncation, with a file-based minimum-tier waiver and a `task_type:verification` per-task exemption.
@@ -987,15 +987,15 @@ git commit -m "test(sdd): e2e provenance in transition + module-2-first-task pos
   - N4: `controller-checkpoint.py` `find_report_file`/`find_all_report_files` recurse into `archive-*/` (pre-completion passes with archived reports). Name the intentionally-flat lookups.
   - C5: `sdd-skill-enforcement-hook.sh` is now **blocking** (`exit 2`) on an explicit SDD imperative + impl-file + skill-not-loaded; `SUPERPOWERS_SDD_BYPASS` is the escape hatch.
 
-- [ ] **Step 2: CLAUDE.md — "Hook Development Gotchas" section.** Add: `SUPERPOWERS_SDD_BYPASS` env var (allow + stderr warning) mirrors `SUPERPOWERS_VALIDATOR_BYPASS`. Note the C5 detection regex `(invoke|use|run|follow|start|let'?s use)\b.{0,20}(...)` is verified under both ugrep and stock BSD `/usr/bin/grep -iE`.
+- [x] **Step 2: CLAUDE.md — "Hook Development Gotchas" section.** Add: `SUPERPOWERS_SDD_BYPASS` env var (allow + stderr warning) mirrors `SUPERPOWERS_VALIDATOR_BYPASS`. Note the C5 detection regex `(invoke|use|run|follow|start|let'?s use)\b.{0,20}(...)` is verified under both ugrep and stock BSD `/usr/bin/grep -iE`.
 
-- [ ] **Step 3: CLAUDE.md — "Pipeline Flexibility" Known follow-ups.** Mark **N3 (N3a+N3b)**, **N4**, **N10**, and **N11** resolved by this feature. Update the "Testing" line's unit-test count (it increases by the number of new tests added in Tasks 0–4 — compute the real number from `pytest` collection, do not guess).
+- [x] **Step 3: CLAUDE.md — "Pipeline Flexibility" Known follow-ups.** Mark **N3 (N3a+N3b)**, **N4**, **N10**, and **N11** resolved by this feature. Update the "Testing" line's unit-test count (it increases by the number of new tests added in Tasks 0–4 — compute the real number from `pytest` collection, do not guess).
 
-- [ ] **Step 4: docs/ARaymond-customization-manifest.md.** Add an inventory entry for this feature under the SDD scripts section (the four modified scripts + new test files), dated 2026-06-01.
+- [x] **Step 4: docs/ARaymond-customization-manifest.md.** Add an inventory entry for this feature under the SDD scripts section (the four modified scripts + new test files), dated 2026-06-01.
 
-- [ ] **Step 5: BACKLOG.md.** Mark N3/N4/N10 done (find their rows and update status; add a brief "resolved by 2026-06-01-sdd-enforcement-hardening" note). Add a **row N11 marked DONE** (discovered during this feature's plan review and fixed here, Task 3): *"`transition-module.py` did not recompute `enforcement.context_summary_at` on module transition — it stayed pinned to the completed module's midpoint, firing Check 6b early for later-module tasks. Fixed: `transition()` recomputes it for the next module's range."*
+- [x] **Step 5: BACKLOG.md.** Mark N3/N4/N10 done (find their rows and update status; add a brief "resolved by 2026-06-01-sdd-enforcement-hardening" note). Add a **row N11 marked DONE** (discovered during this feature's plan review and fixed here, Task 3): *"`transition-module.py` did not recompute `enforcement.context_summary_at` on module transition — it stayed pinned to the completed module's midpoint, firing Check 6b early for later-module tasks. Fixed: `transition()` recomputes it for the next module's range."*
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add CLAUDE.md docs/ARaymond-customization-manifest.md docs/process-improvement-findings/BACKLOG.md
@@ -1014,7 +1014,7 @@ git commit -m "docs(sdd): record enforcement-hardening changes; mark N3/N4/N10/N
 
 **Context:** Run every suite the change touches and confirm the doc-stated counts are accurate. Report PASS/FAIL with the actual output. Do not fix anything here — if a suite fails, that is a finding to route back to the owning task.
 
-- [ ] **Step 1: Static + regression + install**
+- [x] **Step 1: Static + regression + install**
 
 Run:
 ```bash
@@ -1024,31 +1024,31 @@ bash tests/ARaymond-hook-baseline/check-hooks.sh
 ```
 Expected: install checks PASS; regression PASS-with-advisory-WARNINGs (no FAIL); hook baseline PASS (registration unchanged — C5 only changed behavior, not the `settings.json:78` registration).
 
-- [ ] **Step 2: Full unit suite**
+- [x] **Step 2: Full unit suite**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -v`
 Expected: all PASS. Record the new total and confirm it matches the count written in CLAUDE.md by Task 6.
 
-- [ ] **Step 3: Integration e2e**
+- [x] **Step 3: Integration e2e**
 
 Run: `bash tests/integration/sdd-e2e-test.sh`
 Expected: `E2E PIPELINE PASS - 11 steps composed correctly`.
 
-- [ ] **Step 4: Report.** Write the implementer report summarizing each suite's result (pass counts, the e2e step count, the unit-test total) and confirming the documented counts match reality. No commit.
+- [x] **Step 4: Report.** Write the implementer report summarizing each suite's result (pass counts, the e2e step count, the unit-test total) and confirming the documented counts match reality. No commit.
 
 ---
 
 ## Acceptance Criteria
 
-- [ ] 2-module plan **without** Source Contracts runs end-to-end through `transition-module.py` with zero manual workarounds (e2e Steps 4–5 + 7b: module-2 first task dispatches; pre-completion passes with archived reports).
-- [ ] 2-module plan **with** Source Contracts does not BLOCK at module 2 (Check 5 finds archived Task 0 — `test_check5_finds_archived_task0`).
-- [ ] No-Task-0 single-module plan starting at Task 1 dispatches without forging a `task=0` log entry (Check 4c skip-guard: `PREV=0 < START=1`).
-- [ ] `transition-module.py` **refuses** to transition when a completing-module task's dispatch provenance is missing (`test_blocks_when_provenance_missing`).
-- [ ] Pre-completion gate passes with completed-module reports under `archive-*/` (Task 1 archive-aware lookups + existing pre-completion suite).
-- [ ] `sdd-skill-enforcement-hook.sh` blocks (`exit 2`) an impl Write/Edit when SDD was explicitly requested + skill never loaded; `SUPERPOWERS_SDD_BYPASS` recovers; a casual SDD mention does not false-block (Task 0 tests).
-- [ ] Check 4c and `validate_module_completion` agree on require/exempt decisions, keyed on the file-based minimum signal (`test_minimum_signal_agreement`, 4 cases).
-- [ ] A completing module containing a `task_type:verification` task transitions without demanding spec/quality reviews for it (`test_verification_task_exempt_from_reviews`) — the folded-in exemption matching the hook.
-- [ ] On transition, `enforcement.context_summary_at` is recomputed for the next module's range (N11) — verified by the assertion on `test_manifest_updated_after_transition` and by e2e Step 7b dispatching the module-2 first task with no context-summary stub.
-- [ ] All existing static + unit + integration suites pass; new tests added; `sdd-e2e-test.sh` exercises module-2-first-task **post-transition** (Task 7).
+- [x] 2-module plan **without** Source Contracts runs end-to-end through `transition-module.py` with zero manual workarounds (e2e Steps 4–5 + 7b: module-2 first task dispatches; pre-completion passes with archived reports).
+- [x] 2-module plan **with** Source Contracts does not BLOCK at module 2 (Check 5 finds archived Task 0 — `test_check5_finds_archived_task0`).
+- [x] No-Task-0 single-module plan starting at Task 1 dispatches without forging a `task=0` log entry (Check 4c skip-guard: `PREV=0 < START=1`).
+- [x] `transition-module.py` **refuses** to transition when a completing-module task's dispatch provenance is missing (`test_blocks_when_provenance_missing`).
+- [x] Pre-completion gate passes with completed-module reports under `archive-*/` (Task 1 archive-aware lookups + existing pre-completion suite).
+- [x] `sdd-skill-enforcement-hook.sh` blocks (`exit 2`) an impl Write/Edit when SDD was explicitly requested + skill never loaded; `SUPERPOWERS_SDD_BYPASS` recovers; a casual SDD mention does not false-block (Task 0 tests).
+- [x] Check 4c and `validate_module_completion` agree on require/exempt decisions, keyed on the file-based minimum signal (`test_minimum_signal_agreement`, 4 cases).
+- [x] A completing module containing a `task_type:verification` task transitions without demanding spec/quality reviews for it (`test_verification_task_exempt_from_reviews`) — the folded-in exemption matching the hook.
+- [x] On transition, `enforcement.context_summary_at` is recomputed for the next module's range (N11) — verified by the assertion on `test_manifest_updated_after_transition` and by e2e Step 7b dispatching the module-2 first task with no context-summary stub.
+- [x] All existing static + unit + integration suites pass; new tests added; `sdd-e2e-test.sh` exercises module-2-first-task **post-transition** (Task 7).
 
 **Note on dogfooding:** This plan's own execution is the first live exercise of `task_type: verification` (Task 7). Two interactions to respect during execution: (1) Task 7 must produce **no commits** (its window must be clean for the pre-completion git-reality check, Check 9); commit all of Task 6's docs before dispatching Task 7. (2) The verification-ratio cap is 30% — this plan is 1/8 = 12.5%, well under.
