@@ -119,12 +119,14 @@ def count_pending_deviations(deviations_content: str) -> int:
 
 
 def find_report_file(reports_dir: str, task_number: int) -> str:
+    """Return the path to the implementer report for the given task, or "" if not found.
+
+    Searches the live reports dir AND archived module dirs (reports/archive-*/).
+    When a report exists in both, the live copy wins (sorts last). N4.
     """
-    Return the path to the implementer report for the given task, or "" if not found.
-    Searches for files matching task-N-implementer-report*.
-    """
-    pattern = os.path.join(reports_dir, report_filename_pattern(task_number))
-    matches = glob.glob(pattern)
+    pattern = report_filename_pattern(task_number)
+    matches = glob.glob(os.path.join(reports_dir, pattern))
+    matches += glob.glob(os.path.join(reports_dir, "archive-*", pattern))
     return sorted(matches)[-1] if matches else ""
 
 
@@ -184,9 +186,11 @@ def detect_stale_artifacts(deviations_file: str, reports_dir: str) -> dict:
 
 
 def find_all_report_files(reports_dir: str) -> list:
-    """Return all report files in the reports directory (any task)."""
-    pattern = os.path.join(reports_dir, "task-*-implementer-report*")
-    return sorted(glob.glob(pattern))
+    """Return all implementer report files, live AND archived (reports/archive-*/). N4."""
+    pattern = "task-*-implementer-report*"
+    matches = glob.glob(os.path.join(reports_dir, pattern))
+    matches += glob.glob(os.path.join(reports_dir, "archive-*", pattern))
+    return sorted(matches)
 
 
 def _review_tiers_per_task(reports_dir, review_type):
