@@ -55,13 +55,25 @@ fi
 # ─── Check if SDD was requested in this session ──────────────────────────
 
 # Grep the transcript for user messages requesting SDD
-# User messages have "role":"user" in the JSONL
+# User messages have "role":"user" in the JSONL.
+#
+# NOTE: do NOT pipe the producer grep into `grep -q`. Under `set -o pipefail`,
+# when `grep -q` matches early it exits and closes the pipe; the upstream grep
+# then takes SIGPIPE (exit 141), pipefail propagates that as the pipeline's
+# status, and the `if` evaluates FALSE — so the hook would FAIL TO BLOCK on
+# every real (>64KB) transcript. We read the filtered lines into a variable via
+# command substitution (no pipe, whole file consumed) and feed `grep -q` from a
+# here-string (a temp buffer — no upstream process to SIGPIPE).
 SDD_REQUESTED=false
 if grep -q '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null; then
-  # Require an explicit SDD imperative (not a bare mention) to avoid false blocks.
-  # Verified under ugrep 7.5 and stock /usr/bin/grep -iE (BSD): imperatives match,
-  # casual mentions ("reading about subagent-driven-development", "the SDD hook") do not.
-  if grep '"role":"user"' "$TRANSCRIPT_PATH" | grep -qiE "(invoke|use|run|follow|start|let'?s use)\b.{0,20}(subagent-driven-development|sdd)" 2>/dev/null; then
+  USER_LINES=$(grep '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null)
+  # Require an explicit SDD imperative (not a bare mention) to avoid false
+  # blocks. Both alternation groups are \b-anchored so the verb does not match
+  # inside a larger word (reuse/misuse) and "sdd" does not match inside a larger
+  # word (assddata). What this does NOT catch: semantic false positives where the
+  # words legitimately appear ("run the sdd tests") will still block — that is
+  # inherent to a regex heuristic. Use SUPERPOWERS_SDD_BYPASS to override.
+  if grep -qiE "\b(invoke|use|run|follow|start|let'?s use)\b.{0,20}\b(subagent-driven-development|sdd)\b" <<< "${USER_LINES:-}" 2>/dev/null; then
     SDD_REQUESTED=true
   fi
 fi
