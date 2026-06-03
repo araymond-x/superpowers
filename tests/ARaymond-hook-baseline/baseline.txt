@@ -2,13 +2,13 @@
 # Regenerate: bash tests/ARaymond-hook-baseline/check-hooks.sh --capture
 
 ## Hook script hashes (sha256)
-6bdbf383214e0e29db4644096b2f7c80a7d0ff98d4a3d645e793503d84f75776  hooks/session-start
-f829642ef6af38bf922f631628e40753a94491e7aef3a88dec1570586537196f  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
-5f1981091ff9d9e8d94b999f9c4662995af26a0019574c1ab395c4533970c714  skills/subagent-driven-development/scripts/sdd-report-guard.sh
-0ece19cad8a22543b4a97af3ba00bb745f1bdca5ae68891d4e5318e3135774c5  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
-5455231e268b8a1b8cc3abf8ea9251640f3b11e1281bba1e142c9569117eb42f  skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
-782a70cc0be1dc506220e7d2364e41df0583944f7b399f2743c4a8a36abb523a  skills/handoff-acceptance/scripts/handoff-gate-hook.sh
-2f736c6f36a5ca591f68602c560eb1e158d7041d6d58f1d0a6b128d1e2b087b3  skills/writing-plans/scripts/plan-validation-gate-hook.sh
+bd0936b6d70a4fae5152a4c9c3ab384dff64d4c4f4bf88a7e45ee8cd7323a81d  hooks/session-start
+42227c9d776c63c6643e1389629ef0d8583063dae6fbd2b14b1c84191b50d037  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
+0a2aa424ae18615af035727aaf63f039b796e42ef1cec134895f9a9917ef45f4  skills/subagent-driven-development/scripts/sdd-report-guard.sh
+871128f8b2826c1328366f7679d5969716545715743180df073928f8b688412b  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
+1614ac1fcd26c7b048bcd3331d3708a65f325bed046efcf7f937b501058aed66  skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
+57ecd1d07272abc209f28dfbcc6cd794818c8f03c0800c9bae4fb8625c933d6e  skills/handoff-acceptance/scripts/handoff-gate-hook.sh
+7ebf94c7631c1ec899107bccced884396a1ce859fa6a87f6cf9b0f425fdc5539  skills/writing-plans/scripts/plan-validation-gate-hook.sh
 
 ## Superpowers hook entries in ~/.claude/settings.json
 # Format: <Event>\t<matcher>\t<command>
