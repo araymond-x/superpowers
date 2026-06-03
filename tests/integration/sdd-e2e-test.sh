@@ -120,6 +120,9 @@ for tid in 0 1; do
       printf 'x%.0s' {1..100}
     } > "$FEAT/reports/task-${padded}-${kind}.md"
   done
+  # N3b: transition now verifies dispatch-log provenance before truncating.
+  echo "2026-06-01T00:00:00Z DISPATCH reviewer task=${tid} type=spec-review" >> "$FEAT/reports/.dispatch-log"
+  echo "2026-06-01T00:00:00Z DISPATCH reviewer task=${tid} type=quality-review" >> "$FEAT/reports/.dispatch-log"
 done
 echo "  PASS: 6 stub reports created"
 
@@ -157,6 +160,32 @@ PLAN_DETAIL=$(python3 -c "import json; print(json.load(open('$TMPOUT'))['checks'
 rm "$TMPOUT"
 echo "$PLAN_DETAIL" | grep -q "module-2.md"
 echo "  PASS: Post-transition checkpoint resolves module-2.md"
+
+echo ""
+echo "=== STEP 7b: module-2 first task dispatches post-transition (N3a skip-guard + N11) ==="
+# After the Core->API transition the live log is empty (truncated), task_range is
+# [2,3], and (N11) context_summary_at has been recomputed to module-2's midpoint
+# (3). Dispatching task 2 (module-first) must be ALLOWED: PREV=1 < START=2 ->
+# Check 4c skip-guard. Non-vacuous on TWO axes: pre-N3a the hook greps the empty
+# log for `task=1 type=spec-review` and BLOCKS; pre-N11 context_summary_at stays 1,
+# so Check 6b (2 >= 1) BLOCKS task 2 for a missing context summary. Live proof of both.
+CS=$(python3 -c "import json; print(json.load(open('$FEAT/.sdd-session.json'))['enforcement']['context_summary_at'])")
+test "$CS" = "3" || { echo "FAIL: N11 — context_summary_at not recomputed for module 2 (got $CS, want 3)"; exit 1; }
+HOOK="$PROJECT/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"
+echo "$FEAT" > "$WORK/.active-feature"          # hook resolves manifest via .active-feature
+touch "$WORK/.allow-main"                         # git init default branch is main; allow SDD here
+# Support files so the only gate that could fire for task 2 is Check 4c (NO
+# context-summary stub needed — N11's recompute means 2 < context_summary_at=3):
+{ echo "# audit"; printf 'x%.0s' {1..60}; } > "$FEAT/reports/pre-execution-audit.md"
+echo '{"status":"PASS","detail":"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"}' > "$FEAT/reports/checkpoint-pre-dispatch-002.json"
+{ echo "# partner"; printf 'x%.0s' {1..60}; } > "$FEAT/reports/partner-review-002.md"
+echo "2026-06-01T00:00:00Z DISPATCH reviewer task=2 type=partner-review" >> "$FEAT/reports/.dispatch-log"
+HOOK_INPUT='{"tool_input":{"description":"Implement task 2","prompt":"You are implementing task 2"},"cwd":"'"$WORK"'"}'
+set +e
+echo "$HOOK_INPUT" | bash "$HOOK"; HOOK_RC=$?
+set -e
+test "$HOOK_RC" -eq 0 || { echo "FAIL: hook blocked module-2 first task post-transition (rc=$HOOK_RC)"; exit 1; }
+echo "  PASS: task 2 dispatched post-transition — skip-guard (N3a) + recomputed context_summary_at (N11)"
 
 echo ""
 echo "=== STEP 8: review_tier:minimum exclusion via manifest modules (non-active module) ==="
@@ -358,5 +387,5 @@ fi
 echo "PASS: Step 10 — verification keyword WARNING"
 
 echo ""
-echo "E2E PIPELINE PASS - 10 steps composed correctly"
+echo "E2E PIPELINE PASS - 11 steps composed correctly"
 rm -rf "$WORK"
