@@ -16,10 +16,14 @@ This fork is installed via symlinks, NOT as a marketplace plugin. The symlink ap
 ```
 ~/.claude/skills/superpowers/       → ~/projects/claude-custom/superpowers/skills/
 ~/.claude/commands/superpowers/*.md  (standalone files — NOT in repo, regenerate per machine)
+~/.claude/commands/honesty.md       → ~/projects/claude-custom/superpowers/commands/honesty.md
+~/.claude/commands/honesty-sdd.md   → ~/projects/claude-custom/superpowers/commands/honesty-sdd.md
 ~/.claude/settings.json             (hooks + permissions — NOT in repo)
 ```
 
 **Key distinction**: The `/skills` picker namespace comes from command stubs at `~/.claude/commands/superpowers/`, NOT from the skills directory structure. Personal skills support only one level of nesting in the picker; command stubs provide the `superpowers:` namespace.
+
+**Saved-prompt commands (added 2026-06-03)**: `commands/honesty.md` and `commands/honesty-sdd.md` are hand-authored top-level personal slash commands (invoked `/honesty`, `/honesty-sdd` — no namespace), version-controlled IN this repo and symlinked into `~/.claude/commands/` (per-file, matching the `runtime-qa-tools.md` precedent). This differs from the `superpowers:` stubs above, which are auto-generated and live outside the repo. `/honesty` is a general-purpose session honesty check (net-new content); `/honesty-sdd` is a curated copy of the SDD dispatch prompt at `skills/subagent-driven-development/honesty-check-prompt.md` — if those 9 questions change, update the command to match. These have no command stubs (they're not skills) and are not counted by `verify-symlink-install.sh`.
 
 ---
 

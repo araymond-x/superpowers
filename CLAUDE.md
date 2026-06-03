@@ -21,6 +21,7 @@ After each production-deployable update to the fork, review:
 ## Installation Architecture
 - Skills: `~/.claude/skills/superpowers` → `./skills/` (single parent symlink, loads into context for auto-invocation)
 - Commands: `~/.claude/commands/superpowers/*.md` — stubs with `!`bash strip-frontmatter.sh`` preprocessing that dynamically include the full SKILL.md content (minus frontmatter) at invocation time. These provide the `superpowers:` namespace in the `/skills` picker (personal skills don't support nested directory namespacing; commands do via `commands/<group>/<name>.md`). **These files live outside the repo** — regenerate on new machines (see below)
+- Saved-prompt commands (added 2026-06-03): `~/.claude/commands/honesty.md` + `honesty-sdd.md` → `./commands/*.md` (per-file symlinks, matching the `runtime-qa-tools.md` precedent). Hand-authored top-level personal commands invoked as `/honesty` and `/honesty-sdd` (no namespace). **Source IS version-controlled in this repo's `commands/` dir** — UNLIKE the auto-generated `superpowers:` stubs above. `/honesty` is general-purpose (net-new); `/honesty-sdd` is a curated copy of `skills/subagent-driven-development/honesty-check-prompt.md` — keep in sync if those 9 questions change.
 - Hook: SessionStart in `~/.claude/settings.json` calls `./hooks/session-start` with `CLAUDE_PLUGIN_ROOT` set
 
 ## Subagent Context Improvements (2026-04-08)
