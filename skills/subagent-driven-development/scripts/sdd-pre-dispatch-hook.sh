@@ -502,6 +502,13 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
     : # Skip — manifest tier does not require dispatch provenance
   elif [ "$PREV_TASK_TYPE" = "verification" ]; then
     : # Previous task was verification — no dispatch provenance to verify
+  elif [ "$PREV" -lt "$MANIFEST_TASK_START" ] 2>/dev/null; then
+    # N3a: PREV belongs to a prior (archived) module, or precedes the module's
+    # first task (no-Task-0 plan, start=1). The live dispatch log was truncated
+    # at the module boundary, so PREV's provenance lives in the archived log.
+    # The completing module's boundary provenance is re-verified at transition
+    # time by transition-module.py:validate_module_completion (sibling enforcement).
+    : # Skip — boundary provenance verified at transition, not here
   else
     if [ -f "$DISPATCH_LOG" ]; then
       # Check for spec-review dispatch entry for previous task
@@ -550,7 +557,11 @@ if [ -n "$TASK_NUMBER" ] && [ "$TASK_NUMBER" -gt 0 ] 2>/dev/null; then
   fi
 
   if [ "$HAS_SOURCE_CONTRACTS" = true ]; then
-    T0_GLOB=$(task_report_glob "0" "implementer-report")
+    # N10: cover both the live reports dir and archived module dirs. A multi-
+    # module plan with Source Contracts archives Task 0's report under
+    # reports/archive-<module>/ at the first transition; Check 5 must still find
+    # it. check_report_file runs `ls $pattern`, so space-separated globs work.
+    T0_GLOB="${REPORTS_DIR}/task-000-implementer-report* ${REPORTS_DIR}/archive-*/task-000-implementer-report*"
     RESULT=$(check_report_file "$T0_GLOB" "Task 0 report")
     case "$RESULT" in
       MISSING)
