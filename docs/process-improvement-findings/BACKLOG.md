@@ -85,6 +85,42 @@ Each open item becomes its own brainstorming → writing-plans → SDD cycle, va
 
 ---
 
+## Recommended sprint 3 (planned 2026-06-03)
+
+Theme: **close the loop on sprint-1/2 features + raise the integration-test floor.** Anchor (Track 2) chosen by Aaron on 2026-06-03 — C2 over P2/C1/C3 because it's the only Critical-severity item that's M-sized and execution-ready, and its plan-time-declaration + hook-check fix shape is a concrete down-payment on C3's out-of-band-enforcement principle. Track-1 rows flip to `in-flight` when execution starts; this block is a planning artifact, not a status change.
+
+### Track 1 — Cleanup bundle (one standard-tier feature; **N16 first**)
+
+Deliberately bundled **now**, not folded in opportunistically (sequencing item #9) — opportunistic fold-in is the "I noted it but kept going" anti-pattern (`2026-05-21-skill-evaluation.md` §10.8). ~7 files (hook, checkpoint, `validate-plan.py`, `validate-all-skills.py`, `implementer_report.py`, `transition-module.py`, SDD SKILL.md) with real behavior changes ⇒ needs integration tests; the three bug-fixes carry a failing-test-first obligation.
+
+| Item | Role in bundle |
+|---|---|
+| **N16** | Bug fix (test-first). Add `task_type` to `ImplementerReport`; exempt `verification` from `files_changed`-non-empty. **Unblocks Track 3.** |
+| **N5** | Bug fix (test-first). Fence-aware `^### Task` regex in BOTH `validate-plan.py` + `controller-checkpoint.py`. |
+| **N7** | Bug fix (test-first). Treat prose `Source Contracts: None` as valid-absent; kills a per-run accepted deviation. |
+| **N1** | Hook preflight — accumulate all missing prereqs (same file as the just-merged hardening work). |
+| **N12, N13, N17** | `sdd-enforcement-hardening` follow-ups: align transition gate w/ `enforcement.dispatch_provenance`; backport `mkdir` into plan snippet; add transition main-plan fallback. |
+| N6, N8, N9 | Fold in if budget allows: hook-enforces-this framing pass; intent-based F6 check; `_task_ids_where` SSOT helper. |
+
+### Track 2 — Anchor: **C2** integration-test gate
+
+Lead with a short fixture spike (sequencing note already requires C2 to ship a fixture proving a missing integration path is now caught): design the plan-time declaration field for contract/route/security-touching features + the pre-completion hook check, validated against a fixture modeling the practerus M15 cache-poisoning miss. Then ship as a standard-tier feature.
+
+### Track 3 — Prove it live (Phase-4 gap)
+
+After N16 lands, run one real SDD session whose plan **deliberately includes a non-last `task_type:verification` task and crosses a module boundary** — the only exercise of the never-run-live multi-module + verification paths. (The Track-1+Track-2 work could itself be authored as a 2-module plan to serve double duty as this live exercise.)
+
+### Cross-track sequencing
+
+Track 1 and C2 **both** modify `sdd-pre-dispatch-hook.sh` and `controller-checkpoint.py`. Run **Track 1 before C2** so C2's new checkpoint check builds on a base where N5 (fence-blind miscount) and N7 (source-contracts false positive) are already gone — otherwise C2 inherits two known-buggy code paths.
+
+### Deferred (not sprint 3)
+
+- **Sprint-4 design spikes (need brainstorming first):** **C1** (plan-ref execution validation, L), **C3 + B8** (gameable-gates→hooks + async honesty, L).
+- **Lower-leverage / revisit:** B7, B9 (may be unnecessary post-B6); B10 + C6(b) (paired — B10 wants C6(b)'s real pressure signal); C4; C5.
+
+---
+
 ## Sources
 
 - `docs/2026-05-28-sdd-session-assessment-btd-consolidation.md` — BTD consolidation SDD session post-mortem (B*/I* items).
