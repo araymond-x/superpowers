@@ -99,13 +99,20 @@ If any match **and** `integration_test` is absent → emit a **WARNING** (adviso
 **5.3 Pre-completion Check 10** (`controller-checkpoint.py`, sibling to Check 8/9 in `run_pre_completion`)
 If `integration_test` declared (aggregated across plan files):
 - (a) `path` **exists on disk**, AND
-- (b) `path` **appears in the feature's git diff vs base** (added/modified by this feature — proves a
-  *new* test, not a pre-existing file pointed at).
+- (b) `path` is **part of this feature's changeset vs the default branch** — proving a *new* test was
+  written for this feature, not a pre-existing file pointed at.
 - Pass → `checks["integration_test_present"] = PASS`. Fail either condition → FAIL + append blocker
   `integration_test_missing`.
-- Reuses the git-root resolution + git invocation infra already present in
-  `_check_verification_git_reality`. Exact diff base (merge-base vs manifest-recorded base) resolved
-  at plan-writing time.
+- **Git mechanism — must be written new; it does NOT exist today.** Reuse *only* `_resolve_git_root`
+  (`controller-checkpoint.py` ~L518) for the repo root. `_check_verification_git_reality` performs a
+  *timestamp-window* `git log --after/--before` keyed on dispatch-log entries — it is **not** a
+  base-relative diff and is **not** reusable for (b). Implement (b) as:
+  - diff base = `git merge-base <default-branch> HEAD` (resolve the default branch from the repo, e.g. `main`);
+  - compare `<base>` against the **working tree** — `git diff --name-only <base> -- <path>` — **not**
+    `<base>..HEAD`: at pre-completion the new integration test may be **uncommitted**, so a commit-only
+    diff would miss it and fail (b) even though the test was written.
+  - There is **no manifest-recorded base** — the `SddSession` / `ArtifactPaths` / `Enforcement` models
+    carry no base/branch field. Derive the base via merge-base; do **not** invent a manifest field.
 - No declaration → PASS with "no integration_test declared — check skipped" (mirrors Check 9's empty case).
 
 **5.4 Fixtures** (the required C2 deliverable)
