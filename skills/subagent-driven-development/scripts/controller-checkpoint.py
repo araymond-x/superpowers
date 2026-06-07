@@ -229,17 +229,17 @@ def _review_tiers_per_task(reports_dir, review_type):
     return results
 
 
-def _declared_minimum_task_ids(plan_contents):
-    # type: (list) -> tuple
-    """Collect task IDs declaring review_tier=='minimum' from plan frontmatter.
+def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
+    """Return (set_of_task_ids, parsed_any_frontmatter) where task[field] == value.
 
-    Returns (set_of_ids, parsed_any:bool). Uses raw yaml.safe_load on the
-    frontmatter (NOT the strict Pydantic Plan model) so an unrelated validation
-    issue cannot take down the ratio check; reads only tasks[].review_tier/id.
+    Uses raw yaml.safe_load on the frontmatter (NOT the strict Pydantic Plan
+    model) so an unrelated validation issue cannot take down the ratio check.
+    Reads only tasks[].field and tasks[].id from each plan file's frontmatter.
     """
     import yaml
 
-    declared, parsed_any = set(), False
+    ids: set = set()
+    parsed = False
     for content in plan_contents:
         if not content or not content.startswith("---"):
             continue
@@ -253,44 +253,49 @@ def _declared_minimum_task_ids(plan_contents):
         tasks = fm.get("tasks") if isinstance(fm, dict) else None
         if not isinstance(tasks, list):
             continue
-        parsed_any = True
+        parsed = True
         for t in tasks:
             if (
                 isinstance(t, dict)
-                and t.get("review_tier") == "minimum"
+                and t.get(field) == value
                 and isinstance(t.get("id"), int)
             ):
-                declared.add(t["id"])
-    return declared, parsed_any
+                ids.add(t["id"])
+    return ids, parsed
 
 
-def _verification_task_ids(plan_contents):
-    # type: (list) -> set
-    """Collect task IDs declaring task_type=='verification' from plan frontmatter."""
-    import yaml
+def _load_all_plan_contents(manifest_data: dict, git_root: str) -> list:
+    """Load parent plan + all module plan files, deduplicated by realpath.
 
-    result = set()
-    for content in plan_contents:
-        if not content or not content.startswith("---"):
+    Returns a list of file contents (strings). Missing files are silently
+    skipped. Deduplication prevents double-counting when a module file path
+    resolves to the same file as the parent plan.
+    """
+    contents: list = []
+    seen: set = set()
+
+    # Parent plan
+    parent_path = os.path.join(git_root, manifest_data["plan_file"])
+    real_parent = os.path.realpath(parent_path)
+    if os.path.isfile(real_parent):
+        seen.add(real_parent)
+        contents.append(read_file(real_parent))
+
+    # Module files
+    feature_dir = manifest_data.get("paths", {}).get("feature_dir", "")
+    for module in manifest_data.get("modules", []):
+        mod_file = module.get("file", "")
+        if not mod_file:
             continue
-        end = content.find("---", 3)
-        if end == -1:
+        mod_path = os.path.join(git_root, feature_dir, mod_file)
+        real_mod = os.path.realpath(mod_path)
+        if real_mod in seen:
             continue
-        try:
-            fm = yaml.safe_load(content[3:end])
-        except Exception:
-            continue
-        tasks = fm.get("tasks") if isinstance(fm, dict) else None
-        if not isinstance(tasks, list):
-            continue
-        for t in tasks:
-            if (
-                isinstance(t, dict)
-                and t.get("task_type") == "verification"
-                and isinstance(t.get("id"), int)
-            ):
-                result.add(t["id"])
-    return result
+        if os.path.isfile(real_mod):
+            seen.add(real_mod)
+            contents.append(read_file(real_mod))
+
+    return contents
 
 
 def _check_verification_git_reality(
@@ -1042,31 +1047,27 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         print(json.dumps({"error": f"Cannot read plan file: {e}"}), file=sys.stderr)
         sys.exit(3)
 
-    # Read additional plan files for multi-module aggregation
-    all_plan_contents = [plan_content]
-    if getattr(args, "additional_plan_files", None):
-        for path in args.additional_plan_files:
-            if os.path.isfile(path):
-                try:
-                    all_plan_contents.append(read_file(path))
-                except OSError:
-                    pass
-
-    # Item 4b: add module plan files (modular plans) to the scan, then collect
-    # declared-minimum task IDs from ALL plan contents.
+    # Build all_plan_contents: manifest mode uses _load_all_plan_contents
+    # (parent plan + module files, deduplicated); non-manifest mode uses the
+    # primary plan + any --additional-plan-files.
     if getattr(args, "manifest", None):
         try:
             _mp = Path(args.manifest)
             _md = json.loads(_mp.read_text(encoding="utf-8"))
             _gr = _resolve_git_root(_mp)
-            _feat = _md.get("paths", {}).get("feature_dir", "")
-            for _mod in _md.get("modules") or []:
-                _full = os.path.join(_gr, _feat, _mod.get("file", ""))
-                if _mod.get("file") and os.path.isfile(_full):
-                    all_plan_contents.append(read_file(_full))
+            all_plan_contents = _load_all_plan_contents(_md, _gr)
         except Exception:
-            pass
-    declared_min, _parsed = _declared_minimum_task_ids(all_plan_contents)
+            all_plan_contents = [plan_content]
+    else:
+        all_plan_contents = [plan_content]
+        if getattr(args, "additional_plan_files", None):
+            for path in args.additional_plan_files:
+                if os.path.isfile(path):
+                    try:
+                        all_plan_contents.append(read_file(path))
+                    except OSError:
+                        pass
+    declared_min, _parsed = _task_ids_where(all_plan_contents, "review_tier", "minimum")
     if not _parsed:
         warnings.append("review_tier_plan_parse_skipped")
 
@@ -1260,7 +1261,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     _ratio_check("partner-review", "excessive_minimum_tier_partner", "partner")
 
     # Check 8: Verification task ratio cap (>30% triggers blocker)
-    verification_ids = _verification_task_ids(all_plan_contents)
+    verification_ids, _ = _task_ids_where(all_plan_contents, "task_type", "verification")
     all_task_ids = set(
         int(n)
         for content in all_plan_contents
