@@ -1,4 +1,5 @@
 """Pydantic model for ImplementerReport artifacts (YAML frontmatter)."""
+
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -28,8 +29,12 @@ class ContractComplianceItem(StrictModel):
     detail: str
 
 
+TaskType = Literal["implementation", "verification"]
+
+
 class ImplementerReport(SchemaVersionedModel):
     task_id: int
+    task_type: TaskType = "implementation"
     status: Status
     files_changed: list[FileChange]
     tests: TestSummary
@@ -46,6 +51,8 @@ class ImplementerReport(SchemaVersionedModel):
 
     @model_validator(mode="after")
     def files_changed_non_empty_for_done(self) -> "ImplementerReport":
+        if self.task_type == "verification":
+            return self
         if self.status in ("DONE", "DONE_WITH_CONCERNS") and not self.files_changed:
             raise ValueError(
                 f"status is {self.status} but files_changed is empty — "
