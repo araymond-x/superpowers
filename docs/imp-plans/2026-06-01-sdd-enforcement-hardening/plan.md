@@ -800,6 +800,8 @@ def _hook_requires_quality_prov(tmp_path, min_file, provenance):
     within-module so Check 4c runs). Returns True if it blocks for quality."""
     ws = setup_manifest_workspace(tmp_path, tier="standard", task_range=(0, 1), total_tasks=2)
     reports = ws["reports_dir"]
+    reports.mkdir(exist_ok=True)
+    (reports / ".dispatch-log").parent.mkdir(parents=True, exist_ok=True)
     log = reports / ".dispatch-log"
     log.write_text("# sdd-hook-sentinel abc123\n")
     # Task 0 fully present + spec provenance (isolate the quality decision).

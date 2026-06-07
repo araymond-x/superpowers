@@ -96,6 +96,27 @@ def read_file(path: str) -> str:
         return f.read()
 
 
+def _unfenced_content(text: str) -> str:
+    """Return text with lines inside ``` fence blocks replaced by blank lines.
+
+    Preserves line count so that line-index-based logic (span measurement,
+    header positions) remains valid after filtering.
+    """
+    lines = text.splitlines(keepends=True)
+    result = []
+    in_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            result.append("\n")
+        elif in_fence:
+            result.append("\n")
+        else:
+            result.append(line)
+    return "".join(result)
+
+
 def file_size_bytes(path: str) -> int:
     """Return the size of a file in bytes."""
     return os.path.getsize(path)
@@ -103,7 +124,7 @@ def file_size_bytes(path: str) -> int:
 
 def count_tasks(plan_content: str) -> int:
     """Count the number of task headers in the plan (### Task N patterns)."""
-    return len(TASK_HEADER_PATTERN.findall(plan_content))
+    return len(TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content)))
 
 
 def count_checkboxes(plan_content: str) -> dict:
@@ -431,13 +452,17 @@ def estimate_context_load(
 def has_task_zero(plan_content: str) -> bool:
     """Return True if the plan contains a Task 0 header."""
     return bool(
-        re.search(r"^###\s+Task\s+0\b", plan_content, re.MULTILINE | re.IGNORECASE)
+        re.search(
+            r"^###\s+Task\s+0\b",
+            _unfenced_content(plan_content),
+            re.MULTILINE | re.IGNORECASE,
+        )
     )
 
 
 def task_zero_is_first(plan_content: str) -> bool:
     """Return True if Task 0 appears before any other task in the plan."""
-    tasks = TASK_HEADER_PATTERN.findall(plan_content)
+    tasks = TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))
     return bool(tasks and tasks[0] == "0")
 
 
@@ -475,6 +500,9 @@ def get_task_checkbox_range(plan_content: str, task_number: int) -> dict:
     Extract checkbox counts for a specific task section.
     Returns {"checked": N, "unchecked": N, "total": N}.
     """
+    # Unfence internally so fenced task headers don't act as section boundaries
+    plan_content = _unfenced_content(plan_content)
+
     # Find the start of the target task section
     task_match = re.search(
         rf"^###\s+Task\s+{task_number}\b",
@@ -508,7 +536,7 @@ def all_tasks_have_reports(plan_content: str, reports_dir: str) -> dict:
     Check whether every task in the plan has a corresponding report file.
     Returns {"pass": bool, "missing": list_of_task_numbers}.
     """
-    task_numbers = [int(n) for n in TASK_HEADER_PATTERN.findall(plan_content)]
+    task_numbers = [int(n) for n in TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))]
     missing = []
     for n in task_numbers:
         if not find_report_file(reports_dir, n):
@@ -1265,7 +1293,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     all_task_ids = set(
         int(n)
         for content in all_plan_contents
-        for n in TASK_HEADER_PATTERN.findall(content)
+        for n in TASK_HEADER_PATTERN.findall(_unfenced_content(content))
     )
     total_tasks = len(all_task_ids)
     verif_count = len(verification_ids & all_task_ids)

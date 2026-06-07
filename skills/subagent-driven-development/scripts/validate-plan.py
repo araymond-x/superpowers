@@ -101,6 +101,27 @@ def read_file(path: str) -> str:
         return fh.read()
 
 
+def _unfenced_content(text: str) -> str:
+    """Return text with lines inside ``` fence blocks replaced by blank lines.
+
+    Preserves line count so that line-index-based logic (span measurement,
+    header positions) remains valid after filtering.
+    """
+    lines = text.splitlines(keepends=True)
+    result = []
+    in_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            result.append("\n")
+        elif in_fence:
+            result.append("\n")
+        else:
+            result.append(line)
+    return "".join(result)
+
+
 def _frontmatter_end_line(lines: List[str]) -> int:
     """Return the index of the first line after YAML frontmatter, or 0 if none."""
     if not lines or lines[0].strip() != "---":
@@ -137,7 +158,7 @@ def extract_inline_value(content: str, pattern: re.Pattern) -> Optional[str]:
 
 def extract_task_numbers(content: str) -> List[int]:
     """Extract all task numbers from ### Task N headers in the given content."""
-    return [int(m) for m in TASK_HEADER_RE.findall(content)]
+    return [int(m) for m in TASK_HEADER_RE.findall(_unfenced_content(content))]
 
 
 def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
@@ -154,9 +175,13 @@ def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
     warnings: List[str] = []
     blockers: List[str] = []
 
+    # Unfence: replace fenced lines with blanks to skip code-block task headers.
+    # Line count is preserved so span indices remain valid.
+    unfenced_lines = _unfenced_content("\n".join(lines)).splitlines()
+
     # Collect (line_index, task_number, task_name) for all task headers
     header_positions: List[Tuple[int, int, str]] = []
-    for idx, line in enumerate(lines):
+    for idx, line in enumerate(unfenced_lines):
         m = re.match(r"^###\s+Task\s+(\d+)\s*(.*)", line, re.IGNORECASE)
         if m:
             task_num = int(m.group(1))
@@ -260,13 +285,14 @@ def check_sections(lines: List[str], full_content: str) -> Dict:
         "present": bool(WRITE_SCOPE_RE.search(full_content))
     }
 
-    # Task 0 / Contract Verification
+    # Task 0 / Contract Verification — use unfenced content to ignore code blocks
+    unfenced_full = _unfenced_content(full_content)
     task_zero_match = re.search(
-        r"^###\s+Task\s+0\b", full_content, re.MULTILINE | re.IGNORECASE
+        r"^###\s+Task\s+0\b", unfenced_full, re.MULTILINE | re.IGNORECASE
     )
     task_zero_present = bool(task_zero_match)
     # Is task 0 the first task header that appears?
-    first_task = TASK_HEADER_RE.search(full_content)
+    first_task = TASK_HEADER_RE.search(unfenced_full)
     is_first = False
     if task_zero_present and first_task:
         first_num = int(first_task.group(1))
