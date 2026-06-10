@@ -400,24 +400,60 @@ def _integration_test_paths(plan_contents: list) -> list:
 
 
 def _resolve_base_ref(git_root: str) -> Optional[str]:
-    """Return the first base ref that resolves (origin/HEAD, main, master), else None.
+    """Return the resolvable base ref whose merge-base with HEAD is newest.
 
-    None signals an infrastructure problem — the caller emits an infra-error
-    FAIL rather than crashing.
+    Candidates (priority order): origin/HEAD, main, master. Among ALL that
+    resolve, pick the one whose merge-base(<candidate>, HEAD) commit has the
+    latest committer timestamp — ties keep priority order. This guards
+    against a stale origin/HEAD (local-only merges, never pushed): the stale
+    merge-base opens a diff window covering PRIOR features, letting a plan
+    pass Check 10 with an integration test some prior feature modified.
+
+    A candidate whose merge-base computation fails is skipped; if no
+    candidate yields a merge-base (e.g. unrelated histories), fall back to
+    the first resolvable candidate. None (nothing resolves) signals an
+    infrastructure problem — the caller emits an infra-error FAIL rather
+    than crashing.
     """
-    for ref in ("origin/HEAD", "main", "master"):
+
+    def _git(cmd_args: list):
         try:
-            result = subprocess.run(
-                ["git", "-C", git_root, "rev-parse", "--verify", "--quiet", ref],
+            return subprocess.run(
+                ["git", "-C", git_root] + cmd_args,
                 capture_output=True,
                 text=True,
                 timeout=10,
             )
         except (subprocess.TimeoutExpired, OSError):
             return None
+
+    resolvable = []
+    for ref in ("origin/HEAD", "main", "master"):
+        result = _git(["rev-parse", "--verify", "--quiet", ref])
+        if result is None:
+            return None
         if result.returncode == 0 and result.stdout.strip():
-            return ref
-    return None
+            resolvable.append(ref)
+    if not resolvable:
+        return None
+
+    best_ref = None
+    best_ts = -1
+    for ref in resolvable:
+        mb = _git(["merge-base", ref, "HEAD"])
+        if mb is None or mb.returncode != 0 or not mb.stdout.strip():
+            continue
+        show = _git(["show", "-s", "--format=%ct", mb.stdout.strip()])
+        if show is None or show.returncode != 0:
+            continue
+        try:
+            ts = int(show.stdout.strip())
+        except ValueError:
+            continue
+        if ts > best_ts:  # strict > keeps priority order on ties
+            best_ts = ts
+            best_ref = ref
+    return best_ref if best_ref is not None else resolvable[0]
 
 
 def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:

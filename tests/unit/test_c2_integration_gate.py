@@ -143,6 +143,14 @@ CHECKPOINT_SCRIPT = os.path.join(
 
 IT_PATH = "tests/integration/e2e.sh"
 
+# Null host git config so fixtures are independent of the machine's
+# ~/.gitconfig and system config (e.g. init.defaultBranch, commit.gpgsign).
+_GIT_ENV = {
+    **os.environ,
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_SYSTEM": "/dev/null",
+}
+
 
 def _c2_plan(integration_path=None):
     """Minimal valid plan; optionally declares a top-level integration_test."""
@@ -170,12 +178,16 @@ class TestC2Check10:
     blocker.
     """
 
-    def _git(self, repo, *args):
+    def _git(self, repo, *args, date=None):
+        env = _GIT_ENV
+        if date is not None:
+            env = {**_GIT_ENV, "GIT_AUTHOR_DATE": date, "GIT_COMMITTER_DATE": date}
         return subprocess.run(
             ["git", "-C", str(repo)] + list(args),
             capture_output=True,
             text=True,
             check=True,
+            env=env,
         )
 
     def _setup_repo(self, tmp_path, plan_content, module_content=None):
@@ -190,6 +202,7 @@ class TestC2Check10:
             capture_output=True,
             text=True,
             check=True,
+            env=_GIT_ENV,
         )
         self._git(tmp_path, "config", "user.email", "test@example.com")
         self._git(tmp_path, "config", "user.name", "Test")
@@ -284,6 +297,53 @@ class TestC2Check10:
         check = out.get("checks", {}).get("integration_test_present", {})
         assert check.get("status") == "FAIL", check
         assert IT_PATH in check.get("detail", ""), check
+        assert "integration_test_present" in out.get("blockers", [])
+
+    def test_stale_origin_head_does_not_widen_changeset(self, tmp_path):
+        """Stale origin/HEAD must NOT win base-ref selection (fail-open guard).
+
+        origin/HEAD is fabricated as a symbolic ref pinned at the BASE commit
+        (simulating local-only merges never pushed). Local main then advances
+        with an intermediate commit that modifies the declared integration
+        test path (a PRIOR feature's work); the feature branch (current HEAD)
+        does NOT touch it; clean tree. First-resolvable selection picks the
+        stale origin/HEAD, whose merge-base window covers the prior feature's
+        change → PASS (fail-open). Newest-merge-base selection picks main →
+        the declared test is NOT in this feature's changeset → FAIL.
+        """
+        self._setup_repo(tmp_path, _c2_plan(IT_PATH))  # base commit on main
+        base_sha = self._git(tmp_path, "rev-parse", "HEAD").stdout.strip()
+        # Fabricate a stale origin: origin/main pinned at the base commit,
+        # origin/HEAD as a symbolic ref pointing at it.
+        self._git(tmp_path, "update-ref", "refs/remotes/origin/main", base_sha)
+        self._git(
+            tmp_path, "symbolic-ref",
+            "refs/remotes/origin/HEAD", "refs/remotes/origin/main",
+        )
+        # Prior feature (stale window): advance main, modifying the declared
+        # IT path. Explicit later dates make merge-base recency deterministic.
+        it_file = tmp_path / IT_PATH
+        it_file.parent.mkdir(parents=True)
+        it_file.write_text("#!/bin/bash\necho e2e from a PRIOR feature\n")
+        self._git(tmp_path, "add", IT_PATH)
+        self._git(
+            tmp_path, "commit", "-q", "-m", "prior feature adds e2e",
+            date="2030-01-01T00:00:00 +0000",
+        )
+        # This feature's branch: does NOT touch the IT path; clean tree.
+        self._git(tmp_path, "checkout", "-q", "-b", "feature")
+        (tmp_path / "feature.txt").write_text("feature work\n")
+        self._git(tmp_path, "add", "feature.txt")
+        self._git(
+            tmp_path, "commit", "-q", "-m", "feature work",
+            date="2030-01-02T00:00:00 +0000",
+        )
+        status = self._git(tmp_path, "status", "--porcelain")
+        assert status.stdout.strip() == "", "fixture requires a clean working tree"
+        out = self._run_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        assert "changeset" in check.get("detail", "").lower(), check
         assert "integration_test_present" in out.get("blockers", [])
 
     def test_merge_base_committed_on_branch_clean_tree_passes(self, tmp_path):
