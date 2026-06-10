@@ -26,6 +26,10 @@ import sys
 import tempfile
 from typing import Dict, List, Optional, Tuple
 
+# Sibling scripts dir — importlib-loaded consumers (tests) don't put it on sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _report_utils import _unfenced_content  # noqa: E402  (single source of truth)
+
 # -----------------------------------------------------------------------
 # Thresholds
 # -----------------------------------------------------------------------
@@ -99,27 +103,6 @@ def read_file(path: str) -> str:
     """Read a file and return its text contents. Raises OSError on failure."""
     with open(path, "r", encoding="utf-8") as fh:
         return fh.read()
-
-
-def _unfenced_content(text: str) -> str:
-    """Return text with lines inside ``` fence blocks replaced by blank lines.
-
-    Preserves line count so that line-index-based logic (span measurement,
-    header positions) remains valid after filtering.
-    """
-    lines = text.splitlines(keepends=True)
-    result = []
-    in_fence = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            result.append("\n")
-        elif in_fence:
-            result.append("\n")
-        else:
-            result.append(line)
-    return "".join(result)
 
 
 def _frontmatter_end_line(lines: List[str]) -> int:

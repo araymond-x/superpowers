@@ -2,7 +2,8 @@
 _report_utils.py
 
 Shared utilities for report parsing, section detection, and content heuristics.
-Used by validate-report.py, controller-checkpoint.py, and context-summary.py.
+Used by validate-report.py, controller-checkpoint.py, context-summary.py, and
+validate-plan.py.
 
 VALID_STATUSES is re-exported from the Pydantic model (single source of truth).
 Prose section validation covers the 5 sections that remain in the markdown body
@@ -42,6 +43,30 @@ PROMPT_PLACEHOLDER_PHRASES = [
     "none found in modified directories",
     "no contract constraints for this task",
 ]
+
+
+def _unfenced_content(text: str) -> str:
+    """Return text with lines inside ``` fence blocks replaced by blank lines.
+
+    Preserves line count so that line-index-based logic (span measurement,
+    header positions) remains valid after filtering.
+
+    Single source of truth — imported by validate-plan.py and
+    controller-checkpoint.py for fence-aware task-header parsing (N5).
+    """
+    lines = text.splitlines(keepends=True)
+    result = []
+    in_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            result.append("\n")
+        elif in_fence:
+            result.append("\n")
+        else:
+            result.append(line)
+    return "".join(result)
 
 
 def find_sections(content):

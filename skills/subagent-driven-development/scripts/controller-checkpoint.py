@@ -47,6 +47,10 @@ from _base import CURRENT_SCHEMA_VERSION
 from checkpoint_result import CheckpointResult, CheckResult, Progress
 from sdd_session import SddSession
 
+# Sibling scripts dir — importlib-loaded consumers (tests) don't put it on sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _report_utils import _unfenced_content  # noqa: E402  (single source of truth)
+
 # Character-to-token approximation (standard industry estimate: 1 token = 4 chars)
 CHARS_PER_TOKEN = 4
 
@@ -94,27 +98,6 @@ def read_file(path: str) -> str:
     """Read a file and return its contents. Raises OSError on failure."""
     with open(path, "r", encoding="utf-8") as f:
         return f.read()
-
-
-def _unfenced_content(text: str) -> str:
-    """Return text with lines inside ``` fence blocks replaced by blank lines.
-
-    Preserves line count so that line-index-based logic (span measurement,
-    header positions) remains valid after filtering.
-    """
-    lines = text.splitlines(keepends=True)
-    result = []
-    in_fence = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            result.append("\n")
-        elif in_fence:
-            result.append("\n")
-        else:
-            result.append(line)
-    return "".join(result)
 
 
 def file_size_bytes(path: str) -> int:
