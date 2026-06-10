@@ -1,6 +1,7 @@
 """N5: Fence-aware task-header parsing at all 7+1 sites.
 Run: .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py -v
 """
+import argparse
 import importlib.util
 import os
 import re
@@ -88,3 +89,27 @@ class TestCheckpointFenceAware:
         get_task_checkbox_range = _ckpt.get_task_checkbox_range
         cbs = get_task_checkbox_range(plan, 1)
         assert cbs["unchecked"] == 2  # Step A + Step B, not the fenced one
+
+
+class TestSourceContractsNonePass:
+    def test_source_contracts_none_is_valid_absent(self, tmp_path):
+        """N7: Source Contracts: None should yield PASS, not FAIL."""
+        plan = tmp_path / "plan.md"
+        plan.write_text(
+            "---\nschema_version: 1\nfeature_archetype: extension\n"
+            "source_contracts: null\ntasks:\n  - id: 1\n    title: T\n---\n"
+            "# Plan\n\n**Source Contracts:** None\n\n**Contract Constraints:** None\n\n"
+            "**Feature Archetype:** Extension\n\n**Code Footprint:**\n\n"
+            "| Cat | Files | Action | Deps |\n|--|--|--|--|\n| New | f.py | Create | - |\n\n"
+            f"{_H} 1: Do thing\n- [ ] Step 1\n"
+        )
+        run_pre_execution = _ckpt.run_pre_execution
+        args = argparse.Namespace(
+            plan_file=str(plan),
+            deviations_file=None,
+            reports_dir=None,
+            manifest=None,
+        )
+        result = run_pre_execution(args)
+        sc = result["checks"].get("source_contracts", {})
+        assert sc["status"] != "FAIL", f"Source Contracts: None should PASS, got {sc}"

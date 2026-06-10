@@ -721,10 +721,9 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
             }
         else:
             checks["source_contracts"] = {
-                "status": "FAIL",
-                "detail": "Source Contracts section present but contains 'None' or is empty — update or remove the section",
+                "status": "OK",
+                "detail": "Source Contracts section present — declared as None/empty (valid-absent)",
             }
-            blockers.append("source_contracts")
     else:
         checks["source_contracts"] = {
             "status": "OK",
