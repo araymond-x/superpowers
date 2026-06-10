@@ -414,6 +414,36 @@ def check_verification_keyword_heuristic(frontmatter: Optional[Dict]) -> List[st
 
 
 # -----------------------------------------------------------------------
+# integration-test risk-surface heuristic (C2)
+# -----------------------------------------------------------------------
+
+_C2_RISK_PATTERNS = re.compile(
+    r"\b(?:router|routes/|middleware|auth|migration|cache|cors|security)\b",
+    re.IGNORECASE,
+)
+
+
+def check_integration_test_risk(content: str, frontmatter: Optional[Dict]) -> List[str]:
+    """Warn when plan content matches risk-surface patterns but has no integration_test."""
+    warnings: List[str] = []
+    has_integration_test = (
+        isinstance(frontmatter, dict)
+        and frontmatter.get("integration_test") is not None
+    )
+    if has_integration_test:
+        return warnings
+    if _C2_RISK_PATTERNS.search(content):
+        warnings.append(
+            "integration_test_risk_surface: Plan content matches risk-surface patterns "
+            "(router/middleware/auth/migration/cache/cors/security) but no "
+            "integration_test is declared in frontmatter. Consider adding "
+            "integration_test: {path: 'tests/integration/...'} to declare the "
+            "integration test that validates this feature."
+        )
+    return warnings
+
+
+# -----------------------------------------------------------------------
 # Main validation logic
 # -----------------------------------------------------------------------
 
@@ -670,6 +700,11 @@ def validate_plan(
             "status": "WARNING",
             "detail": " | ".join(vk_warnings),
         }
+
+    # --- integration-test risk-surface heuristic (C2) ---
+    it_warnings = check_integration_test_risk(content, frontmatter)
+    for w in it_warnings:
+        warnings.append(w)
 
     # --- Overall status ---
     if blockers:
