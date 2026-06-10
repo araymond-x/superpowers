@@ -124,7 +124,9 @@ def validate_module_completion(
             spec_report = os.path.join(reports_dir, f"task-{padded}-spec-review.md")
             if not os.path.isfile(spec_report) or os.path.getsize(spec_report) < 50:
                 errors.append(f"Task {task_id}: missing or empty spec review")
-            elif not _has_dispatch_provenance(dispatch_log, task_id, "spec-review"):
+            elif manifest.enforcement.dispatch_provenance and not _has_dispatch_provenance(
+                dispatch_log, task_id, "spec-review"
+            ):
                 errors.append(f"Task {task_id}: spec review not provenance-logged")
 
         if pr.quality_review_mode != "skip":
@@ -144,7 +146,9 @@ def validate_module_completion(
                 errors.append(f"Task {task_id}: missing or empty quality review")
             elif has_min:
                 pass  # file-based minimum signal waives quality-review provenance
-            elif not _has_dispatch_provenance(dispatch_log, task_id, "quality-review"):
+            elif manifest.enforcement.dispatch_provenance and not _has_dispatch_provenance(
+                dispatch_log, task_id, "quality-review"
+            ):
                 errors.append(f"Task {task_id}: quality review not provenance-logged")
 
     return errors

@@ -203,6 +203,35 @@ def test_minimum_tier_file_waives_quality_provenance(tmp_path):
     assert result.returncode == 0, f"stderr={result.stderr}"
 
 
+class TestN12SplitFileProvenance:
+    def test_micro_modules_self_review_no_dispatch_log_passes(self, tmp_path):
+        """N12: With dispatch_provenance=False, missing dispatch-log provenance
+        must not fail the transition when the review FILES exist (self-written)."""
+        manifest_path, reports_dir, feat_dir = create_manifest(tmp_path, tier="micro")
+        # Review files present, but NO provenance lines (log has only the sentinel).
+        for tid in [0, 1, 2, 3]:
+            padded = f"{tid:03d}"
+            for rt in ["implementer-report", "spec-review", "quality-review"]:
+                (reports_dir / f"task-{padded}-{rt}.md").write_text(
+                    f"# {rt}\n" + "x" * 100)
+        result = run_transition(manifest_path, "Core", "API")
+        assert result.returncode == 0, f"stderr={result.stderr}"
+        assert "not provenance-logged" not in result.stderr
+
+    def test_missing_self_review_files_still_fails(self, tmp_path):
+        """N12: Even with dispatch_provenance=False, review FILES must exist."""
+        manifest_path, reports_dir, feat_dir = create_manifest(tmp_path, tier="micro")
+        # Implementer + spec-review files only — quality-review file missing.
+        for tid in [0, 1, 2, 3]:
+            padded = f"{tid:03d}"
+            for rt in ["implementer-report", "spec-review"]:
+                (reports_dir / f"task-{padded}-{rt}.md").write_text(
+                    f"# {rt}\n" + "x" * 100)
+        result = run_transition(manifest_path, "Core", "API")
+        assert result.returncode == 1
+        assert "missing or empty quality review" in result.stderr
+
+
 def test_verification_task_exempt_from_reviews(tmp_path):
     manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
     # Declare task 3 as verification in the completing module's plan file.
