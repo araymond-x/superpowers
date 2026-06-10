@@ -102,3 +102,30 @@ class TestC2RiskSurfaceWarning:
         risk_warns = [w for w in result["warnings"]
                       if "integration" in w.lower() and "risk" in w.lower()]
         assert len(risk_warns) == 0
+
+    def test_frontmatterless_plan_with_risk_warns(self):
+        """No YAML frontmatter at all → frontmatter is None → still warns."""
+        plan = (
+            f"# Plan\n\n**Source Contracts:** None\n\n"
+            f"{_H} 1: Add auth middleware\n- [ ] Do it\n"
+        )
+        result = _vp.validate_plan(plan)
+        assert any(w.startswith("integration_test_risk_surface")
+                   for w in result["warnings"])
+        section = result["sections"].get("integration_test_risk", {})
+        assert section.get("status") == "WARNING"
+
+    def test_explicit_null_integration_test_still_warns(self):
+        """integration_test: null in frontmatter is not a declaration → still warns."""
+        plan = (
+            "---\nschema_version: 1\nfeature_archetype: extension\n"
+            "integration_test: null\n"
+            "tasks:\n  - id: 1\n    title: Add auth middleware\n---\n"
+            f"# Plan\n\n**Source Contracts:** None\n\n**Feature Archetype:** Extension\n\n"
+            f"{_H} 1: Add auth middleware\n- [ ] Do it\n"
+        )
+        result = _vp.validate_plan(plan)
+        assert any(w.startswith("integration_test_risk_surface")
+                   for w in result["warnings"])
+        section = result["sections"].get("integration_test_risk", {})
+        assert section.get("status") == "WARNING"

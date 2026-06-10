@@ -705,6 +705,11 @@ def validate_plan(
     it_warnings = check_integration_test_risk(content, frontmatter)
     for w in it_warnings:
         warnings.append(w)
+    if it_warnings:
+        sections["integration_test_risk"] = {
+            "status": "WARNING",
+            "detail": " | ".join(it_warnings),
+        }
 
     # --- Overall status ---
     if blockers:
