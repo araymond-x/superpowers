@@ -567,12 +567,16 @@ def _load_manifest_config(
 
     Side effects:
       - Mutates args.plan_file in place. Prefers active_module_file over plan_file.
+      - Sets args.manifest_task_range to the manifest's (start, end) tuple, or
+        None when no manifest is provided (consumed by the N18 module-boundary
+        skip-guard in run_pre_dispatch).
       - On unrecoverable error (missing file, invalid JSON, schema validation
         failure), prints a JSON error to stderr and calls sys.exit(3).
 
     Returns:
       (tier, enforcement_dict) when args.manifest is set, otherwise (None, None).
     """
+    args.manifest_task_range = None
     if not args.manifest:
         return None, None
 
@@ -614,6 +618,8 @@ def _load_manifest_config(
         )
     else:
         args.plan_file = os.path.join(git_root, manifest.plan_file)
+
+    args.manifest_task_range = tuple(manifest.task_range)
 
     return manifest.tier, manifest.enforcement.model_dump()
 
@@ -828,8 +834,29 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
 
     previous_task = task_number - 1
 
+    # N18: module-boundary skip-guard (mirror of the hook's N3a). When the
+    # previous task precedes the active module's task_range, it belongs to a
+    # prior (archived) module whose completion was already verified by
+    # transition-module.py:validate_module_completion at the boundary — skip
+    # all previous-task checks instead of failing on archived artifacts.
+    manifest_task_range = getattr(args, "manifest_task_range", None)
+    boundary_skip = (
+        manifest_task_range is not None
+        and task_number > 0
+        and previous_task < manifest_task_range[0]
+    )
+    boundary_detail = (
+        f"Task {previous_task} belongs to a prior module — "
+        "completion verified by transition-module.py at module boundary"
+    )
+
     # Check 1: Previous task checkboxes (only if task > 0)
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_task_checkboxes"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_cbs = get_task_checkbox_range(plan_content, previous_task)
         if prev_cbs["total"] == 0:
             # Task exists but has no checkboxes — treat as OK (some tasks may not have them)
@@ -858,7 +885,13 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 2: Previous task report file exists (only if task > 0)
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_task_report"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+        report_path = ""
+    elif task_number > 0:
         report_path = find_report_file(args.reports_dir, previous_task)
         if report_path:
             checks["previous_task_report"] = {
@@ -883,7 +916,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         report_path = ""
 
     # Check 3: Previous task report is COMPLETE (inline validate-report logic)
-    if task_number > 0 and report_path:
+    if boundary_skip:
+        checks["previous_report_complete"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0 and report_path:
         try:
             report_content = read_file(report_path)
             validation = validate_report_sections(report_content)
@@ -920,7 +958,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 4: Previous task spec review report exists
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_spec_review"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
         spec_review_pattern = os.path.join(
             args.reports_dir, "task-{}-spec-review*".format(prev_padded)
@@ -946,7 +989,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 5: Previous task quality review report exists
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_quality_review"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
         quality_review_pattern = os.path.join(
             args.reports_dir, "task-{}-quality-review*".format(prev_padded)
