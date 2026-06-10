@@ -28,6 +28,8 @@ class IntegrationTest(StrictModel):
     @field_validator("path")
     @classmethod
     def path_must_be_relative_and_safe(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("integration_test path must not be empty")
         if os.path.isabs(v):
             raise ValueError(f"integration_test path must not be absolute: {v}")
         if ".." in v.split("/"):

@@ -15,10 +15,23 @@ import re
 import sys
 from pathlib import Path
 
-# Re-export VALID_STATUSES from the Pydantic model (single source of truth)
-sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
-from implementer_report import Status
-VALID_STATUSES = set(Status.__args__)
+# VALID_STATUSES re-exports from the Pydantic model (single source of truth).
+# Resolved lazily via module __getattr__ (PEP 562) so that importing this module
+# — e.g. validate-plan.py pulling _unfenced_content — stays stdlib-only and does
+# NOT load pydantic. plan-validation-gate-hook.sh invokes validate-plan.py with
+# bare python3; an eager pydantic import would silently fail open on a
+# pydantic-less machine.
+def __getattr__(name):
+    if name == "VALID_STATUSES":
+        sys.path.insert(
+            0, str(Path(__file__).resolve().parent / "../../scripts/models")
+        )
+        from implementer_report import Status
+
+        value = set(Status.__args__)
+        globals()["VALID_STATUSES"] = value  # cache for subsequent lookups
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Required prose sections — 5 remain after Phase 2 moved 4 to frontmatter
 REQUIRED_SECTIONS = [
