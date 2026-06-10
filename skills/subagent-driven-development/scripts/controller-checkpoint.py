@@ -366,18 +366,27 @@ def _check_verification_git_reality(
     return findings
 
 
-def _integration_test_paths(plan_contents: list) -> list:
+def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
     """Extract top-level frontmatter `integration_test.path` from plan contents.
 
     `integration_test` is a TOP-LEVEL frontmatter field (not per-task), so this
     is a plain dict lookup — NOT the tasks[]-walking _task_ids_where pattern.
     Uses raw yaml.safe_load so an unrelated validation issue cannot take down
     the check. Defends against fm being None and integration_test being null.
-    Returns deduplicated declared paths in first-seen order.
+
+    Returns (paths, malformed): deduplicated valid declared paths in
+    first-seen order, plus human-readable descriptions of present-but-
+    MALFORMED declarations (bare string/list/other non-dict values, dicts
+    without a 'path' key, dicts with an empty/whitespace/non-string path).
+    Malformed declarations must surface to the caller — silently treating
+    them as "not declared" lets Check 10 skip a gate the author believes
+    they declared (fail-open). `integration_test: null` or absent remains
+    NOT declared (the documented "no declaration" idiom).
     """
     import yaml
 
     paths: list = []
+    malformed: list = []
     for content in plan_contents:
         if not content or not content.startswith("---"):
             continue
@@ -391,12 +400,38 @@ def _integration_test_paths(plan_contents: list) -> list:
         if not isinstance(fm, dict):
             continue
         it = fm.get("integration_test")
+        if it is None:
+            continue
         if not isinstance(it, dict):
+            shape = (
+                "a bare string"
+                if isinstance(it, str)
+                else "a {}".format(type(it).__name__)
+            )
+            malformed.append(
+                "plan declares integration_test as {} ({!r}) — expected a "
+                "mapping with a non-empty 'path' key".format(shape, it)
+            )
+            continue
+        if "path" not in it:
+            malformed.append(
+                "integration_test mapping has no 'path' key — expected a "
+                "mapping with a non-empty 'path' key"
+            )
             continue
         path = it.get("path")
-        if isinstance(path, str) and path.strip() and path not in paths:
+        if not isinstance(path, str) or not path.strip():
+            desc = (
+                "empty" if isinstance(path, str) else "a {}".format(type(path).__name__)
+            )
+            malformed.append(
+                "integration_test.path is {} ({!r}) — expected a non-empty "
+                "string path".format(desc, path)
+            )
+            continue
+        if path not in paths:
             paths.append(path)
-    return paths
+    return paths, malformed
 
 
 def _resolve_base_ref(git_root: str) -> Optional[str]:
@@ -645,7 +680,9 @@ def all_tasks_have_reports(plan_content: str, reports_dir: str) -> dict:
     Check whether every task in the plan has a corresponding report file.
     Returns {"pass": bool, "missing": list_of_task_numbers}.
     """
-    task_numbers = [int(n) for n in TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))]
+    task_numbers = [
+        int(n) for n in TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))
+    ]
     missing = []
     for n in task_numbers:
         if not find_report_file(reports_dir, n):
@@ -1461,7 +1498,9 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     _ratio_check("partner-review", "excessive_minimum_tier_partner", "partner")
 
     # Check 8: Verification task ratio cap (>30% triggers blocker)
-    verification_ids, _ = _task_ids_where(all_plan_contents, "task_type", "verification")
+    verification_ids, _ = _task_ids_where(
+        all_plan_contents, "task_type", "verification"
+    )
     all_task_ids = set(
         int(n)
         for content in all_plan_contents
@@ -1538,16 +1577,28 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
 
     # Check 10: Integration test gate (C2) — every declared integration_test
     # path (top-level frontmatter, aggregated across all plan files) must
-    # exist on disk AND be part of this feature's changeset.
-    declared_it_paths = _integration_test_paths(all_plan_contents)
-    if not declared_it_paths:
+    # exist on disk AND be part of this feature's changeset. A present-but-
+    # MALFORMED declaration is a FAIL, never a skip — the author believes
+    # they declared a gate.
+    declared_it_paths, malformed_it_decls = _integration_test_paths(all_plan_contents)
+    if not declared_it_paths and not malformed_it_decls:
         checks["integration_test_present"] = {
             "status": "PASS",
             "detail": (
-                "No integration_test declared in any plan frontmatter — "
-                "check skipped"
+                "No integration_test declared in any plan frontmatter — check skipped"
             ),
         }
+    elif not declared_it_paths:
+        checks["integration_test_present"] = {
+            "status": "FAIL",
+            "detail": (
+                "Malformed integration_test declaration(s): "
+                + "; ".join(malformed_it_decls)
+                + ". Expected shape: a mapping with a non-empty 'path' key "
+                "(integration_test: null or absent means no declaration)."
+            ),
+        }
+        blockers.append("integration_test_present")
     else:
         if getattr(args, "manifest", None):
             it_git_root = _resolve_git_root(Path(args.manifest))
@@ -1556,18 +1607,25 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
 
         base_ref = _resolve_base_ref(it_git_root)
         if base_ref is None:
+            detail = (
+                "Infrastructure error: no base ref resolves (tried "
+                "origin/HEAD, main, master) — cannot verify the declared "
+                "integration test changeset. Check the git repository "
+                "state, then re-run."
+            )
+            if malformed_it_decls:
+                detail += " Also malformed declaration(s): " + "; ".join(
+                    malformed_it_decls
+                )
             checks["integration_test_present"] = {
                 "status": "FAIL",
-                "detail": (
-                    "Infrastructure error: no base ref resolves (tried "
-                    "origin/HEAD, main, master) — cannot verify the declared "
-                    "integration test changeset. Check the git repository "
-                    "state, then re-run."
-                ),
+                "detail": detail,
             }
             blockers.append("integration_test_present")
         else:
-            it_problems = []
+            it_problems = [
+                "malformed declaration: {}".format(d) for d in malformed_it_decls
+            ]
             for rel_path in declared_it_paths:
                 abs_path = os.path.join(it_git_root, rel_path)
                 if not os.path.isfile(abs_path):

@@ -1,6 +1,7 @@
 """C2: Integration-test gate — model, validate-plan WARNING, Check 10.
 Run: .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py -v
 """
+
 import importlib.util
 import json
 import os
@@ -15,7 +16,9 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
 
 def _load_script(name, filename):
-    path = os.path.join(ROOT, "skills", "subagent-driven-development", "scripts", filename)
+    path = os.path.join(
+        ROOT, "skills", "subagent-driven-development", "scripts", filename
+    )
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
@@ -85,13 +88,18 @@ class TestIntegrationTestModel:
 class TestC2RiskSurfaceWarning:
     def test_risk_pattern_no_integration_test_warns(self):
         result = _vp.validate_plan(RISK_PLAN)
-        assert any("integration" in w.lower() or "risk" in w.lower()
-                    for w in result["warnings"])
+        assert any(
+            "integration" in w.lower() or "risk" in w.lower()
+            for w in result["warnings"]
+        )
 
     def test_risk_pattern_with_integration_test_no_warn(self):
         result = _vp.validate_plan(SAFE_PLAN_WITH_INTEGRATION)
-        risk_warns = [w for w in result["warnings"]
-                      if "integration" in w.lower() and "risk" in w.lower()]
+        risk_warns = [
+            w
+            for w in result["warnings"]
+            if "integration" in w.lower() and "risk" in w.lower()
+        ]
         assert len(risk_warns) == 0
 
     def test_no_risk_pattern_no_warn(self):
@@ -102,8 +110,11 @@ class TestC2RiskSurfaceWarning:
             f"{_H} 1: Add utility\n- [ ] Do it\n"
         )
         result = _vp.validate_plan(no_risk)
-        risk_warns = [w for w in result["warnings"]
-                      if "integration" in w.lower() and "risk" in w.lower()]
+        risk_warns = [
+            w
+            for w in result["warnings"]
+            if "integration" in w.lower() and "risk" in w.lower()
+        ]
         assert len(risk_warns) == 0
 
     def test_frontmatterless_plan_with_risk_warns(self):
@@ -113,8 +124,9 @@ class TestC2RiskSurfaceWarning:
             f"{_H} 1: Add auth middleware\n- [ ] Do it\n"
         )
         result = _vp.validate_plan(plan)
-        assert any(w.startswith("integration_test_risk_surface")
-                   for w in result["warnings"])
+        assert any(
+            w.startswith("integration_test_risk_surface") for w in result["warnings"]
+        )
         section = result["sections"].get("integration_test_risk", {})
         assert section.get("status") == "WARNING"
 
@@ -128,10 +140,12 @@ class TestC2RiskSurfaceWarning:
             f"{_H} 1: Add auth middleware\n- [ ] Do it\n"
         )
         result = _vp.validate_plan(plan)
-        assert any(w.startswith("integration_test_risk_surface")
-                   for w in result["warnings"])
+        assert any(
+            w.startswith("integration_test_risk_surface") for w in result["warnings"]
+        )
         section = result["sections"].get("integration_test_risk", {})
         assert section.get("status") == "WARNING"
+
 
 # ---------------------------------------------------------------------------
 # Check 10: pre-completion integration-test gate (controller-checkpoint.py)
@@ -317,8 +331,10 @@ class TestC2Check10:
         # origin/HEAD as a symbolic ref pointing at it.
         self._git(tmp_path, "update-ref", "refs/remotes/origin/main", base_sha)
         self._git(
-            tmp_path, "symbolic-ref",
-            "refs/remotes/origin/HEAD", "refs/remotes/origin/main",
+            tmp_path,
+            "symbolic-ref",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/main",
         )
         # Prior feature (stale window): advance main, modifying the declared
         # IT path. Explicit later dates make merge-base recency deterministic.
@@ -327,7 +343,11 @@ class TestC2Check10:
         it_file.write_text("#!/bin/bash\necho e2e from a PRIOR feature\n")
         self._git(tmp_path, "add", IT_PATH)
         self._git(
-            tmp_path, "commit", "-q", "-m", "prior feature adds e2e",
+            tmp_path,
+            "commit",
+            "-q",
+            "-m",
+            "prior feature adds e2e",
             date="2030-01-01T00:00:00 +0000",
         )
         # This feature's branch: does NOT touch the IT path; clean tree.
@@ -335,7 +355,11 @@ class TestC2Check10:
         (tmp_path / "feature.txt").write_text("feature work\n")
         self._git(tmp_path, "add", "feature.txt")
         self._git(
-            tmp_path, "commit", "-q", "-m", "feature work",
+            tmp_path,
+            "commit",
+            "-q",
+            "-m",
+            "feature work",
             date="2030-01-02T00:00:00 +0000",
         )
         status = self._git(tmp_path, "status", "--porcelain")
@@ -344,6 +368,41 @@ class TestC2Check10:
         check = out.get("checks", {}).get("integration_test_present", {})
         assert check.get("status") == "FAIL", check
         assert "changeset" in check.get("detail", "").lower(), check
+        assert "integration_test_present" in out.get("blockers", [])
+
+    def test_flat_string_declaration_fails(self, tmp_path):
+        """integration_test: <bare string> (the natural authoring mistake) —
+        present-but-malformed must FAIL with the expected shape named, not
+        silently report PASS skipped (fail-open guard)."""
+        plan = (
+            "---\nschema_version: 1\nfeature_archetype: extension\n"
+            "integration_test: {}\n".format(IT_PATH)
+            + "tasks:\n  - id: 1\n    title: T\n---\n"
+            + f"# Plan\n\n**Source Contracts:** None\n\n{_H} 1: T\n- [x] done\n"
+        )
+        self._setup_repo(tmp_path, plan)
+        out = self._run_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        detail = check.get("detail", "").lower()
+        assert "malformed" in detail, check
+        # Detail must name the expected shape: a mapping with a 'path' key.
+        assert "mapping" in detail and "path" in detail, check
+        assert "integration_test_present" in out.get("blockers", [])
+
+    def test_empty_path_declaration_fails(self, tmp_path):
+        """integration_test: {path: ""} — declared but empty path must FAIL."""
+        plan = (
+            "---\nschema_version: 1\nfeature_archetype: extension\n"
+            'integration_test:\n  path: ""\n'
+            "tasks:\n  - id: 1\n    title: T\n---\n"
+            + f"# Plan\n\n**Source Contracts:** None\n\n{_H} 1: T\n- [x] done\n"
+        )
+        self._setup_repo(tmp_path, plan)
+        out = self._run_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        assert "empty" in check.get("detail", "").lower(), check
         assert "integration_test_present" in out.get("blockers", [])
 
     def test_merge_base_committed_on_branch_clean_tree_passes(self, tmp_path):
