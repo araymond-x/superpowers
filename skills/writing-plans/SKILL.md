@@ -432,6 +432,19 @@ Each task may declare `task_type: verification` in the plan's YAML frontmatter t
 
 `validate-plan.py` emits a WARNING when verification task titles contain write-suggesting keywords (`create`, `add`, `implement`, `fix`, `modify`, `write`, `update`, `refactor`, `migrate`, `delete`, `remove`). The plan reviewer provides the semantic check.
 
+## Declaring `integration_test` per Plan
+
+Plans that modify risk-surface code (routers, middleware, auth, migrations, caching, CORS, security) should declare an integration test in the YAML frontmatter:
+
+    integration_test:
+      path: tests/integration/my-feature-e2e-test.sh
+
+The path must be repo-root-relative, non-absolute, and contain no `..` segments.
+
+**Pre-completion Check 10** verifies that the declared file: (a) exists on disk, and (b) is part of this feature's changeset (added or modified — both tracked diffs and untracked new files count). Modifying an existing integration test to cover the new feature is acceptable.
+
+When no `integration_test` is declared, `validate-plan.py` emits an advisory WARNING if the plan content matches risk-surface patterns. The WARNING is informational — not all plans need integration tests.
+
 ## No Placeholders
 
 Every step must contain the actual content an engineer needs. These are **plan failures** — never write them:
