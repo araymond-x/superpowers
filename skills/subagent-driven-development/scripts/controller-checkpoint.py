@@ -366,6 +366,96 @@ def _check_verification_git_reality(
     return findings
 
 
+def _integration_test_paths(plan_contents: list) -> list:
+    """Extract top-level frontmatter `integration_test.path` from plan contents.
+
+    `integration_test` is a TOP-LEVEL frontmatter field (not per-task), so this
+    is a plain dict lookup — NOT the tasks[]-walking _task_ids_where pattern.
+    Uses raw yaml.safe_load so an unrelated validation issue cannot take down
+    the check. Defends against fm being None and integration_test being null.
+    Returns deduplicated declared paths in first-seen order.
+    """
+    import yaml
+
+    paths: list = []
+    for content in plan_contents:
+        if not content or not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end == -1:
+            continue
+        try:
+            fm = yaml.safe_load(content[3:end])
+        except Exception:
+            continue
+        if not isinstance(fm, dict):
+            continue
+        it = fm.get("integration_test")
+        if not isinstance(it, dict):
+            continue
+        path = it.get("path")
+        if isinstance(path, str) and path.strip() and path not in paths:
+            paths.append(path)
+    return paths
+
+
+def _resolve_base_ref(git_root: str) -> Optional[str]:
+    """Return the first base ref that resolves (origin/HEAD, main, master), else None.
+
+    None signals an infrastructure problem — the caller emits an infra-error
+    FAIL rather than crashing.
+    """
+    for ref in ("origin/HEAD", "main", "master"):
+        try:
+            result = subprocess.run(
+                ["git", "-C", git_root, "rev-parse", "--verify", "--quiet", ref],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+        if result.returncode == 0 and result.stdout.strip():
+            return ref
+    return None
+
+
+def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:
+    """Return True when <path> is part of the feature changeset.
+
+    Union of:
+      - untracked files (git ls-files --others --exclude-standard -- <path>)
+      - tracked diff vs merge-base(base_ref, HEAD) — isolates feature changes
+        from base-branch drift.
+    If merge-base computation fails, falls back to the working-tree-only diff
+    (git diff --name-only HEAD -- <path>).
+    """
+
+    def _git(cmd_args: list):
+        try:
+            return subprocess.run(
+                ["git", "-C", git_root] + cmd_args,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+
+    untracked = _git(["ls-files", "--others", "--exclude-standard", "--", path])
+    if untracked is not None and untracked.returncode == 0 and untracked.stdout.strip():
+        return True
+
+    merge_base = None
+    mb = _git(["merge-base", base_ref, "HEAD"])
+    if mb is not None and mb.returncode == 0 and mb.stdout.strip():
+        merge_base = mb.stdout.strip()
+
+    diff_base = merge_base if merge_base else "HEAD"
+    diff = _git(["diff", "--name-only", diff_base, "--", path])
+    return diff is not None and diff.returncode == 0 and bool(diff.stdout.strip())
+
+
 def validate_report_sections(report_content: str) -> dict:
     """
     Validate that a report has the 5 required prose sections.
@@ -1409,6 +1499,69 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             "status": "PASS",
             "detail": "No verification tasks — git reality check skipped",
         }
+
+    # Check 10: Integration test gate (C2) — every declared integration_test
+    # path (top-level frontmatter, aggregated across all plan files) must
+    # exist on disk AND be part of this feature's changeset.
+    declared_it_paths = _integration_test_paths(all_plan_contents)
+    if not declared_it_paths:
+        checks["integration_test_present"] = {
+            "status": "PASS",
+            "detail": (
+                "No integration_test declared in any plan frontmatter — "
+                "check skipped"
+            ),
+        }
+    else:
+        if getattr(args, "manifest", None):
+            it_git_root = _resolve_git_root(Path(args.manifest))
+        else:
+            it_git_root = _resolve_git_root(Path(args.plan_file))
+
+        base_ref = _resolve_base_ref(it_git_root)
+        if base_ref is None:
+            checks["integration_test_present"] = {
+                "status": "FAIL",
+                "detail": (
+                    "Infrastructure error: no base ref resolves (tried "
+                    "origin/HEAD, main, master) — cannot verify the declared "
+                    "integration test changeset. Check the git repository "
+                    "state, then re-run."
+                ),
+            }
+            blockers.append("integration_test_present")
+        else:
+            it_problems = []
+            for rel_path in declared_it_paths:
+                abs_path = os.path.join(it_git_root, rel_path)
+                if not os.path.isfile(abs_path):
+                    it_problems.append("{}: missing on disk".format(rel_path))
+                elif not _in_changeset(rel_path, base_ref, it_git_root):
+                    it_problems.append(
+                        "{}: exists but is not part of this feature's "
+                        "changeset (no diff vs {})".format(rel_path, base_ref)
+                    )
+            if it_problems:
+                checks["integration_test_present"] = {
+                    "status": "FAIL",
+                    "detail": (
+                        "Declared integration test(s) failed the gate: "
+                        + "; ".join(it_problems)
+                        + ". The declared file must exist and be added or "
+                        "modified by this feature."
+                    ),
+                }
+                blockers.append("integration_test_present")
+            else:
+                checks["integration_test_present"] = {
+                    "status": "PASS",
+                    "detail": (
+                        "{} declared integration test(s) exist and are in the "
+                        "feature changeset (base: {})".format(
+                            len(declared_it_paths), base_ref
+                        )
+                    ),
+                }
 
     pct = (
         round(100 * checkbox_counts["checked"] / checkbox_counts["total"])
