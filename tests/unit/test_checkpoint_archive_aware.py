@@ -85,7 +85,7 @@ def _plan_for_tasks(task_ids):
     return "\n".join(parts)
 
 
-def _pre_dispatch_workspace(tmp_path, task_range, plan_task_ids):
+def _pre_dispatch_workspace(tmp_path, task_range, plan_task_ids, completed_modules=()):
     """Git repo + manifest + plan + deviations + reports mirroring the live layout."""
     subprocess.run(["git", "init", "-q"], cwd=str(tmp_path), check=True)
     feat_dir = tmp_path / "docs" / "imp-plans" / "test-feature"
@@ -118,7 +118,7 @@ def _pre_dispatch_workspace(tmp_path, task_range, plan_task_ids):
         "midpoint": midpoint,
         "enforcement": enforcement,
         "process_requirements": profile["process_requirements"],
-        "completed_modules": [],
+        "completed_modules": list(completed_modules),
         "module_reports_archived": False,
         "modules": None,
         "dispatch_log_sentinel": False,
@@ -142,7 +142,8 @@ def _run_pre_dispatch(ws, task_number, manifest=True):
 def test_boundary_task_skips_previous_task_checks(tmp_path):
     """First task of module 2 (range [8,11]): task-007 artifacts live only under
     archive-*/ — previous-task checks must SKIP, not block (live bug 2026-06-10)."""
-    ws = _pre_dispatch_workspace(tmp_path, (8, 11), plan_task_ids=range(8, 12))
+    ws = _pre_dispatch_workspace(tmp_path, (8, 11), plan_task_ids=range(8, 12),
+                                 completed_modules=["Cleanup"])
     arch = ws["reports_dir"] / "archive-Cleanup"; arch.mkdir()
     _impl(arch / "task-007-implementer-report.md")
     _impl(arch / "task-007-spec-review.md")
@@ -154,6 +155,21 @@ def test_boundary_task_skips_previous_task_checks(tmp_path):
     for name in _PREV_TASK_CHECKS:
         assert result["checks"][name]["status"] == "SKIP", (name, result["checks"][name])
         assert "prior module" in result["checks"][name]["detail"], result["checks"][name]
+
+
+def test_no_task_0_plan_skips_with_accurate_detail(tmp_path):
+    """Single-module no-Task-0 plan (range [1,7], no completed modules), dispatch
+    task 1: previous_task 0 < 1 — five SKIPs fire, but the rationale must NOT
+    claim a prior module/transition that never existed (quality review, Issue 1)."""
+    ws = _pre_dispatch_workspace(tmp_path, (1, 7), plan_task_ids=range(1, 8))
+    result = _run_pre_dispatch(ws, 1)
+    assert result["status"] == "PASS", result
+    assert result["blockers"] == [], result
+    for name in _PREV_TASK_CHECKS:
+        assert result["checks"][name]["status"] == "SKIP", (name, result["checks"][name])
+        detail = result["checks"][name]["detail"]
+        assert "prior module" not in detail, (name, detail)
+        assert "no-Task-0 plan" in detail, (name, detail)
 
 
 def test_non_boundary_task_still_blocks_on_missing_reports(tmp_path):

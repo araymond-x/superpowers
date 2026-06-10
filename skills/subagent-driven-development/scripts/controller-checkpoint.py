@@ -570,6 +570,9 @@ def _load_manifest_config(
       - Sets args.manifest_task_range to the manifest's (start, end) tuple, or
         None when no manifest is provided (consumed by the N18 module-boundary
         skip-guard in run_pre_dispatch).
+      - Sets args.manifest_has_prior_modules to True when the manifest records
+        completed prior modules (consumed by the N18 skip-guard to pick an
+        accurate SKIP rationale).
       - On unrecoverable error (missing file, invalid JSON, schema validation
         failure), prints a JSON error to stderr and calls sys.exit(3).
 
@@ -577,6 +580,7 @@ def _load_manifest_config(
       (tier, enforcement_dict) when args.manifest is set, otherwise (None, None).
     """
     args.manifest_task_range = None
+    args.manifest_has_prior_modules = False
     if not args.manifest:
         return None, None
 
@@ -620,6 +624,7 @@ def _load_manifest_config(
         args.plan_file = os.path.join(git_root, manifest.plan_file)
 
     args.manifest_task_range = tuple(manifest.task_range)
+    args.manifest_has_prior_modules = bool(manifest.completed_modules)
 
     return manifest.tier, manifest.enforcement.model_dump()
 
@@ -845,10 +850,21 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         and task_number > 0
         and previous_task < manifest_task_range[0]
     )
-    boundary_detail = (
-        f"Task {previous_task} belongs to a prior module — "
-        "completion verified by transition-module.py at module boundary"
-    )
+    # Checkbox/report-section completeness skipped here is backstopped terminally
+    # by pre-completion (Check 1 aggregates checkboxes across all plan files; the
+    # report-completeness loop is archive-aware).
+    if getattr(args, "manifest_has_prior_modules", False):
+        boundary_detail = (
+            f"Task {previous_task} belongs to a prior module — "
+            "completion verified by transition-module.py at module boundary"
+        )
+    else:
+        # No completed prior modules: previous_task simply doesn't exist in the
+        # plan (no-Task-0 plan whose task_range starts past it).
+        boundary_detail = (
+            f"Task {previous_task} precedes the active module's task_range "
+            "(no-Task-0 plan) — nothing to verify"
+        )
 
     # Check 1: Previous task checkboxes (only if task > 0)
     if boundary_skip:
