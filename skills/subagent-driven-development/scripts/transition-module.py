@@ -105,11 +105,15 @@ def validate_module_completion(
     pr = manifest.process_requirements
 
     # Per-task verification exemption (mirrors sdd-pre-dispatch-hook.sh): read the
-    # completing module's own plan file for task_type declarations.
+    # completing module's own plan file for task_type declarations. N17: when the
+    # module has no per-module file, fall back to the main plan (hook lines ~294-299).
     verif_ids: set = set()
     if module.file:
         module_plan = os.path.join(git_root, manifest.paths.feature_dir, module.file)
         verif_ids = _verification_task_ids_from_file(module_plan)
+    else:
+        main_plan = os.path.join(git_root, manifest.plan_file)
+        verif_ids = _verification_task_ids_from_file(main_plan)
 
     for task_id in module.task_ids:
         padded = f"{task_id:03d}"

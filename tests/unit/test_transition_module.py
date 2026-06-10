@@ -232,6 +232,26 @@ class TestN12SplitFileProvenance:
         assert "missing or empty quality review" in result.stderr
 
 
+class TestN17MainPlanFallback:
+    def test_reads_verif_ids_from_main_plan_when_module_file_empty(self, tmp_path):
+        """N17: When module.file is empty, read verification IDs from the main plan."""
+        manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
+        # Completing module has NO per-module plan file.
+        data = json.loads(manifest_path.read_text())
+        data["modules"][0]["file"] = ""
+        manifest_path.write_text(json.dumps(data, indent=2))
+        # MAIN plan (manifest plan_file) declares task 3 as verification.
+        (feat_dir / "plan.md").write_text(
+            "---\nschema_version: 1\ntasks:\n"
+            "  - id: 0\n  - id: 1\n  - id: 2\n  - id: 3\n    task_type: verification\n"
+            "---\n# Plan\n")
+        # Tasks 0-2 full (reports + provenance); task 3 implementer report ONLY.
+        create_task_reports(reports_dir, [0, 1, 2])
+        (reports_dir / "task-003-implementer-report.md").write_text("# impl\n" + "x" * 100)
+        result = run_transition(manifest_path, "Core", "API")
+        assert result.returncode == 0, f"stderr={result.stderr}"
+
+
 def test_verification_task_exempt_from_reviews(tmp_path):
     manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
     # Declare task 3 as verification in the completing module's plan file.
