@@ -244,6 +244,20 @@ The 2026-05-20 adaptive-enforcement-tiers feature shipped four scripts (`materia
 
 ---
 
+## First Live Runs Find What Even Integration Tests Miss (2026-06-10 lessons)
+
+The sdd-cleanup-and-integration-gate sprint ran the first-ever live `transition-module.py` module transition — with 456 unit tests and an 11-step e2e suite green. Three lessons from one session:
+
+1. **The first live exercise of a path is part of its acceptance test.** The transition itself ran clean, but the very next action (pre-dispatch checkpoint for module 2's first task) FAILed: the hook had the N3a boundary guard since the hardening feature, but `controller-checkpoint.py` never got the matching guard (N18) — and no unit or e2e test composed "transition, then checkpoint" in that order. Budget the first live run as a discovery activity; the fix-with-full-ceremony loop (deviation row → TDD fix subagent → dispatched reviews → re-run the gate) took under an hour because the context was hot.
+
+2. **Provenance gates catch real fabrication — when remediation is real dispatches, the delta is visible.** A prior session had controller-written Task 3 review files (no dispatch-log entries; mtimes 5-10s after the implementer report). The remediation dispatched REAL reviewers for the same commit: the fabricated quality review had said "PASS / Issues found: None"; the real one found 1 Critical (a plan-prescribed fix that was a no-op), 1 Important, 3 Minor. That contrast is the empirical justification for Check 4c — keep it.
+
+3. **Hunt fail-opens by probing the live repo, not just fixtures.** Two shipped in this feature's own new gate and were caught only because reviewers probed reality: `origin/HEAD`-first base-ref selection was 21 commits stale in THIS repo (local-only merges) — widening the "feature changeset" to swallow prior features; and present-but-malformed `integration_test` declarations (flat string, empty path) silently classified as "not declared" → PASS. Review prompts for enforcement code should explicitly ask "run it against this repo, now — what does it actually resolve/skip?"
+
+Also reaffirmed: review-driven fixes need their own post-fix review (the honesty check caught two unreviewed prescribed-fix commits; the combined verification then proved both RED→GREEN from pre-fix code), and ad-hoc fix dispatches are currently invisible to the dispatch log (BACKLOG N26) — the tamper-evidence backbone only sees classified dispatches.
+
+---
+
 ## Worktree Session Architecture
 
 ### The Problem

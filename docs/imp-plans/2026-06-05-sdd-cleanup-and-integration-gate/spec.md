@@ -113,7 +113,11 @@ declared `integration_test.path` (de-duped across parent+modules — D18/m2), ve
   `git diff --name-only <base> -- <path>` **∪** `git ls-files --others --exclude-standard -- <path>`
   (tracked-diff OR untracked; the union catches a never-`git add`ed new test).
 - ALL declared paths must pass → `checks["integration_test_present"]=PASS`; any fail → FAIL + blocker
-  `integration_test_missing`. No declaration → PASS (skipped, mirrors Check 9 empty case).
+  `integration_test_present`. No declaration → PASS (skipped, mirrors Check 9 empty case).
+  (As-built: blocker unified to the check key — CheckpointResult's `blockers_reference_check_names`
+  validator requires blockers ∈ checks keys; deviations.md Task 10 row. As-built also FAILs on
+  present-but-malformed declarations — flat string / empty path — closing a silent fail-open found
+  by the final review; commit 911f025.)
 
 **Git mechanism (NEW code — does not exist today).** Reuse ONLY `_resolve_git_root`
 (`controller-checkpoint.py` ~L517). `_check_verification_git_reality` is a timestamp-window `git log`,

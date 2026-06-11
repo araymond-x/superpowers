@@ -117,7 +117,7 @@ Note: Tasks 2, 3, 4 serialize on `controller-checkpoint.py`. Tasks 5, 6 serializ
 
 **Pattern References:** `tests/unit/test_models/test_implementer_report_model.py` — follow existing model test patterns.
 
-- [ ] **Step 1: Write failing tests** in `tests/unit/test_n16_verification_report.py`
+- [x] **Step 1: Write failing tests** in `tests/unit/test_n16_verification_report.py`
 
 Read `tests/unit/test_models/test_implementer_report_model.py` for existing patterns. Write 6 tests:
 
@@ -190,7 +190,7 @@ class TestVerificationExemption:
         assert r.status == "BLOCKED"
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_n16_verification_report.py -v
@@ -198,7 +198,7 @@ class TestVerificationExemption:
 
 Expected: `test_default_is_implementation` FAILS (no `task_type` field), `test_verification_done_empty_files_passes` FAILS (validator rejects it).
 
-- [ ] **Step 3: Add `task_type` field to ImplementerReport**
+- [x] **Step 3: Add `task_type` field to ImplementerReport**
 
 In `skills/scripts/models/implementer_report.py`, add the field and update the validator:
 
@@ -220,7 +220,7 @@ In `skills/scripts/models/implementer_report.py`, add the field and update the v
         return self
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_n16_verification_report.py -v
@@ -228,7 +228,7 @@ In `skills/scripts/models/implementer_report.py`, add the field and update the v
 
 Expected: All 6 tests PASS.
 
-- [ ] **Step 5: Update report template in implementer-prompt.md**
+- [x] **Step 5: Update report template in implementer-prompt.md**
 
 In `skills/subagent-driven-development/implementer-prompt.md`, find the YAML frontmatter template (~line 193-206). Add `task_type` after `task_id`:
 
@@ -239,7 +239,7 @@ In `skills/subagent-driven-development/implementer-prompt.md`, find the YAML fro
     status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
 ```
 
-- [ ] **Step 6: Update SDD SKILL.md verification guidance**
+- [x] **Step 6: Update SDD SKILL.md verification guidance**
 
 In `skills/subagent-driven-development/SKILL.md`, find the "Modified implementer prompt for verification tasks" section (~line 357-359). Add after the auditor quote:
 
@@ -247,11 +247,13 @@ Add a line instructing the subagent: "Set `task_type: verification` in your repo
 
 Check word count stays under 5000: `wc -w skills/subagent-driven-development/SKILL.md`
 
-- [ ] **Step 7: Add validate-report CLI fixture test**
+> **Audit Order 5 (IMPORTANT):** Current SKILL.md is 4904 words — only 96 words of headroom. Keep the addition to a single sentence (e.g., "Set `task_type: verification` in your report frontmatter."). If the resulting count exceeds 4950, extract equivalent content to `references/` first.
+
+- [x] **Step 7: Add validate-report CLI fixture test**
 
 Add a test that writes a complete markdown report file (valid YAML frontmatter with `task_type: verification`, `status: DONE`, `files_changed: []`, plus all 5 prose sections), runs `validate-report.py --report-file <path>`, and asserts exit code 0. Also write a report with `task_type: implementation`, `status: DONE`, `files_changed: []` and assert exit code 1 (Pydantic rejects it). This verifies the N16 fix flows through the full CLI validation pipeline, not just the in-process Pydantic model.
 
-- [ ] **Step 8: Run full existing test suite to check no regressions**
+- [x] **Step 8: Run full existing test suite to check no regressions**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_models/ -v
@@ -260,7 +262,7 @@ Add a test that writes a complete markdown report file (valid YAML frontmatter w
 
 Expected: All tests PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add skills/scripts/models/implementer_report.py \
@@ -280,7 +282,7 @@ git commit -m "feat(N16): add task_type to ImplementerReport, exempt verificatio
 
 **Pattern References:** `tests/unit/test_pre_completion_gates.py` — follow existing checkpoint test patterns.
 
-- [ ] **Step 1: Write failing tests** in `tests/unit/test_n9_plan_loading_helpers.py`
+- [x] **Step 1: Write failing tests** in `tests/unit/test_n9_plan_loading_helpers.py`
 
 Read `tests/unit/test_pre_completion_gates.py` for patterns. Write tests for the two new helpers:
 
@@ -409,7 +411,7 @@ class TestLoadAllPlanContents:
         assert len(result) == 1
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_n9_plan_loading_helpers.py -v
@@ -417,19 +419,21 @@ class TestLoadAllPlanContents:
 
 Expected: ImportError — `_task_ids_where` and `_load_all_plan_contents` don't exist yet.
 
-- [ ] **Step 3: Implement _task_ids_where**
+- [x] **Step 3: Implement _task_ids_where**
 
 In `controller-checkpoint.py`, replace `_declared_minimum_task_ids` (~L232-264) and `_verification_task_ids` (~L267-293) with a single generic `_task_ids_where(plan_contents, field, value) -> (set, bool)`. Same YAML-parse logic, parameterized by field name and target value. Update all callers: `_declared_minimum_task_ids(x)` → `_task_ids_where(x, "review_tier", "minimum")`, `_verification_task_ids(x)` → `_task_ids_where(x, "task_type", "verification")`. Remove the two old functions.
 
-- [ ] **Step 4: Implement _load_all_plan_contents**
+- [x] **Step 4: Implement _load_all_plan_contents**
 
 Add `_load_all_plan_contents(manifest_data, git_root) -> list[str]` to `controller-checkpoint.py`. It reads the parent plan (`manifest_data["plan_file"]`), then each module's file (`<git_root>/<feature_dir>/<module.file>`). De-duplicates by `os.path.realpath`. Skips missing files. Returns list of file content strings. Use the existing `read_file()` helper.
 
-- [ ] **Step 5: Retrofit pre-completion to use _load_all_plan_contents**
+- [x] **Step 5: Retrofit pre-completion to use _load_all_plan_contents**
 
 In `run_pre_completion`, replace the ad-hoc module-file loading block (~lines 1057-1068) with a call to `_load_all_plan_contents`. Replace `_declared_minimum_task_ids` call with `_task_ids_where`: `declared_min, _parsed = _task_ids_where(all_plan_contents, "review_tier", "minimum")`. Replace `_verification_task_ids` call with unpacked `_task_ids_where`: `verification_ids, _ = _task_ids_where(all_plan_contents, "task_type", "verification")` — note the tuple unpack, since `_task_ids_where` returns `(set, bool)` while the old function returned a bare `set`.
 
-- [ ] **Step 6: Run tests — expect PASS**
+> **Audit Order 2 (BLOCKING) — Double-count prevention:** When manifest is present, set `all_plan_contents = _load_all_plan_contents(manifest_data, git_root)` as a **full replacement** — do NOT extend the existing `[plan_content]` seed. Remove the L1046 seed initialization and the L1057-1068 ad-hoc block entirely in the manifest case. When manifest is absent, keep `all_plan_contents = [plan_content]` unchanged (single-file fallback). The helper already de-duplicates by `os.path.realpath`, so the active module appears exactly once. CRITICAL: `_load_manifest_config` mutates `args.plan_file` to the active module (L595-598), so `plan_content` at L1040 is the active module — appending `_load_all_plan_contents` output would double-count it.
+
+- [x] **Step 6: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_n9_plan_loading_helpers.py -v
@@ -438,7 +442,7 @@ In `run_pre_completion`, replace the ad-hoc module-file loading block (~lines 10
 
 Expected: All tests PASS, including existing pre-completion tests (behavior unchanged).
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py \
@@ -458,7 +462,7 @@ git commit -m "refactor(N9): collapse declared-min/verif helpers into _task_ids_
 
 **Pattern References:** `tests/unit/test_validate_plan.py`, `tests/unit/test_pre_completion_gates.py`
 
-- [ ] **Step 1: Write failing tests** in `tests/unit/test_fence_aware_parsing.py`
+- [x] **Step 1: Write failing tests** in `tests/unit/test_fence_aware_parsing.py`
 
 ```python
 """N5: Fence-aware task-header parsing at all 7 sites.
@@ -553,7 +557,7 @@ class TestCheckpointFenceAware:
         assert cbs["unchecked"] == 2  # Step A + Step B, not the fenced one
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py -v
@@ -561,7 +565,7 @@ class TestCheckpointFenceAware:
 
 Expected: Tests FAIL because current parsing is fence-blind.
 
-- [ ] **Step 3: Add fence-aware helpers**
+- [x] **Step 3: Add fence-aware helpers**
 
 Add a helper function to each script that filters out lines inside fence blocks. The approach: track fence state while iterating lines, mark fenced lines.
 
@@ -596,10 +600,10 @@ Route all 3 sites through it:
 In `controller-checkpoint.py`, add the same helper and route 4 sites:
 1. `count_tasks`: apply to content before regex
 2. `has_task_zero` (~L429): apply to content before regex
-3. `get_task_checkbox_range` (~L474): pass the **entire** unfenced content to the function (not just for header search) — fenced checkboxes must also be excluded from the count
-4. `all_tasks_have_reports` (~L506): apply to content for task number extraction
+3. `get_task_checkbox_range` (~L474): apply `_unfenced_content` **inside** the function body (not at the call site). The Step 1 test passes raw fenced content and expects the function to ignore fenced checkboxes internally. (Audit Order 4 clarification: unfence internally, not caller-side.)
+4. `all_tasks_have_reports` (~L506): apply to content for task number extraction. (Auditor cross-ref: this is an 8th fence-affected site not counted in the "7 sites" — apply `_unfenced_content` here too for completeness.)
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py -v
@@ -609,7 +613,7 @@ In `controller-checkpoint.py`, add the same helper and route 4 sites:
 
 Expected: All tests PASS.
 
-- [ ] **Step 5: N13 — Backport mkdir lines to hardening plan**
+- [x] **Step 5: N13 — Backport mkdir lines to hardening plan**
 
 In `docs/imp-plans/2026-06-01-sdd-enforcement-hardening/plan.md`, find the Task 4 code snippet (~line 801-802) where `setup_manifest_workspace` is called. Add the two missing `mkdir()` calls that were discovered during execution:
 
@@ -621,7 +625,7 @@ Find the first `_impl(reports / ...)` call in the Task 4 snippet and add before 
 
 This is a documentation fix — the test code itself already works (it was fixed during implementation).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/validate-plan.py \
@@ -640,7 +644,7 @@ git commit -m "fix(N5): fence-aware task-header parsing at all 7 sites; fix(N13)
 
 **Pattern References:** `tests/unit/test_pre_completion_gates.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `tests/unit/test_fence_aware_parsing.py` (or inline in the existing checkpoint test file — follow the test organization convention):
 
@@ -670,7 +674,7 @@ class TestSourceContractsNonePass:
         assert sc["status"] != "FAIL", f"Source Contracts: None should PASS, got {sc}"
 ```
 
-- [ ] **Step 2: Run test — expect FAIL**
+- [x] **Step 2: Run test — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py::TestSourceContractsNonePass -v
@@ -678,7 +682,7 @@ class TestSourceContractsNonePass:
 
 Expected: FAIL — current code treats "None" as non-empty content after the header.
 
-- [ ] **Step 3: Fix source_contracts_non_empty**
+- [x] **Step 3: Fix source_contracts_non_empty**
 
 In `controller-checkpoint.py`, modify the `source_contracts_non_empty` function (~L444-465). The fix: treat "None", "N/A", empty, and "—" as valid-absent (return False), so the pre-execution check at ~L690-694 gets `PASS` instead of `FAIL`.
 
@@ -713,7 +717,11 @@ Replace the source_contracts check block (~L683-694):
 
 The key change: `None`/empty source contracts → `OK` (was `FAIL` + blocker).
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 3b: Consolidate `_unfenced_content` into `_report_utils.py` (scope addition 2026-06-10 — Task 3 quality review Important Issue 2 + partner-review finding; see deviations.md Scope Changes)**
+
+Move the byte-identical `_unfenced_content` helper out of `validate-plan.py` and `controller-checkpoint.py` into `skills/subagent-driven-development/scripts/_report_utils.py` (the declared shared library / single source of truth). Update BOTH scripts to import it — follow the existing sibling-import pattern (`_midpoint.py` is imported by materialize-manifest.py and transition-module.py; check how those scripts and their importlib-loading tests handle the sibling import, and mirror it). Delete both local copies. All existing fence-aware tests must pass unchanged — they exercise behavior through the scripts' public functions, not the helper directly. Commit the consolidation as a SEPARATE commit: `refactor(SSOT): consolidate _unfenced_content into _report_utils.py`.
+
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py::TestSourceContractsNonePass -v
@@ -722,7 +730,7 @@ The key change: `None`/empty source contracts → `OK` (was `FAIL` + blocker).
 
 Expected: All tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py \
@@ -739,7 +747,7 @@ git commit -m "fix(N7): Source Contracts None/empty treated as valid-absent, not
 
 **Pattern References:** `tests/unit/test_transition_module.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `tests/unit/test_transition_module.py` (extend existing file):
 
@@ -760,13 +768,13 @@ class TestN12SplitFileProvenance:
 
 Read `tests/unit/test_transition_module.py` for the exact workspace setup pattern, then fill in the test bodies with real setup code following the existing patterns.
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_transition_module.py::TestN12SplitFileProvenance -v
 ```
 
-- [ ] **Step 3: Fix validate_module_completion**
+- [x] **Step 3: Fix validate_module_completion**
 
 In `transition-module.py:validate_module_completion` (~L122-130), the current code gates both file-existence AND provenance on `process_requirements.{spec,quality}_review_mode != "skip"`. The fix: keep file-existence under `review_mode != "skip"`, but gate ONLY `_has_dispatch_provenance()` on `manifest.enforcement.dispatch_provenance`.
 
@@ -782,13 +790,13 @@ In `transition-module.py:validate_module_completion` (~L122-130), the current co
             # ... same pattern for quality: file-existence always, provenance only when enforced
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_transition_module.py -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/transition-module.py \
@@ -805,7 +813,7 @@ git commit -m "fix(N12): gate only provenance on dispatch_provenance, not file-e
 
 **Pattern References:** `tests/unit/test_transition_module.py`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `tests/unit/test_transition_module.py`:
 
@@ -819,13 +827,13 @@ class TestN17MainPlanFallback:
         pass  # fill with actual setup
 ```
 
-- [ ] **Step 2: Run test — expect FAIL**
+- [x] **Step 2: Run test — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_transition_module.py::TestN17MainPlanFallback -v
 ```
 
-- [ ] **Step 3: Add main-plan fallback**
+- [x] **Step 3: Add main-plan fallback**
 
 In `transition-module.py`, at ~line 109-112, where `verif_ids` is populated:
 
@@ -841,13 +849,13 @@ In `transition-module.py`, at ~line 109-112, where `verif_ids` is populated:
 
 This mirrors `sdd-pre-dispatch-hook.sh:297-298` which already has this fallback.
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_transition_module.py -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/transition-module.py \
@@ -866,7 +874,7 @@ git commit -m "fix(N17): fall back to main plan for verification-id lookup when 
 
 This is test-only. No hook edits. No baseline recapture.
 
-- [ ] **Step 1: Write the regression test**
+- [x] **Step 1: Write the regression test**
 
 Read `tests/unit/test_sdd_classification.py` for the `make_hook_input` and `setup_manifest_workspace` patterns. The test must prove that the hook accumulates multiple errors (via `ERRORS+=()`) and emits ALL of them before exiting, rather than short-circuiting on the first failure.
 
@@ -931,7 +939,7 @@ class TestMultiErrorAccumulation:
         assert result.returncode == 2
 ```
 
-- [ ] **Step 2: Run test — expect PASS**
+- [x] **Step 2: Run test — expect PASS**
 
 This test should already PASS on the current hook (it already accumulates errors). This is a regression guard, not a bug fix.
 
@@ -941,13 +949,13 @@ This test should already PASS on the current hook (it already accumulates errors
 
 Expected: PASS (hook already accumulates).
 
-- [ ] **Step 3: Verify no hook files touched**
+- [x] **Step 3: Verify no hook files touched**
 
 ```bash
 git diff --name-only | grep -c "\.sh$"  # should be 0
 ```
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/unit/test_n1_multi_error_accumulation.py

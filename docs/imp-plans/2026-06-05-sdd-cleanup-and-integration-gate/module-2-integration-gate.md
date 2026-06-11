@@ -87,7 +87,7 @@ Note: Tasks 8, 9, 10 each write to `tests/unit/test_c2_integration_gate.py` but 
 
 **Pattern References:** `tests/unit/test_models/` — Pydantic model test patterns.
 
-- [ ] **Step 1: Write failing tests** in `tests/unit/test_c2_integration_gate.py`
+- [x] **Step 1: Write failing tests** in `tests/unit/test_c2_integration_gate.py`
 
 ```python
 """C2: Integration-test gate — model, validate-plan WARNING, Check 10.
@@ -137,7 +137,7 @@ class TestIntegrationTestModel:
         assert p.integration_test.path == "tests/e2e.sh"
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestIntegrationTestModel -v
@@ -145,7 +145,7 @@ class TestIntegrationTestModel:
 
 Expected: ImportError — `IntegrationTest` doesn't exist yet.
 
-- [ ] **Step 3: Add IntegrationTest model to plan.py**
+- [x] **Step 3: Add IntegrationTest model to plan.py**
 
 In `skills/scripts/models/plan.py`, add the model and field:
 
@@ -173,7 +173,7 @@ class Plan(SchemaVersionedModel):
     integration_test: IntegrationTest | None = None
 ```
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestIntegrationTestModel -v
@@ -182,7 +182,7 @@ class Plan(SchemaVersionedModel):
 
 Expected: All tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/scripts/models/plan.py \
@@ -197,10 +197,17 @@ git commit -m "feat(C2): add IntegrationTest model + Plan.integration_test field
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/validate-plan.py`
 - Modify: `tests/unit/test_c2_integration_gate.py` (add WARNING tests)
+- Modify (Step 0 scope additions): `skills/subagent-driven-development/scripts/_report_utils.py`, `skills/scripts/models/plan.py`
 
 **Pattern References:** `tests/unit/test_validate_plan.py`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 0: Review-driven scope additions (2026-06-10 — see deviations.md; each is small and mechanical)**
+
+  - **0a (Task 4 quality review Important 1):** Make `_report_utils.py`'s `implementer_report` import lazy (move `from implementer_report import ...` into the function(s) that need it, or an accessor), so importing `unfenced_content`/`_unfenced_content` does NOT pull pydantic — restoring validate-plan.py's stdlib-only property (plan-validation-gate-hook.sh:165 invokes it with bare `python3` and silently fails open on a pydantic-less machine). Verify: `python3 -c "import sys; sys.path.insert(0, 'skills/subagent-driven-development/scripts'); import importlib.util as iu; spec=iu.spec_from_file_location('vp','skills/subagent-driven-development/scripts/validate-plan.py'); m=iu.module_from_spec(spec); spec.loader.exec_module(m); assert 'pydantic' not in sys.modules"` passes.
+  - **0b (Task 8 quality review Important 1):** In `plan.py`'s `IntegrationTest.path_must_be_relative_and_safe`, reject empty/whitespace-only paths (`if not v.strip(): raise ValueError(...)`). Add pin tests to `TestIntegrationTestModel`: empty string rejected, bare `".."` rejected.
+  - **0c (Task 8 quality review Minor 2):** In `test_c2_integration_gate.py`, drop the redundant module-level `sys.path.insert` (conftest.py already inserts the models dir) and hoist `from plan import IntegrationTest, Plan` to module level, matching test_models/ convention.
+
+- [x] **Step 1: Write failing tests**
 
 Append to `tests/unit/test_c2_integration_gate.py`:
 
@@ -255,13 +262,13 @@ class TestC2RiskSurfaceWarning:
         assert len(risk_warns) == 0
 ```
 
-- [ ] **Step 2: Run tests — expect FAIL**
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestC2RiskSurfaceWarning -v
 ```
 
-- [ ] **Step 3: Add risk-surface WARNING to validate-plan.py**
+- [x] **Step 3: Add risk-surface WARNING to validate-plan.py**
 
 In `validate-plan.py`, add after the verification keyword heuristic section:
 
@@ -294,14 +301,14 @@ def check_integration_test_risk(content: str, frontmatter: dict | None) -> list[
 
 Call it from `validate_plan()` after the verification keyword check, passing `content` and `frontmatter`.
 
-- [ ] **Step 4: Run tests — expect PASS**
+- [x] **Step 4: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestC2RiskSurfaceWarning -v
 .venv/bin/python3 -m pytest tests/unit/test_validate_plan.py -v
 ```
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/validate-plan.py \
@@ -319,7 +326,9 @@ git commit -m "feat(C2): validate-plan.py risk-surface WARNING when integration_
 
 **Pattern References:** `tests/unit/test_pre_completion_gates.py` — pre-completion check patterns (Check 8/9).
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 0: Task 9 review fold-in (2026-06-10, small):** In validate-plan.py, add a `sections["integration_test_risk"]` entry alongside the warning for parity with the neighboring heuristics (3 lines, mirror their structure). In test_c2_integration_gate.py, add 2 cheap tests: frontmatter-less plan with risk content → warns; explicit `integration_test: null` in frontmatter → still warns. Include in the Task 10 commit or a tiny prep commit.
+
+- [x] **Step 1: Write failing tests**
 
 Append to `tests/unit/test_c2_integration_gate.py`. Build a `_run_checkpoint` helper (subprocess wrapper for `controller-checkpoint.py --phase pre-completion --manifest ...`) and write 6 tests using a `_H` variable for task headers to avoid plan-validator false match:
 
@@ -350,7 +359,9 @@ class TestC2Check10:
 
 6 fixtures: (1) no declaration → PASS/SKIP; (2) declared but missing on disk → FAIL; (3) untracked-new after commit → PASS; (4) pre-committed unchanged → FAIL; (5) tracked then modified → PASS; (6) parent-only declaration in modular plan → the declared path is checked (FAIL if missing). Read `tests/unit/test_pre_completion_gates.py` for the git-init + subprocess pattern. Use `_plan_str()` helper and `_MICRO` manifest base.
 
-- [ ] **Step 2: Run tests — expect FAIL**
+> **Audit Order 1 (BLOCKING) — 7th fixture required:** Add a 7th fixture that exercises the PRIMARY merge-base diff path (not the fallback). Create a `main` branch with a base commit, create a feature branch, commit the integration test file on the branch, leave the working tree CLEAN, and assert Check 10 PASS. This path is what runs when this feature gates its own completion (committed test file, clean working tree, merge-base != HEAD). All other fixtures use single-commit repos where merge-base == HEAD, exercising only the fallback path.
+
+- [x] **Step 2: Run tests — expect FAIL**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestC2Check10 -v
@@ -358,7 +369,7 @@ class TestC2Check10:
 
 Expected: FAIL — `integration_test_present` check key absent.
 
-- [ ] **Step 3: Add helpers `_resolve_base_ref` and `_in_changeset`**
+- [x] **Step 3: Add helpers `_resolve_base_ref` and `_in_changeset`**
 
 In `controller-checkpoint.py`, add before `run_pre_completion`:
 
@@ -366,18 +377,20 @@ In `controller-checkpoint.py`, add before `run_pre_completion`:
 
 `_in_changeset(path, base_ref, git_root) -> bool`: first compute `merge_base = git merge-base <base_ref> HEAD` to isolate feature changes from base-branch drift. Then union: `git ls-files --others --exclude-standard -- <path>` (untracked) and `git diff --name-only <merge_base> -- <path>` (tracked diff against merge-base, not raw base ref). Returns True if any produces output. If merge-base computation fails (e.g., on default branch where merge-base == HEAD), fall back to untracked + `git diff --name-only HEAD -- <path>` (working-tree only).
 
-- [ ] **Step 4: Implement Check 10 in `run_pre_completion`**
+- [x] **Step 4: Implement Check 10 in `run_pre_completion`**
 
-After Check 9 (git reality), add Check 10. Aggregate `integration_test.path` from all `all_plan_contents` frontmatter (YAML parse, same pattern as _task_ids_where). Per path: `is_file()` + `_in_changeset()`. No declaration → PASS (skipped). Any missing/unchanged → FAIL + `integration_test_missing` blocker. Use `_resolve_git_root` (existing) for the git root.
+After Check 9 (git reality), add Check 10. Aggregate `integration_test.path` from all `all_plan_contents` frontmatter. Per path: `is_file()` + `_in_changeset()`. No declaration → PASS (skipped). Any missing/unchanged → FAIL + `integration_test_missing` blocker. Use `_resolve_git_root` (existing) for the git root.
 
-- [ ] **Step 5: Run tests — expect PASS**
+> **Audit Order 3 (IMPORTANT):** `integration_test` is a **top-level** frontmatter field, NOT a per-task field. Do NOT use `_task_ids_where` (which walks `fm["tasks"][]`). Instead, YAML-parse each plan content string, then extract `fm.get("integration_test", {}).get("path")`. The helper to reuse for aggregation is `_load_all_plan_contents` (from Task 2/N9) — the extraction itself is a simple top-level dict lookup, not the task-level `_task_ids_where` pattern.
+
+- [x] **Step 5: Run tests — expect PASS**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py::TestC2Check10 -v
 .venv/bin/python3 -m pytest tests/unit/test_pre_completion_gates.py -v
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/controller-checkpoint.py \
@@ -393,7 +406,7 @@ git commit -m "feat(C2): Check 10 pre-completion integration-test gate with chan
 - Modify: `skills/writing-plans/SKILL.md`
 - Modify: `tests/integration/sdd-e2e-test.sh`
 
-- [ ] **Step 1: Add C2 documentation to writing-plans/SKILL.md**
+- [x] **Step 1: Add C2 documentation to writing-plans/SKILL.md**
 
 In `skills/writing-plans/SKILL.md`, add a section after "Declaring `task_type` per Task" (or before the "No Placeholders" section):
 
@@ -414,7 +427,7 @@ When no `integration_test` is declared, `validate-plan.py` emits an advisory WAR
 
 Check word count: `wc -w skills/writing-plans/SKILL.md` — must stay under 5000.
 
-- [ ] **Step 2: Add C2 e2e step to sdd-e2e-test.sh**
+- [x] **Step 2: Add C2 e2e step to sdd-e2e-test.sh**
 
 In `tests/integration/sdd-e2e-test.sh`, add a step that exercises Check 10 with an untracked test file and a parent-only declaration. Read the existing step patterns (steps 9-10 for verification keyword) and follow the same structure.
 
@@ -424,7 +437,7 @@ The step should:
 3. Run controller-checkpoint.py pre-completion
 4. Assert `integration_test_present` check is PASS
 
-- [ ] **Step 3: Run the full test suites**
+- [x] **Step 3: Run the full test suites**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/ -v
@@ -434,7 +447,7 @@ bash tests/integration/sdd-e2e-test.sh
 
 Expected: All suites green.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/writing-plans/SKILL.md \
