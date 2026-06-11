@@ -192,6 +192,7 @@ Task tool (general-purpose):
     ---
     schema_version: 1
     task_id: [your task number]
+    task_type: implementation
     status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     files_changed:
       - path: "path/to/file.py"

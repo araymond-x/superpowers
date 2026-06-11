@@ -105,11 +105,15 @@ def validate_module_completion(
     pr = manifest.process_requirements
 
     # Per-task verification exemption (mirrors sdd-pre-dispatch-hook.sh): read the
-    # completing module's own plan file for task_type declarations.
+    # completing module's own plan file for task_type declarations. N17: when the
+    # module has no per-module file, fall back to the main plan (hook lines ~294-299).
     verif_ids: set = set()
     if module.file:
         module_plan = os.path.join(git_root, manifest.paths.feature_dir, module.file)
         verif_ids = _verification_task_ids_from_file(module_plan)
+    else:
+        main_plan = os.path.join(git_root, manifest.plan_file)
+        verif_ids = _verification_task_ids_from_file(main_plan)
 
     for task_id in module.task_ids:
         padded = f"{task_id:03d}"
@@ -124,7 +128,9 @@ def validate_module_completion(
             spec_report = os.path.join(reports_dir, f"task-{padded}-spec-review.md")
             if not os.path.isfile(spec_report) or os.path.getsize(spec_report) < 50:
                 errors.append(f"Task {task_id}: missing or empty spec review")
-            elif not _has_dispatch_provenance(dispatch_log, task_id, "spec-review"):
+            elif manifest.enforcement.dispatch_provenance and not _has_dispatch_provenance(
+                dispatch_log, task_id, "spec-review"
+            ):
                 errors.append(f"Task {task_id}: spec review not provenance-logged")
 
         if pr.quality_review_mode != "skip":
@@ -144,7 +150,9 @@ def validate_module_completion(
                 errors.append(f"Task {task_id}: missing or empty quality review")
             elif has_min:
                 pass  # file-based minimum signal waives quality-review provenance
-            elif not _has_dispatch_provenance(dispatch_log, task_id, "quality-review"):
+            elif manifest.enforcement.dispatch_provenance and not _has_dispatch_provenance(
+                dispatch_log, task_id, "quality-review"
+            ):
                 errors.append(f"Task {task_id}: quality review not provenance-logged")
 
     return errors

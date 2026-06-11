@@ -2,7 +2,8 @@
 _report_utils.py
 
 Shared utilities for report parsing, section detection, and content heuristics.
-Used by validate-report.py, controller-checkpoint.py, and context-summary.py.
+Used by validate-report.py, controller-checkpoint.py, context-summary.py, and
+validate-plan.py.
 
 VALID_STATUSES is re-exported from the Pydantic model (single source of truth).
 Prose section validation covers the 5 sections that remain in the markdown body
@@ -14,10 +15,23 @@ import re
 import sys
 from pathlib import Path
 
-# Re-export VALID_STATUSES from the Pydantic model (single source of truth)
-sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
-from implementer_report import Status
-VALID_STATUSES = set(Status.__args__)
+# VALID_STATUSES re-exports from the Pydantic model (single source of truth).
+# Resolved lazily via module __getattr__ (PEP 562) so that importing this module
+# — e.g. validate-plan.py pulling _unfenced_content — stays stdlib-only and does
+# NOT load pydantic. plan-validation-gate-hook.sh invokes validate-plan.py with
+# bare python3; an eager pydantic import would silently fail open on a
+# pydantic-less machine.
+def __getattr__(name):
+    if name == "VALID_STATUSES":
+        sys.path.insert(
+            0, str(Path(__file__).resolve().parent / "../../scripts/models")
+        )
+        from implementer_report import Status
+
+        value = set(Status.__args__)
+        globals()["VALID_STATUSES"] = value  # cache for subsequent lookups
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 # Required prose sections — 5 remain after Phase 2 moved 4 to frontmatter
 REQUIRED_SECTIONS = [
@@ -42,6 +56,30 @@ PROMPT_PLACEHOLDER_PHRASES = [
     "none found in modified directories",
     "no contract constraints for this task",
 ]
+
+
+def _unfenced_content(text: str) -> str:
+    """Return text with lines inside ``` fence blocks replaced by blank lines.
+
+    Preserves line count so that line-index-based logic (span measurement,
+    header positions) remains valid after filtering.
+
+    Single source of truth — imported by validate-plan.py and
+    controller-checkpoint.py for fence-aware task-header parsing (N5).
+    """
+    lines = text.splitlines(keepends=True)
+    result = []
+    in_fence = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("```"):
+            in_fence = not in_fence
+            result.append("\n")
+        elif in_fence:
+            result.append("\n")
+        else:
+            result.append(line)
+    return "".join(result)
 
 
 def find_sections(content):

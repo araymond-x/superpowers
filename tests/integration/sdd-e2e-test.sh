@@ -387,5 +387,62 @@ fi
 echo "PASS: Step 10 — verification keyword WARNING"
 
 echo ""
-echo "E2E PIPELINE PASS - 11 steps composed correctly"
+# Step 11: integration_test declaration → pre-completion Check 10 PASS (C2)
+echo "=== Step 11: Integration-test gate (Check 10) ==="
+
+IT=docs/imp-plans/it-feature
+mkdir -p "$IT/reports"
+IT_DEV="$IT/deviations.md"; echo "# Deviations" > "$IT_DEV"
+IT_TEST=tests/integration/it-feature-e2e-test.sh
+
+cat > "$IT/plan.md" << 'INNER'
+---
+schema_version: 1
+feature_archetype: extension
+enforcement_tier: standard
+source_contracts: null
+integration_test:
+  path: tests/integration/it-feature-e2e-test.sh
+tasks:
+  - id: 0
+    title: "Zero"
+---
+# IT Feature
+**Source Contracts**: None
+**Feature Archetype**: Extension
+## Code Footprint
+### Task 0: Zero
+- [x] done
+INNER
+
+$PYTHON $PROJECT/skills/subagent-driven-development/scripts/materialize-manifest.py \
+  --plan-file "$IT/plan.md" --feature-dir "$IT" > /dev/null
+
+# Check 10's changeset verification needs a resolvable base ref with a commit
+# (the workspace repo has none so far): commit everything, pin the branch name
+# to main, THEN create the declared test file UNTRACKED — the untracked-file
+# branch of _in_changeset is what this step exercises.
+git -C "$WORK" add -A
+git -C "$WORK" -c user.name=e2e -c user.email=e2e@test commit -q -m "base" --no-gpg-sign
+git -C "$WORK" branch -M main
+mkdir -p "$(dirname "$IT_TEST")"
+echo '#!/bin/bash' > "$IT_TEST"
+
+ITOUT=$(mktemp)
+# `|| true` REQUIRED — other pre-completion blockers (honesty, trace audit) FAIL
+# in this stub fixture; we assert only the integration_test_present check.
+$PYTHON $PROJECT/skills/subagent-driven-development/scripts/controller-checkpoint.py \
+  --phase pre-completion --manifest "$IT/.sdd-session.json" \
+  --deviations-file "$IT_DEV" --reports-dir "$IT/reports" > "$ITOUT" 2>&1 || true
+IT_STATUS=$(python3 -c "import json; print(json.load(open('$ITOUT'))['checks']['integration_test_present']['status'])")
+IT_DETAIL=$(python3 -c "import json; print(json.load(open('$ITOUT'))['checks']['integration_test_present']['detail'])")
+rm "$ITOUT"
+if [ "$IT_STATUS" != "PASS" ]; then
+  echo "FAIL: integration_test_present is $IT_STATUS ($IT_DETAIL)"
+  exit 1
+fi
+echo "PASS: Step 11 — declared integration test (untracked) passes Check 10"
+
+echo ""
+echo "E2E PIPELINE PASS - 12 steps composed correctly"
 rm -rf "$WORK"

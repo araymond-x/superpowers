@@ -26,6 +26,10 @@ import sys
 import tempfile
 from typing import Dict, List, Optional, Tuple
 
+# Sibling scripts dir — importlib-loaded consumers (tests) don't put it on sys.path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _report_utils import _unfenced_content  # noqa: E402  (single source of truth)
+
 # -----------------------------------------------------------------------
 # Thresholds
 # -----------------------------------------------------------------------
@@ -137,7 +141,7 @@ def extract_inline_value(content: str, pattern: re.Pattern) -> Optional[str]:
 
 def extract_task_numbers(content: str) -> List[int]:
     """Extract all task numbers from ### Task N headers in the given content."""
-    return [int(m) for m in TASK_HEADER_RE.findall(content)]
+    return [int(m) for m in TASK_HEADER_RE.findall(_unfenced_content(content))]
 
 
 def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
@@ -154,9 +158,13 @@ def analyse_tasks(lines: List[str]) -> Tuple[List[Dict], List[str], List[str]]:
     warnings: List[str] = []
     blockers: List[str] = []
 
+    # Unfence: replace fenced lines with blanks to skip code-block task headers.
+    # Line count is preserved so span indices remain valid.
+    unfenced_lines = _unfenced_content("\n".join(lines)).splitlines()
+
     # Collect (line_index, task_number, task_name) for all task headers
     header_positions: List[Tuple[int, int, str]] = []
-    for idx, line in enumerate(lines):
+    for idx, line in enumerate(unfenced_lines):
         m = re.match(r"^###\s+Task\s+(\d+)\s*(.*)", line, re.IGNORECASE)
         if m:
             task_num = int(m.group(1))
@@ -260,13 +268,14 @@ def check_sections(lines: List[str], full_content: str) -> Dict:
         "present": bool(WRITE_SCOPE_RE.search(full_content))
     }
 
-    # Task 0 / Contract Verification
+    # Task 0 / Contract Verification — use unfenced content to ignore code blocks
+    unfenced_full = _unfenced_content(full_content)
     task_zero_match = re.search(
-        r"^###\s+Task\s+0\b", full_content, re.MULTILINE | re.IGNORECASE
+        r"^###\s+Task\s+0\b", unfenced_full, re.MULTILINE | re.IGNORECASE
     )
     task_zero_present = bool(task_zero_match)
     # Is task 0 the first task header that appears?
-    first_task = TASK_HEADER_RE.search(full_content)
+    first_task = TASK_HEADER_RE.search(unfenced_full)
     is_first = False
     if task_zero_present and first_task:
         first_num = int(first_task.group(1))
@@ -401,6 +410,36 @@ def check_verification_keyword_heuristic(frontmatter: Optional[Dict]) -> List[st
                     tid, task.get("title", ""), ", ".join(matched)
                 )
             )
+    return warnings
+
+
+# -----------------------------------------------------------------------
+# integration-test risk-surface heuristic (C2)
+# -----------------------------------------------------------------------
+
+_C2_RISK_PATTERNS = re.compile(
+    r"\b(?:router|routes/|middleware|auth|migration|cache|cors|security)\b",
+    re.IGNORECASE,
+)
+
+
+def check_integration_test_risk(content: str, frontmatter: Optional[Dict]) -> List[str]:
+    """Warn when plan content matches risk-surface patterns but has no integration_test."""
+    warnings: List[str] = []
+    has_integration_test = (
+        isinstance(frontmatter, dict)
+        and frontmatter.get("integration_test") is not None
+    )
+    if has_integration_test:
+        return warnings
+    if _C2_RISK_PATTERNS.search(content):
+        warnings.append(
+            "integration_test_risk_surface: Plan content matches risk-surface patterns "
+            "(router/middleware/auth/migration/cache/cors/security) but no "
+            "integration_test is declared in frontmatter. Consider adding "
+            "integration_test: {path: 'tests/integration/...'} to declare the "
+            "integration test that validates this feature."
+        )
     return warnings
 
 
@@ -660,6 +699,16 @@ def validate_plan(
         sections["verification_keyword_heuristic"] = {
             "status": "WARNING",
             "detail": " | ".join(vk_warnings),
+        }
+
+    # --- integration-test risk-surface heuristic (C2) ---
+    it_warnings = check_integration_test_risk(content, frontmatter)
+    for w in it_warnings:
+        warnings.append(w)
+    if it_warnings:
+        sections["integration_test_risk"] = {
+            "status": "WARNING",
+            "detail": " | ".join(it_warnings),
         }
 
     # --- Overall status ---

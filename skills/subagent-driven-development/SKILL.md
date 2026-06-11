@@ -358,6 +358,8 @@ Tasks with `task_type: verification` are read-only audits dispatched as subagent
 
 > "You are a read-only auditor. Do not create, modify, or delete any repository files. Your report text is your only output. If you discover something that needs fixing, describe it in your report — do not fix it."
 
+Set `task_type: verification` in your report frontmatter.
+
 **Defense-in-depth:**
 - Plan-time: `validate-plan.py` warns on write-suggesting keywords in verification titles
 - Pre-completion: verification tasks capped at ≤30% of total tasks

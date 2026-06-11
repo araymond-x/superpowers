@@ -1,7 +1,8 @@
 """Pydantic model for Plan artifacts (YAML frontmatter)."""
+import os
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from _base import StrictModel, SchemaVersionedModel
 from sdd_session import Tier
@@ -19,6 +20,21 @@ class PatternReference(StrictModel):
     name: str
     source_files: list[str]
     reason: str
+
+
+class IntegrationTest(StrictModel):
+    path: str
+
+    @field_validator("path")
+    @classmethod
+    def path_must_be_relative_and_safe(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("integration_test path must not be empty")
+        if os.path.isabs(v):
+            raise ValueError(f"integration_test path must not be absolute: {v}")
+        if ".." in v.split("/"):
+            raise ValueError(f"integration_test path must not contain '..': {v}")
+        return v
 
 
 class Task(StrictModel):
@@ -47,6 +63,7 @@ class Plan(SchemaVersionedModel):
     shared_constants: list[SharedConstant] = Field(default_factory=list)
     pattern_references: list[PatternReference] = Field(default_factory=list)
     modules: list[Module] | None = None
+    integration_test: IntegrationTest | None = None
     tasks: list[Task]
 
     @model_validator(mode="after")

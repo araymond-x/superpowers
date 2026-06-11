@@ -876,6 +876,10 @@ def _transition_requires_quality_prov(tmp_path, min_file, provenance):
 
 @pytest.mark.parametrize("min_file,provenance", [(True, False), (False, False), (False, True), (True, True)])
 def test_minimum_signal_agreement(tmp_path, min_file, provenance):
+    # The two drivers each git-init their own root before mkdir-ing it; pytest
+    # creates only the base tmp_path, so these subdirs must exist first.
+    (tmp_path / "hook").mkdir()
+    (tmp_path / "trans").mkdir()
     hook = _hook_requires_quality_prov(tmp_path / "hook", min_file, provenance)
     trans = _transition_requires_quality_prov(tmp_path / "trans", min_file, provenance)
     assert hook == trans, (

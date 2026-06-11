@@ -59,7 +59,7 @@ baselined hook → NO `check-hooks.sh --capture`.**
   `git log`, not a diff). Base resolver: `origin/HEAD` → `main` → `master`; FAIL (infra error) if none.
   On default branch (`merge-base == HEAD`) committed diff is empty → rely on untracked + working-tree set.
   Compare against the **working tree** (not `<base>..HEAD`).
-- Pass → `checks["integration_test_present"]=PASS`; any fail → FAIL + blocker `integration_test_missing`.
+- Pass → `checks["integration_test_present"]=PASS`; any fail → FAIL + blocker `integration_test_present`. (As-built: blocker unified to the check key per the CheckpointResult validator; also FAILs on present-but-malformed declarations — see deviations.md.)
   No declaration → PASS (skipped).
 - **Contract honesty:** proves the test is *part of the changeset* (added OR modified) — NOT brand-new;
   modifying an existing integration test is acceptable.

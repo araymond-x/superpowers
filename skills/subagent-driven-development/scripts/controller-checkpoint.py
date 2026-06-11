@@ -47,6 +47,10 @@ from _base import CURRENT_SCHEMA_VERSION
 from checkpoint_result import CheckpointResult, CheckResult, Progress
 from sdd_session import SddSession
 
+# Sibling scripts dir — importlib-loaded consumers (tests) don't put it on sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _report_utils import _unfenced_content  # noqa: E402  (single source of truth)
+
 # Character-to-token approximation (standard industry estimate: 1 token = 4 chars)
 CHARS_PER_TOKEN = 4
 
@@ -103,7 +107,7 @@ def file_size_bytes(path: str) -> int:
 
 def count_tasks(plan_content: str) -> int:
     """Count the number of task headers in the plan (### Task N patterns)."""
-    return len(TASK_HEADER_PATTERN.findall(plan_content))
+    return len(TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content)))
 
 
 def count_checkboxes(plan_content: str) -> dict:
@@ -229,17 +233,17 @@ def _review_tiers_per_task(reports_dir, review_type):
     return results
 
 
-def _declared_minimum_task_ids(plan_contents):
-    # type: (list) -> tuple
-    """Collect task IDs declaring review_tier=='minimum' from plan frontmatter.
+def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
+    """Return (set_of_task_ids, parsed_any_frontmatter) where task[field] == value.
 
-    Returns (set_of_ids, parsed_any:bool). Uses raw yaml.safe_load on the
-    frontmatter (NOT the strict Pydantic Plan model) so an unrelated validation
-    issue cannot take down the ratio check; reads only tasks[].review_tier/id.
+    Uses raw yaml.safe_load on the frontmatter (NOT the strict Pydantic Plan
+    model) so an unrelated validation issue cannot take down the ratio check.
+    Reads only tasks[].field and tasks[].id from each plan file's frontmatter.
     """
     import yaml
 
-    declared, parsed_any = set(), False
+    ids: set = set()
+    parsed = False
     for content in plan_contents:
         if not content or not content.startswith("---"):
             continue
@@ -253,44 +257,49 @@ def _declared_minimum_task_ids(plan_contents):
         tasks = fm.get("tasks") if isinstance(fm, dict) else None
         if not isinstance(tasks, list):
             continue
-        parsed_any = True
+        parsed = True
         for t in tasks:
             if (
                 isinstance(t, dict)
-                and t.get("review_tier") == "minimum"
+                and t.get(field) == value
                 and isinstance(t.get("id"), int)
             ):
-                declared.add(t["id"])
-    return declared, parsed_any
+                ids.add(t["id"])
+    return ids, parsed
 
 
-def _verification_task_ids(plan_contents):
-    # type: (list) -> set
-    """Collect task IDs declaring task_type=='verification' from plan frontmatter."""
-    import yaml
+def _load_all_plan_contents(manifest_data: dict, git_root: str) -> list:
+    """Load parent plan + all module plan files, deduplicated by realpath.
 
-    result = set()
-    for content in plan_contents:
-        if not content or not content.startswith("---"):
+    Returns a list of file contents (strings). Missing files are silently
+    skipped. Deduplication prevents double-counting when a module file path
+    resolves to the same file as the parent plan.
+    """
+    contents: list = []
+    seen: set = set()
+
+    # Parent plan
+    parent_path = os.path.join(git_root, manifest_data["plan_file"])
+    real_parent = os.path.realpath(parent_path)
+    if os.path.isfile(real_parent):
+        seen.add(real_parent)
+        contents.append(read_file(real_parent))
+
+    # Module files
+    feature_dir = manifest_data.get("paths", {}).get("feature_dir", "")
+    for module in manifest_data.get("modules", []):
+        mod_file = module.get("file", "")
+        if not mod_file:
             continue
-        end = content.find("---", 3)
-        if end == -1:
+        mod_path = os.path.join(git_root, feature_dir, mod_file)
+        real_mod = os.path.realpath(mod_path)
+        if real_mod in seen:
             continue
-        try:
-            fm = yaml.safe_load(content[3:end])
-        except Exception:
-            continue
-        tasks = fm.get("tasks") if isinstance(fm, dict) else None
-        if not isinstance(tasks, list):
-            continue
-        for t in tasks:
-            if (
-                isinstance(t, dict)
-                and t.get("task_type") == "verification"
-                and isinstance(t.get("id"), int)
-            ):
-                result.add(t["id"])
-    return result
+        if os.path.isfile(real_mod):
+            seen.add(real_mod)
+            contents.append(read_file(real_mod))
+
+    return contents
 
 
 def _check_verification_git_reality(
@@ -355,6 +364,167 @@ def _check_verification_git_reality(
             pass
 
     return findings
+
+
+def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
+    """Extract top-level frontmatter `integration_test.path` from plan contents.
+
+    `integration_test` is a TOP-LEVEL frontmatter field (not per-task), so this
+    is a plain dict lookup — NOT the tasks[]-walking _task_ids_where pattern.
+    Uses raw yaml.safe_load so an unrelated validation issue cannot take down
+    the check. Defends against fm being None and integration_test being null.
+
+    Returns (paths, malformed): deduplicated valid declared paths in
+    first-seen order, plus human-readable descriptions of present-but-
+    MALFORMED declarations (bare string/list/other non-dict values, dicts
+    without a 'path' key, dicts with an empty/whitespace/non-string path).
+    Malformed declarations must surface to the caller — silently treating
+    them as "not declared" lets Check 10 skip a gate the author believes
+    they declared (fail-open). `integration_test: null` or absent remains
+    NOT declared (the documented "no declaration" idiom).
+    """
+    import yaml
+
+    paths: list = []
+    malformed: list = []
+    for content in plan_contents:
+        if not content or not content.startswith("---"):
+            continue
+        end = content.find("---", 3)
+        if end == -1:
+            continue
+        try:
+            fm = yaml.safe_load(content[3:end])
+        except Exception:
+            continue
+        if not isinstance(fm, dict):
+            continue
+        it = fm.get("integration_test")
+        if it is None:
+            continue
+        if not isinstance(it, dict):
+            shape = (
+                "a bare string"
+                if isinstance(it, str)
+                else "a {}".format(type(it).__name__)
+            )
+            malformed.append(
+                "plan declares integration_test as {} ({!r}) — expected a "
+                "mapping with a non-empty 'path' key".format(shape, it)
+            )
+            continue
+        if "path" not in it:
+            malformed.append(
+                "integration_test mapping has no 'path' key — expected a "
+                "mapping with a non-empty 'path' key"
+            )
+            continue
+        path = it.get("path")
+        if not isinstance(path, str) or not path.strip():
+            desc = (
+                "empty" if isinstance(path, str) else "a {}".format(type(path).__name__)
+            )
+            malformed.append(
+                "integration_test.path is {} ({!r}) — expected a non-empty "
+                "string path".format(desc, path)
+            )
+            continue
+        if path not in paths:
+            paths.append(path)
+    return paths, malformed
+
+
+def _resolve_base_ref(git_root: str) -> Optional[str]:
+    """Return the resolvable base ref whose merge-base with HEAD is newest.
+
+    Candidates (priority order): origin/HEAD, main, master. Among ALL that
+    resolve, pick the one whose merge-base(<candidate>, HEAD) commit has the
+    latest committer timestamp — ties keep priority order. This guards
+    against a stale origin/HEAD (local-only merges, never pushed): the stale
+    merge-base opens a diff window covering PRIOR features, letting a plan
+    pass Check 10 with an integration test some prior feature modified.
+
+    A candidate whose merge-base computation fails is skipped; if no
+    candidate yields a merge-base (e.g. unrelated histories), fall back to
+    the first resolvable candidate. None (nothing resolves) signals an
+    infrastructure problem — the caller emits an infra-error FAIL rather
+    than crashing.
+    """
+
+    def _git(cmd_args: list):
+        try:
+            return subprocess.run(
+                ["git", "-C", git_root] + cmd_args,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+
+    resolvable = []
+    for ref in ("origin/HEAD", "main", "master"):
+        result = _git(["rev-parse", "--verify", "--quiet", ref])
+        if result is None:
+            return None
+        if result.returncode == 0 and result.stdout.strip():
+            resolvable.append(ref)
+    if not resolvable:
+        return None
+
+    best_ref = None
+    best_ts = -1
+    for ref in resolvable:
+        mb = _git(["merge-base", ref, "HEAD"])
+        if mb is None or mb.returncode != 0 or not mb.stdout.strip():
+            continue
+        show = _git(["show", "-s", "--format=%ct", mb.stdout.strip()])
+        if show is None or show.returncode != 0:
+            continue
+        try:
+            ts = int(show.stdout.strip())
+        except ValueError:
+            continue
+        if ts > best_ts:  # strict > keeps priority order on ties
+            best_ts = ts
+            best_ref = ref
+    return best_ref if best_ref is not None else resolvable[0]
+
+
+def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:
+    """Return True when <path> is part of the feature changeset.
+
+    Union of:
+      - untracked files (git ls-files --others --exclude-standard -- <path>)
+      - tracked diff vs merge-base(base_ref, HEAD) — isolates feature changes
+        from base-branch drift.
+    If merge-base computation fails, falls back to the working-tree-only diff
+    (git diff --name-only HEAD -- <path>).
+    """
+
+    def _git(cmd_args: list):
+        try:
+            return subprocess.run(
+                ["git", "-C", git_root] + cmd_args,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+        except (subprocess.TimeoutExpired, OSError):
+            return None
+
+    untracked = _git(["ls-files", "--others", "--exclude-standard", "--", path])
+    if untracked is not None and untracked.returncode == 0 and untracked.stdout.strip():
+        return True
+
+    merge_base = None
+    mb = _git(["merge-base", base_ref, "HEAD"])
+    if mb is not None and mb.returncode == 0 and mb.stdout.strip():
+        merge_base = mb.stdout.strip()
+
+    diff_base = merge_base if merge_base else "HEAD"
+    diff = _git(["diff", "--name-only", diff_base, "--", path])
+    return diff is not None and diff.returncode == 0 and bool(diff.stdout.strip())
 
 
 def validate_report_sections(report_content: str) -> dict:
@@ -426,13 +596,17 @@ def estimate_context_load(
 def has_task_zero(plan_content: str) -> bool:
     """Return True if the plan contains a Task 0 header."""
     return bool(
-        re.search(r"^###\s+Task\s+0\b", plan_content, re.MULTILINE | re.IGNORECASE)
+        re.search(
+            r"^###\s+Task\s+0\b",
+            _unfenced_content(plan_content),
+            re.MULTILINE | re.IGNORECASE,
+        )
     )
 
 
 def task_zero_is_first(plan_content: str) -> bool:
     """Return True if Task 0 appears before any other task in the plan."""
-    tasks = TASK_HEADER_PATTERN.findall(plan_content)
+    tasks = TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))
     return bool(tasks and tasks[0] == "0")
 
 
@@ -470,6 +644,9 @@ def get_task_checkbox_range(plan_content: str, task_number: int) -> dict:
     Extract checkbox counts for a specific task section.
     Returns {"checked": N, "unchecked": N, "total": N}.
     """
+    # Unfence internally so fenced task headers don't act as section boundaries
+    plan_content = _unfenced_content(plan_content)
+
     # Find the start of the target task section
     task_match = re.search(
         rf"^###\s+Task\s+{task_number}\b",
@@ -503,7 +680,9 @@ def all_tasks_have_reports(plan_content: str, reports_dir: str) -> dict:
     Check whether every task in the plan has a corresponding report file.
     Returns {"pass": bool, "missing": list_of_task_numbers}.
     """
-    task_numbers = [int(n) for n in TASK_HEADER_PATTERN.findall(plan_content)]
+    task_numbers = [
+        int(n) for n in TASK_HEADER_PATTERN.findall(_unfenced_content(plan_content))
+    ]
     missing = []
     for n in task_numbers:
         if not find_report_file(reports_dir, n):
@@ -551,12 +730,20 @@ def _load_manifest_config(
 
     Side effects:
       - Mutates args.plan_file in place. Prefers active_module_file over plan_file.
+      - Sets args.manifest_task_range to the manifest's (start, end) tuple, or
+        None when no manifest is provided (consumed by the N18 module-boundary
+        skip-guard in run_pre_dispatch).
+      - Sets args.manifest_has_prior_modules to True when the manifest records
+        completed prior modules (consumed by the N18 skip-guard to pick an
+        accurate SKIP rationale).
       - On unrecoverable error (missing file, invalid JSON, schema validation
         failure), prints a JSON error to stderr and calls sys.exit(3).
 
     Returns:
       (tier, enforcement_dict) when args.manifest is set, otherwise (None, None).
     """
+    args.manifest_task_range = None
+    args.manifest_has_prior_modules = False
     if not args.manifest:
         return None, None
 
@@ -598,6 +785,9 @@ def _load_manifest_config(
         )
     else:
         args.plan_file = os.path.join(git_root, manifest.plan_file)
+
+    args.manifest_task_range = tuple(manifest.task_range)
+    args.manifest_has_prior_modules = bool(manifest.completed_modules)
 
     return manifest.tier, manifest.enforcement.model_dump()
 
@@ -688,10 +878,9 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
             }
         else:
             checks["source_contracts"] = {
-                "status": "FAIL",
-                "detail": "Source Contracts section present but contains 'None' or is empty — update or remove the section",
+                "status": "OK",
+                "detail": "Source Contracts section present — declared as None/empty (valid-absent)",
             }
-            blockers.append("source_contracts")
     else:
         checks["source_contracts"] = {
             "status": "OK",
@@ -813,8 +1002,40 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
 
     previous_task = task_number - 1
 
+    # N18: module-boundary skip-guard (mirror of the hook's N3a). When the
+    # previous task precedes the active module's task_range, it belongs to a
+    # prior (archived) module whose completion was already verified by
+    # transition-module.py:validate_module_completion at the boundary — skip
+    # all previous-task checks instead of failing on archived artifacts.
+    manifest_task_range = getattr(args, "manifest_task_range", None)
+    boundary_skip = (
+        manifest_task_range is not None
+        and task_number > 0
+        and previous_task < manifest_task_range[0]
+    )
+    # Checkbox/report-section completeness skipped here is backstopped terminally
+    # by pre-completion (Check 1 aggregates checkboxes across all plan files; the
+    # report-completeness loop is archive-aware).
+    if getattr(args, "manifest_has_prior_modules", False):
+        boundary_detail = (
+            f"Task {previous_task} belongs to a prior module — "
+            "completion verified by transition-module.py at module boundary"
+        )
+    else:
+        # No completed prior modules: previous_task simply doesn't exist in the
+        # plan (no-Task-0 plan whose task_range starts past it).
+        boundary_detail = (
+            f"Task {previous_task} precedes the active module's task_range "
+            "(no-Task-0 plan) — nothing to verify"
+        )
+
     # Check 1: Previous task checkboxes (only if task > 0)
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_task_checkboxes"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_cbs = get_task_checkbox_range(plan_content, previous_task)
         if prev_cbs["total"] == 0:
             # Task exists but has no checkboxes — treat as OK (some tasks may not have them)
@@ -843,7 +1064,13 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 2: Previous task report file exists (only if task > 0)
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_task_report"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+        report_path = ""
+    elif task_number > 0:
         report_path = find_report_file(args.reports_dir, previous_task)
         if report_path:
             checks["previous_task_report"] = {
@@ -868,7 +1095,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         report_path = ""
 
     # Check 3: Previous task report is COMPLETE (inline validate-report logic)
-    if task_number > 0 and report_path:
+    if boundary_skip:
+        checks["previous_report_complete"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0 and report_path:
         try:
             report_content = read_file(report_path)
             validation = validate_report_sections(report_content)
@@ -905,7 +1137,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 4: Previous task spec review report exists
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_spec_review"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
         spec_review_pattern = os.path.join(
             args.reports_dir, "task-{}-spec-review*".format(prev_padded)
@@ -931,7 +1168,12 @@ def run_pre_dispatch(args: argparse.Namespace) -> dict:
         }
 
     # Check 5: Previous task quality review report exists
-    if task_number > 0:
+    if boundary_skip:
+        checks["previous_quality_review"] = {
+            "status": "SKIP",
+            "detail": boundary_detail,
+        }
+    elif task_number > 0:
         prev_padded = "{:03d}".format(previous_task)
         quality_review_pattern = os.path.join(
             args.reports_dir, "task-{}-quality-review*".format(prev_padded)
@@ -1042,31 +1284,27 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         print(json.dumps({"error": f"Cannot read plan file: {e}"}), file=sys.stderr)
         sys.exit(3)
 
-    # Read additional plan files for multi-module aggregation
-    all_plan_contents = [plan_content]
-    if getattr(args, "additional_plan_files", None):
-        for path in args.additional_plan_files:
-            if os.path.isfile(path):
-                try:
-                    all_plan_contents.append(read_file(path))
-                except OSError:
-                    pass
-
-    # Item 4b: add module plan files (modular plans) to the scan, then collect
-    # declared-minimum task IDs from ALL plan contents.
+    # Build all_plan_contents: manifest mode uses _load_all_plan_contents
+    # (parent plan + module files, deduplicated); non-manifest mode uses the
+    # primary plan + any --additional-plan-files.
     if getattr(args, "manifest", None):
         try:
             _mp = Path(args.manifest)
             _md = json.loads(_mp.read_text(encoding="utf-8"))
             _gr = _resolve_git_root(_mp)
-            _feat = _md.get("paths", {}).get("feature_dir", "")
-            for _mod in _md.get("modules") or []:
-                _full = os.path.join(_gr, _feat, _mod.get("file", ""))
-                if _mod.get("file") and os.path.isfile(_full):
-                    all_plan_contents.append(read_file(_full))
+            all_plan_contents = _load_all_plan_contents(_md, _gr)
         except Exception:
-            pass
-    declared_min, _parsed = _declared_minimum_task_ids(all_plan_contents)
+            all_plan_contents = [plan_content]
+    else:
+        all_plan_contents = [plan_content]
+        if getattr(args, "additional_plan_files", None):
+            for path in args.additional_plan_files:
+                if os.path.isfile(path):
+                    try:
+                        all_plan_contents.append(read_file(path))
+                    except OSError:
+                        pass
+    declared_min, _parsed = _task_ids_where(all_plan_contents, "review_tier", "minimum")
     if not _parsed:
         warnings.append("review_tier_plan_parse_skipped")
 
@@ -1260,11 +1498,13 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     _ratio_check("partner-review", "excessive_minimum_tier_partner", "partner")
 
     # Check 8: Verification task ratio cap (>30% triggers blocker)
-    verification_ids = _verification_task_ids(all_plan_contents)
+    verification_ids, _ = _task_ids_where(
+        all_plan_contents, "task_type", "verification"
+    )
     all_task_ids = set(
         int(n)
         for content in all_plan_contents
-        for n in TASK_HEADER_PATTERN.findall(content)
+        for n in TASK_HEADER_PATTERN.findall(_unfenced_content(content))
     )
     total_tasks = len(all_task_ids)
     verif_count = len(verification_ids & all_task_ids)
@@ -1334,6 +1574,88 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             "status": "PASS",
             "detail": "No verification tasks — git reality check skipped",
         }
+
+    # Check 10: Integration test gate (C2) — every declared integration_test
+    # path (top-level frontmatter, aggregated across all plan files) must
+    # exist on disk AND be part of this feature's changeset. A present-but-
+    # MALFORMED declaration is a FAIL, never a skip — the author believes
+    # they declared a gate.
+    declared_it_paths, malformed_it_decls = _integration_test_paths(all_plan_contents)
+    if not declared_it_paths and not malformed_it_decls:
+        checks["integration_test_present"] = {
+            "status": "PASS",
+            "detail": (
+                "No integration_test declared in any plan frontmatter — check skipped"
+            ),
+        }
+    elif not declared_it_paths:
+        checks["integration_test_present"] = {
+            "status": "FAIL",
+            "detail": (
+                "Malformed integration_test declaration(s): "
+                + "; ".join(malformed_it_decls)
+                + ". Expected shape: a mapping with a non-empty 'path' key "
+                "(integration_test: null or absent means no declaration)."
+            ),
+        }
+        blockers.append("integration_test_present")
+    else:
+        if getattr(args, "manifest", None):
+            it_git_root = _resolve_git_root(Path(args.manifest))
+        else:
+            it_git_root = _resolve_git_root(Path(args.plan_file))
+
+        base_ref = _resolve_base_ref(it_git_root)
+        if base_ref is None:
+            detail = (
+                "Infrastructure error: no base ref resolves (tried "
+                "origin/HEAD, main, master) — cannot verify the declared "
+                "integration test changeset. Check the git repository "
+                "state, then re-run."
+            )
+            if malformed_it_decls:
+                detail += " Also malformed declaration(s): " + "; ".join(
+                    malformed_it_decls
+                )
+            checks["integration_test_present"] = {
+                "status": "FAIL",
+                "detail": detail,
+            }
+            blockers.append("integration_test_present")
+        else:
+            it_problems = [
+                "malformed declaration: {}".format(d) for d in malformed_it_decls
+            ]
+            for rel_path in declared_it_paths:
+                abs_path = os.path.join(it_git_root, rel_path)
+                if not os.path.isfile(abs_path):
+                    it_problems.append("{}: missing on disk".format(rel_path))
+                elif not _in_changeset(rel_path, base_ref, it_git_root):
+                    it_problems.append(
+                        "{}: exists but is not part of this feature's "
+                        "changeset (no diff vs {})".format(rel_path, base_ref)
+                    )
+            if it_problems:
+                checks["integration_test_present"] = {
+                    "status": "FAIL",
+                    "detail": (
+                        "Declared integration test(s) failed the gate: "
+                        + "; ".join(it_problems)
+                        + ". The declared file must exist and be added or "
+                        "modified by this feature."
+                    ),
+                }
+                blockers.append("integration_test_present")
+            else:
+                checks["integration_test_present"] = {
+                    "status": "PASS",
+                    "detail": (
+                        "{} declared integration test(s) exist and are in the "
+                        "feature changeset (base: {})".format(
+                            len(declared_it_paths), base_ref
+                        )
+                    ),
+                }
 
     pct = (
         round(100 * checkbox_counts["checked"] / checkbox_counts["total"])
