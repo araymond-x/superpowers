@@ -71,12 +71,12 @@ includes N18.
 | D6 | N25(a) fix shape | **Feature-window fallback**: when the selected base ref's merge-base == HEAD, changeset base = parent of the first commit touching `paths.feature_dir`; no anchor resolvable → current FAIL behavior with a detail message naming the on-main case | Anchor always exists by implementation time (spec/plan committed first). Fail-closed preserved: a stale pre-existing test file outside the feature window still FAILs. |
 | D7 | N25 scope | Sub-items (a),(b),(c),(d),(f) in; (e),(g) deferred | (b) line-anchored `---` frontmatter scan fixed in BOTH `_integration_test_paths` and `_task_ids_where` (same inherited bug); (c) module-level `_git_run` SSOT replaces the three near-identical wrappers; (d) directory-as-path detail says "is a directory, not a file"; (f) malformed-declaration messages name the source plan file. |
 | D8 | N22 fix shape | Stem-style patterns (`auth\w*`, `migrat\w*`, `rout(e\|er)\w*`, `cach\w*`, `middleware\w*`, `cors\b`, `securit\w*`) + scan `_unfenced_content(content)` | Ordered AFTER N20 (the scan consumes the fence helper). Advisory-only semantics unchanged. |
-| D9 | N26(a) log shape | Hook classifier gains a fix-dispatch stage: implementer-pattern dispatch whose description matches a fix/remediation pattern with a derivable task number logs `task=N type=fix`; reviewer re-dispatches append repeat `type={spec\|quality\|partner}-review` entries (idempotent append, duplicates fine) | Provenance greps are substring-based (`task=N type=spec-review`), so extra entries are backward-compatible. Exact regex left to plan. |
+| D9 | N26(a) log shape | **Structured marker convention + unattributed fallback** (see §4.3a): a new Stage 0 BEFORE reviewer detection recognizes an explicit `[task N fix]` / `[task N re-review:<kind>]` marker in the dispatch description and logs precisely; markerless fix-heuristic dispatches get an unattributed `type=fix-unattributed` line via Stage-3 passthrough | Chosen over heuristic broadening: the three live sprint-3 shapes (trace-audit items 2/4) had NO derivable task number ("fix N18" carries a BACKLOG id, not a task id) and one matched the reviewer stage first — heuristics cannot attribute them; a controller-side convention can. Provenance greps are substring-based, so extra/repeat entries are backward-compatible. |
 | D10 | N26(b) fix shape | Check 3b allowed-prefix list gains the gate-required artifact names: `honesty-check-*`, `execution-trace-audit.md`, `final-code-review.md` | `checkpoint-pre-completion.json` already exempt as `.json`. Closes the latent post-gate fix-dispatch block hit live in sprint 3 (`fix-n18-*`). |
 | D11 | N19 fix shape | Transition adopts the hook's stricter semantic: use `module.file` only when set AND the file exists; otherwise fall back to the main plan. Same pass removes the dead `verif_ids = set()` initializer and replaces line-number comment refs with construct names | SET-but-missing now falls back (matches hook) instead of yielding an empty exemption set. |
 | D12 | N20 fix shape | Keep blank-to-EOF for unclosed fences (CommonMark: unclosed code block runs to end of document) + add tilde-fence (`~~~`) support + characterization tests; add an advisory `validate-plan.py` WARNING when an unclosed fence is detected | The `all_tasks_have_reports` fail-open is mitigated at the source: authors get warned at plan time that the tail of their file is fence-shadowed. |
 | D13 | N6 fix shape | Apply the C6(a) treatment to SDD SKILL.md §282–286 (pre-dispatch checkpoint / Check 5c), §286/Check-6b (context summary), §426–428 (report validation / Check 4b) | Word-count-aware: C6(a) reduced the count; this pass must too (re-check `wc -w` against the 5000 hard limit before commit). |
-| D14 | N8 fix shape | F6 keys on a structural signal (presence of a "Direct entry"-style heading/section) instead of the literal phrases `"invoked directly"`/`"skipping brainstorming"` | New check verified green against all 15 current skills before merge. |
+| D14 | N8 fix shape | F6 keys on a structural signal (presence of a "Direct entry"-style heading/section) instead of the literal phrases `"invoked directly"`/`"skipping brainstorming"`; **scope stays writing-plans/SKILL.md only** | F6 today checks only writing-plans (validate-all-skills.py ~:568); no other skill gains a direct-entry section. Full regression suite green before merge. |
 | D15 | N28(c) fold-in | Hoist the duplicated `_load_script` importlib loader into `sdd_test_helpers.py` | Free fold-in: sprint-4 tests touch both duplicating files anyway. Rest of N28 stays deferred. |
 | D16 | Verification task | Non-last, Module 2: "archive-awareness inventory audit" — grep-audit that exactly the 5 documented lookups are archive-aware, code vs CLAUDE.md/manifest, zero writes | Placed in Module 2 so its dispatch entry is in the LIVE log at pre-completion (main's pre-fix Check 9 can see it — see §6 hazards). Exercises N16 report path + hook review-skip live. |
 | D17 | Workspace | Worktree **required** (`.worktrees/sdd-aggregate-gate-visibility/`) | The feature edits the very scripts that gate it; live enforcement resolves to the main checkout via `~/.claude/skills/superpowers` symlinks. |
@@ -109,6 +109,10 @@ post-fix it FAILs (>50%).
 - A new helper collects dispatch lines from `reports_dir/archive-*/.dispatch-log` (lexicographic
   archive order — archives are created in module order) followed by the live dispatch log,
   parsing with the existing format regex (:324). Later lines overwrite earlier per task id (D4).
+- The parser continues to match ONLY `type=implementer` lines: N26's new `type=fix` /
+  `type=fix-unattributed` entries do NOT open or move verification windows (a fix dispatch is
+  not a task implementer dispatch). N26 and N27 share this log in Module 1 — this is the
+  explicit contract between them.
 - Window computation over the merged, sorted task set is otherwise unchanged.
 - The silent `continue` for tasks absent from the map (:334) remains — but after the merge,
   archived-module verification tasks are present, so the fail-open class is closed.
@@ -119,13 +123,27 @@ FAILs `verification_git_reality`.
 
 ### 4.3 N26 — dispatch-log classification + Check 3b allowlist (`sdd-pre-dispatch-hook.sh`)
 
-- **(a)** New classification outcome between the reviewer and implementer stages: a dispatch
-  matching the implementer pattern whose description matches a fix/remediation pattern AND
-  carries a derivable task number logs `<ISO> DISPATCH fix task=N type=fix` and is then enforced
-  exactly as an implementer dispatch (no gate relaxation — only the log line is new). Reviewer
-  re-dispatches already pass the reviewer stage; they now ALWAYS append their entry even when an
-  identical entry exists (idempotent append; provenance greps are substring-based and unaffected
-  by duplicates).
+- **(a)** Two-part fix, designed against the three live sprint-3 shapes (trace-audit items 2/4:
+  a fix implementer dispatch with no implementer-pattern match and no derivable task number; its
+  re-reviews, ditto; a fix review logged `task=10 type=unknown`):
+  - **Stage 0 — structured marker (deterministic path).** A new classification stage that runs
+    BEFORE the existing Stage-1 reviewer detection (mandatory: fix-review descriptions contain
+    "review" and would otherwise be consumed by Stage 1). It recognizes an explicit marker in
+    the dispatch description — `[task N fix]` or `[task N re-review:{spec|quality|partner}]`
+    (exact regex at plan time) — and logs `<ISO> DISPATCH fix task=N type=fix` or a repeat
+    `task=N type=<kind>-review` entry respectively. A marked fix dispatch then takes the
+    implementer enforcement path (no gate relaxation); a marked re-review takes the reviewer
+    passthrough. **Controller-side half**: the marker convention is documented where implementer
+    /reviewer dispatch guidance already lives (SDD SKILL.md or its `references/` — word-ceiling
+    aware, see D13) and echoed in the hook's `additionalContext` injection so controllers see it
+    on every dispatch.
+  - **Stage-3 fallback — unattributed capture.** A markerless dispatch reaching passthrough
+    whose description matches a fix heuristic (`\bfix\b|remediat`, exact regex at plan time)
+    logs `<ISO> DISPATCH adhoc type=fix-unattributed` (no `task=`). No enforcement change — the
+    tamper-evidence backbone records that a fix cycle happened even when unattributed.
+  - Fixtures mirror the three live shapes verbatim: with markers → fully attributed entries;
+    without markers → at minimum the `fix-unattributed` line (first shape) while reviewer-stage
+    behavior for the other two is unchanged from today.
 - **(b)** Check 3b's allowed-prefix list gains `honesty-check-`, `execution-trace-audit.md`,
   `final-code-review.md` (D10).
 - Hook edit ⇒ baseline re-capture in the same commit (D18).
@@ -147,8 +165,11 @@ for verification-id lookup. Remove the dead `verif_ids = set()` initializer; rep
   on-main case and the feature-window rule.
 - **(b)** Frontmatter close-delimiter scan becomes line-anchored (regex on `^---$` after the
   opening line) in `_integration_test_paths` AND `_task_ids_where`.
-- **(c)** One module-level `_git_run(args, cwd, timeout)` helper replaces the three
-  near-identical subprocess wrappers.
+- **(c)** One module-level `_git_run(args, cwd, timeout)` helper consolidates the git
+  subprocess sites. There are FOUR call sites, not three: the inline call in
+  `_check_verification_git_reality` (~:353), the two local `_git` helpers (~:456, ~:507), and
+  `_resolve_git_root` (~:703). The plan names the exact in-scope set and audits all four
+  (per the audit-ALL-callers rule); any site deliberately left out is justified in the plan.
 - **(d)** A declared path that exists but `is_dir()` FAILs with "is a directory, not a file"
   (currently misleading "missing on disk").
 - **(f)** Malformed-declaration FAIL messages name the source plan file.
@@ -180,9 +201,12 @@ Net word count must not increase (verify `wc -w` pre/post; 5000 hard limit).
 ### 4.9 N8 — intent-based F6 check (`validate-all-skills.py`)
 
 F6 asserts the presence of a structural "Direct entry" signal (heading match, exact form chosen
-at plan time) instead of two literal phrases. Run the suite to verify all 15 skills pass with
-the new check; if a skill legitimately lacks the section, fix the skill (not the check) in the
-same task.
+at plan time) instead of two literal phrases. **Scope is unchanged: F6 checks ONLY
+`writing-plans/SKILL.md`** (the one skill with direct-entry guidance, from P1) — it does NOT
+expand to other skills, and no other skill gains a "Direct entry" section. If
+`writing-plans/SKILL.md`'s current heading doesn't match the chosen structural signal, adjust
+the heading (word-ceiling aware, ~273-word headroom) in the same task. Acceptance = the full
+regression suite passes.
 
 ### 4.10 Verification task — archive-awareness inventory audit (Module 2, non-last)
 
@@ -245,15 +269,18 @@ Live enforcement during this run resolves to **main's** (pre-fix) scripts via th
 - [ ] Check 7 FAILs on the archived-minimum-tier fixture; PASSes unchanged on single-module
       workspaces.
 - [ ] Check 9 FAILs on the archived-window file-modification fixture; silent-skip class closed.
-- [ ] Fix dispatches and re-reviews produce dispatch-log entries; `fix-n18-*`-style post-gate
-      dispatch names no longer trip Check 3b.
+- [ ] The three live sprint-3 fix-cycle shapes (trace-audit items 2/4), replayed as fixtures
+      WITH markers, produce fully attributed dispatch-log entries; markerless fix dispatches
+      produce at minimum a `fix-unattributed` line; `fix-n18-*`-style post-gate dispatch names
+      no longer trip Check 3b.
 - [ ] Check 10 PASSes for a committed integration test in an on-main remoteless feature window;
       still FAILs for pre-window files and malformed declarations.
 - [ ] Risk-surface WARNING matches inflected keyword forms and ignores fenced quotes.
 - [ ] `_unfenced_content` handles tilde fences; unclosed-fence behavior pinned; validate-plan
       WARNs on unclosed fences.
 - [ ] SDD SKILL.md framing pass lands with net word count ≤ current; regression suite green.
-- [ ] F6 is intent-based and green across all 15 skills.
+- [ ] F6 is intent-based, still scoped to writing-plans/SKILL.md, and the full regression suite
+      is green.
 - [ ] Sprint executed as 2 modules with a live transition AND a non-last verification task whose
       report validates (Track 3 closed).
 - [ ] Archive-awareness inventory (5 sites) consistent across code, CLAUDE.md, manifest —
