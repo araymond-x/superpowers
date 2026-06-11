@@ -132,8 +132,11 @@ FAILs `verification_git_reality`.
     the dispatch description — `[task N fix]` or `[task N re-review:{spec|quality|partner}]`
     (exact regex at plan time) — and logs `<ISO> DISPATCH fix task=N type=fix` or a repeat
     `task=N type=<kind>-review` entry respectively. A marked fix dispatch then takes the
-    implementer enforcement path (no gate relaxation); a marked re-review takes the reviewer
-    passthrough. **Controller-side half**: the marker convention is documented where implementer
+    implementer enforcement path (no gate relaxation) but **skips Stage 2's implementer log
+    write — only the Stage-0 `type=fix` line is emitted** (a `type=implementer task=N` line
+    would match Check 9's parser and move task N's verification window, violating §4.2's
+    contract; the fixture asserts the ABSENCE of a `type=implementer` line, not just the
+    presence of `type=fix`). A marked re-review takes the reviewer passthrough. **Controller-side half**: the marker convention is documented where implementer
     /reviewer dispatch guidance already lives (SDD SKILL.md or its `references/` — word-ceiling
     aware, see D13) and echoed in the hook's `additionalContext` injection so controllers see it
     on every dispatch.
@@ -295,7 +298,8 @@ Live enforcement during this run resolves to **main's** (pre-fix) scripts via th
 - `docs/imp-plans/2026-06-05-sdd-cleanup-and-integration-gate/` — sprint-3 final review
   (N27 provenance), trace audit (N26 provenance), deviations.
 - Prior-session feedback (2026-06-10): live verification exercise pending; N27 meatiest;
-  `writing-plans/SKILL.md` ~273-word headroom (no edits planned there this sprint; if N25(a)
-  needs a doc sentence it stays under ~50 words or pairs with a `references/` extraction).
+  `writing-plans/SKILL.md` ~273-word headroom (two possible touches this sprint, both
+  word-ceiling-aware: a conditional F6 heading adjustment (§4.9) and, if N25(a) needs a doc
+  sentence, it stays under ~50 words or pairs with a `references/` extraction).
 - `controller-checkpoint.py` :200, :305, :1466–1576 (read 2026-06-10);
   `transition-module.py` :218–250 (read 2026-06-10).
