@@ -47,6 +47,13 @@ if ! echo "$FILE_PATH" | grep -qiE '(^|/)src/|(^|/)app/|(^|/)frontend/|(^|/)comp
   exit 0
 fi
 
+# Skip non-code files even when they live inside a matching directory.
+# e.g. apps/api/.env matches /api/ above but is a config file, not source code.
+case "${FILE_PATH##*.}" in
+  env|yaml|yml|json|toml|md|txt|sh|bash|zsh|cfg|ini|conf|lock|sum|mod|log)
+    exit 0 ;;
+esac
+
 # No transcript available (shouldn't happen but be safe)
 if [ -z "$TRANSCRIPT_PATH" ] || [ ! -f "$TRANSCRIPT_PATH" ]; then
   exit 0
@@ -54,8 +61,17 @@ fi
 
 # ─── Check if SDD was requested in this session ──────────────────────────
 
-# Grep the transcript for user messages requesting SDD
+# Grep the transcript for user messages requesting SDD.
 # User messages have "role":"user" in the JSONL.
+#
+# IMPORTANT — exclude tool_result entries: Claude Code stores tool results
+# (hook error messages, pickup bundle content, Skill outputs) as user-role
+# JSONL entries with "type":"tool_result". These are NOT user requests and
+# must not be counted as SDD imperatives. The hook's own "invoke
+# subagent-driven-development" error message would otherwise poison the session
+# and block every subsequent edit (self-reinforcing loop). Filtering lines that
+# contain "type":"tool_result" is safe because genuine user-typed messages
+# never have this marker — they are in separate JSONL entries.
 #
 # NOTE: do NOT pipe the producer grep into `grep -q`. Under `set -o pipefail`,
 # when `grep -q` matches early it exits and closes the pipe; the upstream grep
@@ -66,7 +82,7 @@ fi
 # here-string (a temp buffer — no upstream process to SIGPIPE).
 SDD_REQUESTED=false
 if grep -q '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null; then
-  USER_LINES=$(grep '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null)
+  USER_LINES=$(grep '"role":"user"' "$TRANSCRIPT_PATH" 2>/dev/null | grep -v '"type":"tool_result"')
   # Require an explicit SDD imperative (not a bare mention) to avoid false
   # blocks. Both alternation groups are \b-anchored so the verb does not match
   # inside a larger word (reuse/misuse) and "sdd" does not match inside a larger

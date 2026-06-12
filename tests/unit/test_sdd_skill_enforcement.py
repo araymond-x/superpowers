@@ -136,3 +136,97 @@ def test_embedded_sdd_does_not_block(tmp_path):
     t = _transcript(tmp_path, "use the assddata module", skill_loaded=False)
     r = run_hook("src/app/feature.py", t)
     assert r.returncode == 0, f"'assddata' must not match 'sdd'; stderr={r.stderr}"
+
+
+# ─── tool_result contamination: SDD phrase in tool results must NOT block ──
+# Root cause of the Plane PM false positive (2026-06-12):
+# - hook's own error message ("invoke superpowers:subagent-driven-development")
+#   is stored as an is_error=True tool_result in a user-role JSONL entry
+# - pickup bundle content is stored as a tool_result in a user-role entry
+# Both are user-role entries, so the SDD detection grep matches them as if
+# the user had requested SDD. Filtering out "type":"tool_result" lines fixes this.
+
+def _transcript_with_tool_result(tmp_path, tool_result_text, is_error=False,
+                                  user_text="fix the login bug"):
+    """Write a JSONL transcript where the SDD phrase appears ONLY in a tool_result
+    block (not in a direct user text message). Simulates the hook's own error
+    message or a pickup bundle being stored in the transcript."""
+    sep = (",", ":")
+    # Real user message (no SDD mention)
+    user_line = json.dumps({"role": "user", "content": user_text}, separators=sep)
+    # Tool result stored as user-role entry (how Claude Code stores tool results)
+    tool_result_line = json.dumps({
+        "role": "user",
+        "content": [{
+            "type": "tool_result",
+            "tool_use_id": "toolu_test123",
+            "content": tool_result_text,
+            "is_error": is_error,
+        }],
+    }, separators=sep)
+    p = tmp_path / "transcript.jsonl"
+    p.write_text(user_line + "\n" + tool_result_line + "\n")
+    return str(p)
+
+
+def test_hook_error_message_does_not_poison_subsequent_edits(tmp_path):
+    """The hook's own error message stored as is_error tool_result must not cause
+    all subsequent edits to be blocked (self-reinforcing loop)."""
+    hook_error = ("BLOCKED: The user requested subagent-driven-development but you have "
+                  "not loaded the skill via the Skill tool. Load the skill now: "
+                  "invoke superpowers:subagent-driven-development.")
+    t = _transcript_with_tool_result(tmp_path, hook_error, is_error=True)
+    r = run_hook("src/app/feature.py", t)
+    assert r.returncode == 0, (
+        "hook error message stored as tool_result must NOT trigger SDD detection; "
+        f"stderr={r.stderr}"
+    )
+
+
+def test_pickup_bundle_sdd_mention_does_not_block(tmp_path):
+    """Pickup bundle continuation text stored as tool_result must not trigger
+    SDD detection in an unrelated project session."""
+    pickup_content = ("From this worktree, invoke superpowers:subagent-driven-development "
+                      "via the Skill tool. During SDD ingestion...")
+    t = _transcript_with_tool_result(tmp_path, pickup_content, is_error=False)
+    r = run_hook("src/app/feature.py", t)
+    assert r.returncode == 0, (
+        "pickup bundle tool_result must NOT trigger SDD detection; "
+        f"stderr={r.stderr}"
+    )
+
+
+def test_user_text_sdd_still_blocks_despite_tool_result_filter(tmp_path):
+    """Regression: real user text requesting SDD must still block even when
+    a tool_result is also in the transcript."""
+    sep = (",", ":")
+    # Real user SDD request
+    user_line = json.dumps({"role": "user", "content": "invoke subagent-driven-development"},
+                           separators=sep)
+    # Tool result also present (should not affect detection of user request)
+    tool_result_line = json.dumps({
+        "role": "user",
+        "content": [{"type": "tool_result", "tool_use_id": "t1", "content": "some output"}],
+    }, separators=sep)
+    p = tmp_path / "transcript.jsonl"
+    p.write_text(user_line + "\n" + tool_result_line + "\n")
+    r = run_hook("src/app/feature.py", str(p))
+    assert r.returncode == 2, (
+        "real user SDD request must still block even with tool_result in transcript; "
+        f"stderr={r.stderr}"
+    )
+
+
+# ─── Path exclusion: .env files in api/ dirs must not trigger hook ──────────
+# Root cause: apps/api/.env matched (^|/)api/ because /api/ appears as a
+# path segment. A .env file is a config file, not implementation code.
+
+def test_env_file_in_api_dir_does_not_trigger_impl_check(tmp_path):
+    """apps/api/.env should be excluded as a config file before SDD detection,
+    even though the path contains the /api/ segment."""
+    t = _transcript(tmp_path, "invoke subagent-driven-development", skill_loaded=False)
+    r = run_hook("apps/api/.env", t)
+    assert r.returncode == 0, (
+        "apps/api/.env is a config file and must not trigger the implementation "
+        f"file check; stderr={r.stderr}"
+    )
