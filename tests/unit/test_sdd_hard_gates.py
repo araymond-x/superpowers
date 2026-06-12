@@ -987,6 +987,83 @@ class TestManifestModeDispatchDetection:
         )
 
 
+# ─── No-manifest guard ───────────────────────────────────────────────────────
+
+
+class TestNoManifestGuard:
+    """Tests for the no-manifest artifact guard.
+
+    When .active-feature exists with SDD artifacts (reports/ or deviations.md)
+    but no .sdd-session.json, the hook should only block dispatches that look
+    like SDD work (implementer or reviewer). Non-SDD dispatches pass through.
+    """
+
+    _FEAT_PATH = "docs/imp-plans/2026-06-12-test-feature"
+
+    def _setup(self, tmp_path, *, with_reports: bool = True) -> str:
+        feat_dir = tmp_path / self._FEAT_PATH
+        feat_dir.mkdir(parents=True)
+        if with_reports:
+            (feat_dir / "reports").mkdir()
+        (tmp_path / ".active-feature").write_text(self._FEAT_PATH)
+        # Intentionally no .sdd-session.json
+        return str(tmp_path)
+
+    def test_non_sdd_dispatch_allowed_with_artifacts(self, tmp_path):
+        """Non-SDD dispatch (skill consult, Explore) passes through with no manifest."""
+        cwd = self._setup(tmp_path)
+        hook_input = make_hook_input(
+            description="Verify rules path-scoping mechanism for CLAUDE.md",
+            cwd=cwd,
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+        assert result.returncode == 0, (
+            f"Non-SDD dispatch should pass through without manifest. "
+            f"Exit: {result.returncode}, stderr: {result.stderr}"
+        )
+
+    def test_implementer_dispatch_blocked_without_manifest(self, tmp_path):
+        """Implementer dispatch is blocked when artifacts exist but no manifest."""
+        cwd = self._setup(tmp_path)
+        hook_input = make_hook_input(
+            description="Implement task 5",
+            cwd=cwd,
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+        assert result.returncode == 2, (
+            f"Implementer dispatch should be blocked without manifest. "
+            f"Exit: {result.returncode}, stderr: {result.stderr}"
+        )
+        assert "manifest" in result.stderr.lower(), f"stderr: {result.stderr}"
+
+    def test_reviewer_dispatch_blocked_without_manifest(self, tmp_path):
+        """Reviewer dispatch is blocked when artifacts exist but no manifest."""
+        cwd = self._setup(tmp_path)
+        hook_input = make_hook_input(
+            description="Review spec compliance for task 5",
+            cwd=cwd,
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+        assert result.returncode == 2, (
+            f"Reviewer dispatch should be blocked without manifest. "
+            f"Exit: {result.returncode}, stderr: {result.stderr}"
+        )
+        assert "manifest" in result.stderr.lower(), f"stderr: {result.stderr}"
+
+    def test_any_dispatch_allowed_with_no_artifacts(self, tmp_path):
+        """Any dispatch passes through when .active-feature exists but no artifacts."""
+        cwd = self._setup(tmp_path, with_reports=False)
+        hook_input = make_hook_input(
+            description="Implement task 5",
+            cwd=cwd,
+        )
+        result = run_hook(HOOK_PATH, hook_input)
+        assert result.returncode == 0, (
+            f"Dispatch with no SDD artifacts should pass through. "
+            f"Exit: {result.returncode}, stderr: {result.stderr}"
+        )
+
+
 # ─── Manifest-mode activation guard ──────────────────────────────────────────
 
 

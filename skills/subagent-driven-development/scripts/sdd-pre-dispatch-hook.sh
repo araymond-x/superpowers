@@ -120,14 +120,22 @@ if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
 fi
 
 # ─── Require manifest mode (legacy non-manifest path removed) ───────────────
-# No manifest + SDD artifacts present → upstream failure, block with guidance.
+# No manifest + SDD artifacts present → block only if dispatch is SDD-shaped.
+# Non-SDD dispatches (skill consults, Explore agents, dry-runs) pass through so
+# an inline-execution feature doesn't block unrelated Agent calls.
 # No manifest + no artifacts → not an SDD session, allow.
 if [ "$MANIFEST_MODE" = false ]; then
   if [ -f ".active-feature" ]; then
     FEAT_CHECK=$(cat .active-feature | tr -d '\n' | sed 's|/$||')
     if [ -d "$FEAT_CHECK/reports" ] || [ -f "$FEAT_CHECK/deviations.md" ]; then
-      echo "BLOCKED: SDD artifacts found in $FEAT_CHECK/ but no .sdd-session.json manifest. Run Plan Ingestion (materialize-manifest.py) to create the session manifest before dispatching tasks." >&2
-      exit 2
+      _IS_SDD=false
+      grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit|partner.review)' <<< "$DESCRIPTION" && _IS_SDD=true
+      grep -qiE '(implement|dispatch).*task\s*[0-9]' <<< "$DESCRIPTION" && _IS_SDD=true
+      grep -qiE 'you are implementing task\s*[0-9]' <<< "$PROMPT" && _IS_SDD=true
+      if [ "$_IS_SDD" = true ]; then
+        echo "BLOCKED: SDD artifacts found in $FEAT_CHECK/ but no .sdd-session.json manifest. Run Plan Ingestion (materialize-manifest.py) to create the session manifest before dispatching tasks." >&2
+        exit 2
+      fi
     fi
   fi
   exit 0
