@@ -752,3 +752,46 @@ class TestGitRealityCheck:
                 shutil.rmtree(log_dir, ignore_errors=True)
         finally:
             shutil.rmtree(repo, ignore_errors=True)
+
+
+class TestReviewTiersArchiveAware:
+    """N27: _review_tiers_per_task globs archive-*/ with live-wins."""
+
+    def test_review_tiers_includes_archived(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        archive = reports / "archive-Mod1"
+        archive.mkdir()
+        (archive / "task-001-quality-review-minimum-tier.md").write_text("x")
+        (archive / "task-002-quality-review-minimum-tier.md").write_text("x")
+        (archive / "task-003-quality-review-minimum-tier.md").write_text("x")
+        (reports / "task-004-quality-review.md").write_text("x")
+        tiers = dict(
+            _checkpoint._review_tiers_per_task(str(reports), "quality-review")
+        )
+        assert tiers == {1: True, 2: True, 3: True, 4: False}
+
+    def test_review_tiers_live_wins_over_archive(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        archive = reports / "archive-Mod1"
+        archive.mkdir()
+        # Same task id: archived as minimum, re-reviewed live as full.
+        (archive / "task-005-quality-review-minimum-tier.md").write_text("x")
+        (reports / "task-005-quality-review.md").write_text("x")
+        tiers = dict(
+            _checkpoint._review_tiers_per_task(str(reports), "quality-review")
+        )
+        assert tiers[5] is False  # live full wins over archived minimum
+
+    def test_review_tiers_partner_archive(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        archive = reports / "archive-Mod1"
+        archive.mkdir()
+        (archive / "partner-review-001-minimum-tier.md").write_text("x")
+        (reports / "partner-review-002.md").write_text("x")
+        tiers = dict(
+            _checkpoint._review_tiers_per_task(str(reports), "partner-review")
+        )
+        assert tiers == {1: True, 2: False}

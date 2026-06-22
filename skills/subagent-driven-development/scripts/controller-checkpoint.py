@@ -204,33 +204,53 @@ def _review_tiers_per_task(reports_dir, review_type):
     Recognizes:
       quality-review: task-NNN-quality-review.md / task-NNN-quality-review-minimum-tier.md
       partner-review: partner-review-NNN.md       / partner-review-NNN-minimum-tier.md
+
+    Archive-aware (N27): globs the live reports dir AND reports/archive-*/ with
+    the same basename patterns, so the Check 7 ratio still covers reviews that
+    transition-module.py moved into archive-<module>/. Result is keyed by task
+    id; when a task id appears in both an archive and the live dir, the LIVE
+    entry wins (post-transition re-reviews are not double-counted). Task ids are
+    globally unique across modules, so archive-vs-archive collisions cannot
+    occur. One of the 5 documented archive-aware lookups (see CLAUDE.md).
     """
     if review_type == "quality-review":
-        full_pat = os.path.join(reports_dir, "task-*-quality-review.md")
-        min_pat = os.path.join(reports_dir, "task-*-quality-review-minimum-tier.md")
+        full_name = "task-*-quality-review.md"
+        min_name = "task-*-quality-review-minimum-tier.md"
         id_re = re.compile(r"task-(\d+)-quality-review(?:-minimum-tier)?\.md$")
     elif review_type == "partner-review":
-        full_pat = os.path.join(reports_dir, "partner-review-*.md")
-        min_pat = os.path.join(reports_dir, "partner-review-*-minimum-tier.md")
+        full_name = "partner-review-*.md"
+        min_name = "partner-review-*-minimum-tier.md"
         id_re = re.compile(r"partner-review-(\d+)(?:-minimum-tier)?\.md$")
     else:
         return []
 
-    min_paths = set(glob.glob(min_pat))
-    results = []
-    for path in min_paths:
-        m = id_re.search(os.path.basename(path))
-        if m:
-            results.append((int(m.group(1)), True))
-    # The full glob can also match -minimum-tier.md files (notably the partner
-    # pattern), so skip anything already captured as minimum via min_paths.
-    for path in glob.glob(full_pat):
-        if path in min_paths:
-            continue
-        m = id_re.search(os.path.basename(path))
-        if m:
-            results.append((int(m.group(1)), False))
-    return results
+    def _classify_dir(directory):
+        # type: (str) -> dict
+        """Return {task_id: is_minimum} for one directory."""
+        result = {}  # type: dict
+        min_paths = set(glob.glob(os.path.join(directory, min_name)))
+        for path in min_paths:
+            m = id_re.search(os.path.basename(path))
+            if m:
+                result[int(m.group(1))] = True
+        # The full glob can also match -minimum-tier.md files (notably the
+        # partner pattern), so skip anything already captured as minimum.
+        for path in glob.glob(os.path.join(directory, full_name)):
+            if path in min_paths:
+                continue
+            m = id_re.search(os.path.basename(path))
+            if m:
+                result.setdefault(int(m.group(1)), False)
+        return result
+
+    tiers = {}  # type: dict
+    # Archives first (sorted = module order), live dir LAST so live wins.
+    for archive_dir in sorted(glob.glob(os.path.join(reports_dir, "archive-*"))):
+        if os.path.isdir(archive_dir):
+            tiers.update(_classify_dir(archive_dir))
+    tiers.update(_classify_dir(reports_dir))
+
+    return [(tid, is_min) for tid, is_min in tiers.items()]
 
 
 def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
