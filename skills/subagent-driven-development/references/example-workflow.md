@@ -1,12 +1,12 @@
 # Example Workflow
 
-> Part of the Subagent-Driven Development skill (`skills/subagent-driven-development/SKILL-v0.1.md`).
+> Part of the Subagent-Driven Development skill (`skills/subagent-driven-development/SKILL.md`).
 > This annotated example shows Task 0 catch, DEVIATIONS.md logging, review cycles, and Pre-Completion Gate verification.
 
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
 
-[Read full plan file: docs/plans/feature-plan.md]
+[Read full plan file: <feature-dir>/plan.md]
 [Extract Contract Constraints section (verbatim)]
 [Plan has Source Contracts — read source files: src/api/contracts.py, src/models/user.py]
 [Extract Write-Scope Partitioning table — Tasks 1-4 own distinct files, no conflicts]

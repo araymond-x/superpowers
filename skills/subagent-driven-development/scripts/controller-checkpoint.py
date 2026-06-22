@@ -14,20 +14,20 @@ Exit codes:
 Usage:
   python scripts/controller-checkpoint.py \\
     --phase pre-execution \\
-    --plan-file docs/plans/feature-plan.md \\
+    --plan-file <feature-dir>/plan.md \\
     --deviations-file DEVIATIONS.md \\
     --reports-dir reports/
 
   python scripts/controller-checkpoint.py \\
     --phase pre-dispatch \\
     --task-number 3 \\
-    --plan-file docs/plans/feature-plan.md \\
+    --plan-file <feature-dir>/plan.md \\
     --deviations-file DEVIATIONS.md \\
     --reports-dir reports/
 
   python scripts/controller-checkpoint.py \\
     --phase pre-completion \\
-    --plan-file docs/plans/feature-plan.md \\
+    --plan-file <feature-dir>/plan.md \\
     --deviations-file DEVIATIONS.md \\
     --reports-dir reports/
 """

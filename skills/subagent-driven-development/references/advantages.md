@@ -1,6 +1,6 @@
 # Advantages
 
-> Part of the Subagent-Driven Development skill (`skills/subagent-driven-development/SKILL-v0.1.md`).
+> Part of the Subagent-Driven Development skill (`skills/subagent-driven-development/SKILL.md`).
 > Comparison against manual execution and executing-plans.
 
 **vs. Manual execution:**
