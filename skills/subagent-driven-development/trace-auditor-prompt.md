@@ -45,10 +45,10 @@ Agent tool (general-purpose):
 
     **2. Concern Coverage**
     For each task that returned DONE_WITH_CONCERNS:
-    - Were the concerns logged to DEVIATIONS.md? Unlogged concerns are invisible
+    - Were the concerns logged to deviations.md? Unlogged concerns are invisible
       to the final reviewer and to future agents investigating issues.
     - Were the concerns addressed or explicitly accepted (Disposition != Pending)?
-    - Are there concerns in the trace text that don't appear in DEVIATIONS.md?
+    - Are there concerns in the trace text that don't appear in deviations.md?
 
     **3. Review Coverage**
     - Did every task receive at least a spec compliance review? The statement
@@ -85,7 +85,7 @@ Agent tool (general-purpose):
     |---|------|-------------|----------|--------------|---------|------------|
 
     **Concern Coverage:**
-    | Task | Concerns in Trace | In DEVIATIONS.md? | Disposition |
+    | Task | Concerns in Trace | In deviations.md? | Disposition |
     |------|------------------|-------------------|-------------|
 
     **Review Coverage:**

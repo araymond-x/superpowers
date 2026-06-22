@@ -1,7 +1,7 @@
 # Example Workflow
 
 > Part of the Subagent-Driven Development skill (`skills/subagent-driven-development/SKILL.md`).
-> This annotated example shows Task 0 catch, DEVIATIONS.md logging, review cycles, and Pre-Completion Gate verification.
+> This annotated example shows Task 0 catch, deviations.md logging, review cycles, and Pre-Completion Gate verification.
 
 ```
 You: I'm using Subagent-Driven Development to execute this plan.
@@ -10,7 +10,7 @@ You: I'm using Subagent-Driven Development to execute this plan.
 [Extract Contract Constraints section (verbatim)]
 [Plan has Source Contracts — read source files: src/api/contracts.py, src/models/user.py]
 [Extract Write-Scope Partitioning table — Tasks 1-4 own distinct files, no conflicts]
-[Create DEVIATIONS.md at project root with header template]
+[Create <feature-dir>/deviations.md (empty, with header)]
 [Plan includes Task 0 — verify it is first in task list]
 [Create TodoWrite with Task 0 first, then Tasks 1-4]
 
@@ -39,7 +39,7 @@ Implementer:
   - Self-review: Found I missed --force flag, added it
   - Committed
 
-[No concerns to log — DEVIATIONS.md unchanged]
+[No concerns to log — deviations.md unchanged]
 [Dispatch spec compliance reviewer — tier: standard]
 Spec reviewer: PASS — all requirements met, nothing extra
 
@@ -60,7 +60,7 @@ Implementer:
   - Concern: The repair mode touches a file that Task 3 also modifies (repair_utils.py).
     I made conservative changes to avoid conflicts, but Task 3 should be aware.
 
-[DONE_WITH_CONCERNS — log to DEVIATIONS.md]
+[DONE_WITH_CONCERNS — log to deviations.md]
 [Append: "| Task 2 | IndependentDecision | repair_utils.py also modified by Task 3; conservative changes made | Pending |"]
 
 [Dispatch spec compliance reviewer]
@@ -90,18 +90,18 @@ Code reviewer: Approved
 ...
 
 [After all tasks]
-[Read DEVIATIONS.md — 2 entries, both Pending]
+[Read deviations.md — 2 entries, both Pending]
 [Disposition entries: repair_utils.py concern → Task 3 was given explicit context, no conflict materialized → Accepted]
 [All entries dispositioned]
 
 [Pre-Completion Gate check:]
 [1. All TodoWrite tasks complete: YES]
 [2. All plan checkboxes checked: YES]
-[3. DEVIATIONS.md fully dispositioned: YES]
-[4. Final reviewer will receive DEVIATIONS.md: YES — including in context]
+[3. deviations.md fully dispositioned: YES]
+[4. Final reviewer will receive deviations.md: YES — including in context]
 [5. Contract trace: account_id used correctly throughout: PASS]
 
-[Dispatch final code reviewer with DEVIATIONS.md included in context]
+[Dispatch final code reviewer with deviations.md included in context]
 Final reviewer: All requirements met, deviations reviewed and accepted, ready to merge.
 
 Done — invoking superpowers:finishing-a-development-branch.

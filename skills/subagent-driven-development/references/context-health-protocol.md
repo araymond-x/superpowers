@@ -11,7 +11,7 @@ As the controller processes tasks, its own context accumulates. After 5+ tasks, 
 
 1. Run the context summary script:
    ```bash
-   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file DEVIATIONS.md --output reports/context-summary.md
+   python ~/.claude/skills/superpowers/subagent-driven-development/scripts/context-summary.py --reports-dir reports/ --deviations-file deviations.md --output reports/context-summary.md
    ```
 2. Read `context-summary.md` — this is now your compressed execution state
 3. You no longer need to hold individual report details in context
@@ -19,11 +19,11 @@ As the controller processes tasks, its own context accumulates. After 5+ tasks, 
 
 **At the halfway point of execution** (task count / 2), regardless of context load:
 - Generate a context summary
-- Review DEVIATIONS.md for accumulated drift
+- Review deviations.md for accumulated drift
 - Verify progress percentage matches expectations
 - This is a natural checkpoint to assess whether the plan is on track or needs adjustment
 
 **If you suspect your own context is degraded:**
 - Save execution state to files (context-summary.md is sufficient)
-- Report to the human: "I've completed N of M tasks. My context is heavy. Recommend continuing in a fresh session — all state is in plan checkboxes + DEVIATIONS.md + reports/."
+- Report to the human: "I've completed N of M tasks. My context is heavy. Recommend continuing in a fresh session — all state is in plan checkboxes + deviations.md + reports/."
 - This is not failure — it is disciplined context management

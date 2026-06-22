@@ -1,4 +1,4 @@
-# DEVIATIONS.md Template
+# deviations.md Template
 
 > Part of the subagent-driven-development skill. Referenced from SKILL.md Step 6.
 

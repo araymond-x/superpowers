@@ -3,7 +3,7 @@
 context-summary.py
 
 Generates a condensed execution context summary from completed task reports
-and DEVIATIONS.md. Intended to replace the need to re-read all individual
+and deviations.md. Intended to replace the need to re-read all individual
 report files when the controller's context window is under pressure.
 
 The output is a single markdown file the controller can read to reconstruct
@@ -17,7 +17,7 @@ Exit codes:
 Usage:
   python scripts/context-summary.py \\
     --reports-dir reports/ \\
-    --deviations-file DEVIATIONS.md \\
+    --deviations-file deviations.md \\
     --output context-summary.md
 """
 
@@ -67,7 +67,7 @@ DEVIATIONS_FROM_PLAN_PATTERN = re.compile(
     re.DOTALL | re.IGNORECASE,
 )
 
-# Pattern to match deviation table rows in DEVIATIONS.md
+# Pattern to match deviation table rows in deviations.md
 # Matches lines like: | Task 2 | IndependentDecision | description | Pending |
 DEVIATION_ROW_PATTERN = re.compile(
     r"^\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|",
@@ -232,7 +232,7 @@ def parse_report(report_path: str) -> dict:
 
 def parse_deviations(deviations_path: str) -> list:
     """
-    Parse DEVIATIONS.md and extract all table row entries.
+    Parse deviations.md and extract all table row entries.
     Returns a list of dicts with keys: task, type, description, disposition.
     Excludes header rows and separator rows.
     """
@@ -457,7 +457,7 @@ def main() -> int:
         required=False,
         default=None,
         metavar="PATH",
-        help="Path to DEVIATIONS.md.",
+        help="Path to deviations.md.",
     )
     parser.add_argument(
         "--output",

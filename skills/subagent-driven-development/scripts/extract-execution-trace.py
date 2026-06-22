@@ -11,7 +11,7 @@ Usage:
     python extract-execution-trace.py --session-file /path/to/session.jsonl
     python extract-execution-trace.py --session-file /path/to/session.jsonl \\
         --output trace.json \\
-        --deviations-file DEVIATIONS.md \\
+        --deviations-file deviations.md \\
         --reports-dir reports/
 """
 
@@ -598,7 +598,7 @@ def aggregate_tasks(
             fp = ev.get("file_path", "")
             tn = current_impl_task
 
-            # DEVIATIONS.md update
+            # deviations.md update
             if "DEVIATION" in fp.upper() and tn is not None and tn in task_map:
                 task_map[tn]["deviations_logged"] = True
 
@@ -804,12 +804,12 @@ def detect_anomalies(
             )
 
         # ---- Rule 2: concerns_not_logged ----
-        # DONE_WITH_CONCERNS but no DEVIATIONS.md edit detected before the next task dispatch.
+        # DONE_WITH_CONCERNS but no deviations.md edit detected before the next task dispatch.
         if ret["status"] == "DONE_WITH_CONCERNS" and not task["deviations_logged"]:
             add_anomaly(
                 tn,
                 "concerns_not_logged",
-                f"Task {tn} subagent returned DONE_WITH_CONCERNS but no Edit to DEVIATIONS.md "
+                f"Task {tn} subagent returned DONE_WITH_CONCERNS but no Edit to deviations.md "
                 "was detected before the next task dispatch.",
             )
 
@@ -949,7 +949,7 @@ def extract_trace(
     scripts_run = aggregate_scripts(events)
     anomaly_details, anomaly_summary = detect_anomalies(tasks, events)
 
-    # Cross-reference DEVIATIONS.md if provided
+    # Cross-reference deviations.md if provided
     if deviations_file and os.path.isfile(deviations_file):
         _cross_reference_deviations(tasks, deviations_file)
 
@@ -969,7 +969,7 @@ def _cross_reference_deviations(
     tasks: List[Dict[str, Any]], deviations_file: str
 ) -> None:
     """
-    Read DEVIATIONS.md and mark tasks as deviations_logged if their task number
+    Read deviations.md and mark tasks as deviations_logged if their task number
     appears in the file content.
     """
     try:
@@ -1018,7 +1018,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--deviations-file",
         default=None,
         metavar="PATH",
-        help="Optional DEVIATIONS.md path for cross-reference.",
+        help="Optional deviations.md path for cross-reference.",
     )
     parser.add_argument(
         "--reports-dir",

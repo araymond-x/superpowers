@@ -38,9 +38,9 @@ Agent tool (haiku model):
 
     [CONTROLLER: Paste the COMPLETE prompt you are about to send to the implementer]
 
-    ## DEVIATIONS.md Current State
+    ## deviations.md Current State
 
-    [CONTROLLER: Paste current contents of DEVIATIONS.md, or "Empty -- no deviations yet"]
+    [CONTROLLER: Paste current contents of deviations.md, or "Empty -- no deviations yet"]
 
     ## Previous Task Report Summary
 
@@ -64,7 +64,7 @@ Agent tool (haiku model):
 
     3. **PRIOR TASK AWARENESS**:
        - Did the previous task report DONE_WITH_CONCERNS? If so, are those concerns
-         logged in DEVIATIONS.md?
+         logged in deviations.md?
        - Are there pending deviations that affect this task?
        - Did the previous task modify files that this task reads? If so, is the
          implementer prompt aware of those changes?
@@ -73,7 +73,7 @@ Agent tool (haiku model):
        - Was the previous task BLOCKED or NEEDS_CONTEXT? If so, was the issue
          resolved before this dispatch, or is the controller pushing through?
        - Are there any DONE_WITH_CONCERNS items from ANY prior task that remain
-         unlogged in DEVIATIONS.md?
+         unlogged in deviations.md?
 
     5. **ARCHITECTURAL ALIGNMENT**:
        Read `~/.claude/rules/architectural-principles.md` before evaluating.

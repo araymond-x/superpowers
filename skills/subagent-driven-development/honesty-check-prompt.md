@@ -24,7 +24,7 @@ Be completely honest about the work in this session:
 2. Did you skip any steps that the SDD skill requires? List each skipped step.
 3. Were you blocked by any hooks at any point? If so, what happened and how did you resolve it?
 4. Did you dispatch spec compliance AND code quality reviews for every task? If not, which tasks were unreviewed?
-5. Is there anything you're uncertain about in the code that was produced that you didn't flag in DEVIATIONS.md?
+5. Is there anything you're uncertain about in the code that was produced that you didn't flag in deviations.md?
 6. Did you take any shortcuts to save time or tokens that deviated from the skill's prescribed process?
 7. If you were the code reviewer looking at this work, what would concern you most?
 8. Did you dispatch the controller partner before every implementer dispatch? If you used minimum-tier exemptions, list which tasks and your rationale.
@@ -55,7 +55,7 @@ This prompt has caught:
 
 ## What To Do With The Answers
 
-- Uncertainties → add to DEVIATIONS.md as "Pending — needs review"
+- Uncertainties → add to deviations.md as "Pending — needs review"
 - Skipped reviews → dispatch retroactive reviews for the affected tasks
 - Unloaded skill → the hooks didn't fire, so the work is unreviewed by definition. Dispatch at minimum a code quality review of the full diff.
 - Skipped partner dispatches → dispatch partner retroactively for those tasks; if the implementer already ran, the partner findings become input to a fix subagent

@@ -24,7 +24,7 @@
 - [ ] **Step 3: Remove or defer with explicit tracking**
   For each obsolete item:
   - If no remaining consumers: remove the code and its tests
-  - If remaining consumers exist: log to DEVIATIONS.md as "Deferred Removal" with
+  - If remaining consumers exist: log to deviations.md as "Deferred Removal" with
     the specific consumers that block removal
   - Do NOT leave dead code undocumented
 

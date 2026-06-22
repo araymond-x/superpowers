@@ -15,20 +15,20 @@ Usage:
   python scripts/controller-checkpoint.py \\
     --phase pre-execution \\
     --plan-file <feature-dir>/plan.md \\
-    --deviations-file DEVIATIONS.md \\
+    --deviations-file <feature-dir>/deviations.md \\
     --reports-dir reports/
 
   python scripts/controller-checkpoint.py \\
     --phase pre-dispatch \\
     --task-number 3 \\
     --plan-file <feature-dir>/plan.md \\
-    --deviations-file DEVIATIONS.md \\
+    --deviations-file <feature-dir>/deviations.md \\
     --reports-dir reports/
 
   python scripts/controller-checkpoint.py \\
     --phase pre-completion \\
     --plan-file <feature-dir>/plan.md \\
-    --deviations-file DEVIATIONS.md \\
+    --deviations-file <feature-dir>/deviations.md \\
     --reports-dir reports/
 """
 
@@ -73,7 +73,7 @@ SOURCE_CONTRACTS_PATTERN = re.compile(
     re.MULTILINE | re.IGNORECASE,
 )
 
-# Pattern for pending entries in DEVIATIONS.md
+# Pattern for pending entries in deviations.md
 # Matches rows in a markdown table where the last non-whitespace cell is "Pending"
 PENDING_DEVIATION_PATTERN = re.compile(
     r"\|\s*Pending\s*\|?\s*$", re.MULTILINE | re.IGNORECASE
@@ -118,7 +118,7 @@ def count_checkboxes(plan_content: str) -> dict:
 
 
 def count_pending_deviations(deviations_content: str) -> int:
-    """Count entries in DEVIATIONS.md with 'Pending' disposition."""
+    """Count entries in deviations.md with 'Pending' disposition."""
     return len(PENDING_DEVIATION_PATTERN.findall(deviations_content))
 
 
@@ -138,7 +138,7 @@ def detect_stale_artifacts(deviations_file: str, reports_dir: str) -> dict:
     """
     Check for SDD artifacts from a prior session that exist before execution starts.
 
-    At pre-execution time, DEVIATIONS.md should not have content and reports/
+    At pre-execution time, deviations.md should not have content and reports/
     should not contain task reports or audit files — their presence indicates
     a prior SDD session's artifacts that need archival.
 
@@ -147,13 +147,13 @@ def detect_stale_artifacts(deviations_file: str, reports_dir: str) -> dict:
     """
     found = []
 
-    # Check DEVIATIONS.md for substantive content
+    # Check deviations.md for substantive content
     if os.path.isfile(deviations_file):
         try:
             content = read_file(deviations_file)
             # Only flag if it has real content (not empty or just whitespace)
             if content.strip():
-                found.append("DEVIATIONS.md (has content from prior session)")
+                found.append("deviations.md (has content from prior session)")
         except OSError:
             pass
 
@@ -833,7 +833,7 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
             "pre-execution", None, "FAIL", checks, warnings, blockers, None
         )
 
-    # Check 2: DEVIATIONS.md exists (optional for pre-execution)
+    # Check 2: deviations.md exists (optional for pre-execution)
     if args.deviations_file is None:
         checks["deviations_file"] = {
             "status": "SKIP",
@@ -847,7 +847,7 @@ def run_pre_execution(args: argparse.Namespace) -> dict:
     else:
         checks["deviations_file"] = {
             "status": "FAIL",
-            "detail": f"DEVIATIONS.md not found at: {args.deviations_file}",
+            "detail": f"deviations.md not found at: {args.deviations_file}",
         }
         blockers.append("deviations_file")
 
@@ -1355,7 +1355,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     if pending_count == 0:
         checks["no_pending_deviations"] = {
             "status": "PASS",
-            "detail": "All DEVIATIONS.md entries are dispositioned",
+            "detail": "All deviations.md entries are dispositioned",
         }
     else:
         checks["no_pending_deviations"] = {
@@ -1746,7 +1746,7 @@ def main() -> int:
         default=None,
         metavar="PATH",
         help=(
-            "Path to DEVIATIONS.md. "
+            "Path to deviations.md. "
             "Optional for --phase pre-execution (skipped with SKIP status if absent). "
             "Required for --phase pre-dispatch and pre-completion."
         ),

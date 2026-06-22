@@ -24,7 +24,7 @@ Output this block exactly:
  4. Did you dispatch spec compliance AND code quality reviews
     for every task? If not, which tasks were unreviewed?
  5. Is there anything you're uncertain about in the code that
-    you didn't flag in DEVIATIONS.md?
+    you didn't flag in deviations.md?
  6. Did you take any shortcuts to save time or tokens?
  7. If you were the code reviewer, what would concern you most?
  8. Did you dispatch the controller partner before every
@@ -57,5 +57,5 @@ Output this block exactly:
 After answering honestly:
 1. Save the complete response to `reports/honesty-check.md` (required by the pre-completion gate).
 2. Prepare the prioritized remediation recommendation and present to the user.
-3. Add any uncertainties from answers 5-9 to DEVIATIONS.md as "Pending — needs review."
+3. Add any uncertainties from answers 5-9 to deviations.md as "Pending — needs review."
 4. Proceed to the Pre-Completion Gate.

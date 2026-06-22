@@ -23,7 +23,7 @@
 **Quality gates:**
 - Plan ingestion catches contract mismatches before implementation begins
 - Task 0 verifies contract assumptions before any code is written
-- DEVIATIONS.md surfaces accumulated drift before it reaches merge
+- deviations.md surfaces accumulated drift before it reaches merge
 - Self-review catches issues before handoff
 - Two-stage review: spec compliance, then code quality
 - Review loops ensure fixes actually work

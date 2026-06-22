@@ -313,7 +313,7 @@ Without an explicit footprint, subagents discover dependencies at runtime — on
 For **Replacement**, **Refactor**, and **Migration** archetypes, the plan MUST include an **Obsolescence Verification Task** that:
 1. Greps for every function/component marked "Obsolete" in the footprint
 2. Verifies no remaining consumers outside the plan's scope
-3. Removes confirmed dead code OR logs blockers to DEVIATIONS.md
+3. Removes confirmed dead code OR logs blockers to `<feature-dir>/deviations.md`
 4. Final grep audit to confirm no stale references
 
 This task should be scheduled AFTER all implementation tasks are complete but BEFORE the Pre-Completion Gate.
@@ -322,7 +322,7 @@ For **Greenfield** and **Extension** archetypes, the footprint still documents w
 
 ### Obsolescence Verification Task Template
 
-See `references/obsolescence-verification-template.md` for the complete Obsolescence Verification task template with grep commands and DEVIATIONS.md logging. Copy it into your plan for Replacement/Refactor/Migration archetypes.
+See `references/obsolescence-verification-template.md` for the complete Obsolescence Verification task template with grep commands and `<feature-dir>/deviations.md` logging. Copy it into your plan for Replacement/Refactor/Migration archetypes.
 
 ## Ground-Truth Fixtures
 
