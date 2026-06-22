@@ -322,6 +322,43 @@ def _load_all_plan_contents(manifest_data: dict, git_root: str) -> list:
     return contents
 
 
+def _merged_dispatch_times(dispatch_log_path):
+    # type: (str) -> dict
+    """Merge implementer dispatch timestamps from archived logs + the live log.
+
+    Reads reports/archive-*/.dispatch-log (lexicographic = module order) FIRST,
+    then the live dispatch log LAST, so a re-dispatched task id's latest
+    timestamp wins (preserves Check 9's latest-wins re-dispatch semantics).
+    Parses ONLY `type=implementer` lines — the shared dispatch-log contract with
+    N26: type=fix / type=fix-unattributed lines never open a verification
+    window. One of the 5 documented archive-aware lookups (see CLAUDE.md).
+    """
+    times = {}  # type: dict
+    reports_dir = os.path.dirname(dispatch_log_path)
+    log_re = re.compile(
+        r"(\S+)\s+DISPATCH\s+implementer\s+task=(\d+)\s+type=implementer"
+    )
+
+    def _ingest(path):
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path) as f:
+                for line in f:
+                    m = log_re.match(line)
+                    if m:
+                        times[int(m.group(2))] = m.group(1)
+        except OSError:
+            pass
+
+    for archive_log in sorted(
+        glob.glob(os.path.join(reports_dir, "archive-*", ".dispatch-log"))
+    ):
+        _ingest(archive_log)
+    _ingest(dispatch_log_path)
+    return times
+
+
 def _check_verification_git_reality(
     verification_ids,  # type: set
     dispatch_log_path,  # type: str
@@ -334,19 +371,14 @@ def _check_verification_git_reality(
     runs git log between consecutive task windows,
     returns findings for any file modifications detected.
     """
-    if not verification_ids or not os.path.isfile(dispatch_log_path):
+    if not verification_ids:
         return []
 
-    dispatch_times = {}  # type: dict
-    with open(dispatch_log_path) as f:
-        for line in f:
-            # Format mirrors the writer in sdd-pre-dispatch-hook.sh (~lines 191/194); keep in sync.
-            m = re.match(
-                r"(\S+)\s+DISPATCH\s+implementer\s+task=(\d+)\s+type=implementer",
-                line,
-            )
-            if m:
-                dispatch_times[int(m.group(2))] = m.group(1)
+    # Archive-aware (N27): merge archived dispatch logs + the live log. The
+    # parser inside _merged_dispatch_times matches ONLY type=implementer lines,
+    # so N26's type=fix / type=fix-unattributed entries never open a window.
+    # (Writer: sdd-pre-dispatch-hook.sh Stage 2; keep the format in sync.)
+    dispatch_times = _merged_dispatch_times(dispatch_log_path)
 
     findings = []
     sorted_tasks = sorted(dispatch_times.keys())

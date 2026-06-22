@@ -754,6 +754,80 @@ class TestGitRealityCheck:
             shutil.rmtree(repo, ignore_errors=True)
 
 
+class TestCheck9ArchiveAware:
+    """N27: Check 9 merges archived dispatch logs + live log."""
+
+    def test_merged_dispatch_times_includes_archive(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        archive = reports / "archive-Mod1"
+        archive.mkdir()
+        (archive / ".dispatch-log").write_text(
+            "2026-01-01T00:00:00Z DISPATCH implementer task=3 type=implementer\n"
+        )
+        (reports / ".dispatch-log").write_text(
+            "2026-01-02T00:00:00Z DISPATCH implementer task=5 type=implementer\n"
+        )
+        times = _checkpoint._merged_dispatch_times(str(reports / ".dispatch-log"))
+        assert times == {3: "2026-01-01T00:00:00Z", 5: "2026-01-02T00:00:00Z"}
+
+    def test_merged_dispatch_times_live_overwrites(self, tmp_path):
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        archive = reports / "archive-Mod1"
+        archive.mkdir()
+        (archive / ".dispatch-log").write_text(
+            "2026-01-01T00:00:00Z DISPATCH implementer task=3 type=implementer\n"
+        )
+        (reports / ".dispatch-log").write_text(
+            "2026-02-02T00:00:00Z DISPATCH implementer task=3 type=implementer\n"
+        )
+        times = _checkpoint._merged_dispatch_times(str(reports / ".dispatch-log"))
+        assert times == {3: "2026-02-02T00:00:00Z"}  # live (later) wins
+
+    def test_merged_dispatch_times_ignores_fix_lines(self, tmp_path):
+        # N26/N27 contract: type=fix / type=fix-unattributed never open a window.
+        reports = tmp_path / "reports"
+        reports.mkdir()
+        (reports / ".dispatch-log").write_text(
+            "2026-01-01T00:00:00Z DISPATCH fix task=3 type=fix\n"
+            "2026-01-01T00:00:01Z DISPATCH adhoc type=fix-unattributed\n"
+        )
+        times = _checkpoint._merged_dispatch_times(str(reports / ".dispatch-log"))
+        assert times == {}
+
+    def test_archived_window_file_modification_fails(self):
+        """A verification task dispatched ONLY in an archived log, with a
+        file-modifying commit inside its window, FAILs after the merge (today
+        the live-only read silently skips it)."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_file_at(repo, "modified.txt", "2026-03-01T10:30:00")
+            log_dir = tempfile.mkdtemp()
+            try:
+                reports = os.path.join(log_dir, "reports")
+                archive = os.path.join(reports, "archive-Mod1")
+                os.makedirs(archive)
+                with open(os.path.join(archive, ".dispatch-log"), "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+                live = os.path.join(reports, ".dispatch-log")
+                open(live, "w").close()  # truncated live log (post-transition)
+                findings = _checkpoint._check_verification_git_reality(
+                    {3}, live, git_root=repo
+                )
+                assert findings, f"Expected finding from archived window: {findings}"
+                assert findings[0]["task"] == 3
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+
 class TestReviewTiersArchiveAware:
     """N27: _review_tiers_per_task globs archive-*/ with live-wins."""
 
