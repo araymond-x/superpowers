@@ -1,4 +1,0 @@
-docs/imp-plans/2026-05-02-per-feature-directory-plan.md
-docs/imp-plans/2026-05-02-per-feature-directory-module-1-infrastructure.md
-docs/imp-plans/2026-05-02-per-feature-directory-module-2-hooks.md
-docs/imp-plans/2026-05-02-per-feature-directory-module-3-skills.md
