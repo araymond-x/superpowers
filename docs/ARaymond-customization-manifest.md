@@ -1,11 +1,11 @@
 # Superpowers Customization Manifest
 
 **Author**: Aaron Raymond
-**Last Updated**: 2026-05-07
+**Last Updated**: 2026-06-23
 **Fork**: `~/projects/claude-custom/superpowers` (from `obra/superpowers`)
 **Upstream**: `https://github.com/obra/superpowers`
 **Baseline snapshot**: `snapshot-pre-sdd-improvements-v1` at commit `f352ea9`
-**Last upstream sync**: v5.1.0 (`f2cbfbe`) merged 2026-05-07 (fork commit `80fc5c5`)
+**Last upstream sync**: v5.1.0 (`f2cbfbe`) merged 2026-05-07 (fork commit `80fc5c5`); v6.0.3 (`896224c`) assessed 2026-06-22 — NOT merged, selective cherry-picks only (see Upstream Sync Log)
 
 ---
 
@@ -255,7 +255,7 @@ After merge, resolve conflicts in these files (all contain fork customizations):
 | `skills/subagent-driven-development/spec-reviewer-prompt.md` | Contract verification, severity gradation, BASE_SHA placeholder |
 | `skills/subagent-driven-development/code-quality-reviewer-prompt.md` | All v0.1 fork improvements (dead code BLOCKING, [NEEDS_CONTEXT] label, IMPLEMENTER_REPORT placeholder, per-file SRP check, contract-constraint tracing) |
 | `skills/writing-plans/plan-document-reviewer-prompt.md` | 15-category mechanical checklist, cross-doc audit |
-| `skills/using-git-worktrees/SKILL.md` | Worktree location convention: `.worktrees/` only; sibling/global alternatives removed |
+| `skills/using-git-worktrees/SKILL.md` | Worktree location convention. Legacy global dir (`~/.config/superpowers/worktrees/`) removed (A4, v6 sync 2026-06-22) — `.worktrees/` preferred. (CLAUDE.md mandates `.worktrees/` only; the SKILL.md still accepts a `worktrees/` sibling fallback from upstream — minor residual divergence, not yet reconciled.) |
 
 After merge: if upstream added new skills, create matching command stubs (see Step 3 regeneration script) and run both static test suites.
 
@@ -493,6 +493,7 @@ Files with no expected conflicts (fork-only additions):
 |------|-----------------|---------|-----------|-------------|
 | 2026-03-31 | v5.0.7 (`dd23728`) | 27 | 4 files (CLAUDE.md, brainstorming, writing-plans, codex-tools.md) + writing-skills/using-superpowers auto-merged | "No Placeholders" section from writing-plans; Copilot CLI lines auto-merged into using-superpowers; "two required fields" fix auto-merged into writing-skills |
 | 2026-05-07 | v5.1.0 (`f2cbfbe`) | 3 | 8 files (CLAUDE.md, agents/code-reviewer.md, using-git-worktrees, finishing-a-development-branch, requesting-code-review, subagent-driven-development + code-quality-reviewer-prompt, executing-plans) | Accepted upstream's using-git-worktrees full rewrite + re-added NEW SESSION REQUIRED block; accepted finishing-a-development-branch env detection + kept Step 7 post-completion cleanup; deferred agent deletion at merge time, then completed it on 2026-05-07 via `code-reviewer-agent-migration` (Needs Context + reflection step promoted to template); absorbed "continuous execution" paragraph in SDD |
+| 2026-06-22 | v6.0.3 (`896224c`) | 169 (assessed, **NOT merged**) | N/A — no merge attempted. All 13 SKILL.md upstream touched would conflict; the v6 SDD review-rewrite collides with our hook enforcement. Method: hand-port specific content deltas, not `git merge`/`cherry-pick`. | **A1** systematic-debugging ultrathink-keyword fix `"Ultrathink"→"Ultra-think"` (`90e1721`/#1558); **A2** `scripts/lint-shell.sh` ShellCheck+shfmt harness (`21b44e4`); **A4** using-git-worktrees legacy global-dir removal (`d00f4ad`/#1476). **Declined:** v6.0.3 `.git/`-scratch fix (N/A — we use `docs/imp-plans/`), new-harness support (Kimi/Pi/Antigravity), vendor-neutral prose rewrite (CSO→SDO/"your agent" — primary conflict source), evals submodule split. **Deferred to BACKLOG:** N29 (writing-skills authoring sections — content-port), N30 (architecture-neutral SDD cost wins), N31 (one-vs-two-reviewer strategic decision). Full assessment: `docs/process-improvement-findings/2026-06-22-upstream-v6-sync-assessment.md` |
 
 ---
 
@@ -517,4 +518,5 @@ Files with no expected conflicts (fork-only additions):
 | Pipeline Flexibility feature | `docs/imp-plans/2026-05-31-pipeline-flexibility/` | `task_type: verification` + `entry_mode: direct` SDD execution record (plan, deviations, reports) |
 | SDD Enforcement Hardening feature | `docs/imp-plans/2026-06-01-sdd-enforcement-hardening/` | Multi-module enforcement gap closure (N3a/N3b/N4/N10/N11) + skill-bypass hook blocking (C5) — SDD execution record (plan, deviations, reports) |
 | SDD Cleanup & Integration Gate feature | `docs/imp-plans/2026-06-05-sdd-cleanup-and-integration-gate/` | Sprint-3: 7 enforcement-pipeline bug fixes (N16/N9/N5+N13/N7/N12/N17/N1) + live-discovered N18 + C2 integration-test gate (IntegrationTest model, risk-surface WARNING, pre-completion Check 10) — SDD execution record incl. first live module transition, Task 3 provenance-violation remediation, honesty check + trace audit + final review |
+| Upstream v6 sync assessment | `docs/process-improvement-findings/2026-06-22-upstream-v6-sync-assessment.md` | Categorized assessment of obra/superpowers v6.0.0–v6.0.3 (`896224c`) vs our fork; what was cherry-picked (A1/A2/A4), the one-vs-two-reviewer strategic decision, and what was declined. Sources BACKLOG N29–N31 |
 | CLAUDE.md | `CLAUDE.md` (project root) | Session-level reference: architecture, gotchas, editing workflow, verification |
