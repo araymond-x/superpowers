@@ -253,6 +253,18 @@ def _review_tiers_per_task(reports_dir, review_type):
     return [(tid, is_min) for tid, is_min in tiers.items()]
 
 
+def _frontmatter_block(content: str) -> Optional[str]:
+    """Return the YAML frontmatter body (between the opening and the first
+    line-anchored ^---$), or None. Line-anchored so a '---' inside a value or a
+    markdown hr does not prematurely close the block (N25b)."""
+    if not content or not content.startswith("---"):
+        return None
+    m = re.search(r"^---$", content[3:], re.MULTILINE)
+    if not m:
+        return None
+    return content[3 : 3 + m.start()]
+
+
 def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
     """Return (set_of_task_ids, parsed_any_frontmatter) where task[field] == value.
 
@@ -265,13 +277,11 @@ def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
     ids: set = set()
     parsed = False
     for content in plan_contents:
-        if not content or not content.startswith("---"):
-            continue
-        end = content.find("---", 3)
-        if end == -1:
+        block = _frontmatter_block(content)
+        if block is None:
             continue
         try:
-            fm = yaml.safe_load(content[3:end])
+            fm = yaml.safe_load(block)
         except Exception:
             continue
         tasks = fm.get("tasks") if isinstance(fm, dict) else None
@@ -434,13 +444,11 @@ def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
     paths: list = []
     malformed: list = []
     for content in plan_contents:
-        if not content or not content.startswith("---"):
-            continue
-        end = content.find("---", 3)
-        if end == -1:
+        block = _frontmatter_block(content)
+        if block is None:
             continue
         try:
-            fm = yaml.safe_load(content[3:end])
+            fm = yaml.safe_load(block)
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -1680,6 +1688,12 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # MALFORMED declaration is a FAIL, never a skip — the author believes
     # they declared a gate.
     declared_it_paths, malformed_it_decls = _integration_test_paths(all_plan_contents)
+    # N25f: name the source plan file(s) the malformed declaration could live in
+    # so the author can locate it. _integration_test_paths takes no filenames, so
+    # the caller attributes the malformed declaration to the plan file(s) it
+    # loaded. In manifest mode all_plan_contents spans the parent plan + module
+    # files; args.plan_file names the active one the controller is driving.
+    _plan_label = os.path.basename(args.plan_file) if args.plan_file else "the plan"
     if not declared_it_paths and not malformed_it_decls:
         checks["integration_test_present"] = {
             "status": "PASS",
@@ -1691,7 +1705,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         checks["integration_test_present"] = {
             "status": "FAIL",
             "detail": (
-                "Malformed integration_test declaration(s): "
+                "Malformed integration_test declaration(s) in {}: ".format(_plan_label)
                 + "; ".join(malformed_it_decls)
                 + ". Expected shape: a mapping with a non-empty 'path' key "
                 "(integration_test: null or absent means no declaration)."
@@ -1713,9 +1727,9 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 "state, then re-run."
             )
             if malformed_it_decls:
-                detail += " Also malformed declaration(s): " + "; ".join(
-                    malformed_it_decls
-                )
+                detail += " Also malformed declaration(s) in {}: ".format(
+                    _plan_label
+                ) + "; ".join(malformed_it_decls)
             checks["integration_test_present"] = {
                 "status": "FAIL",
                 "detail": detail,
@@ -1739,12 +1753,18 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                     on_base_no_window = True
 
             it_problems = [
-                "malformed declaration: {}".format(d) for d in malformed_it_decls
+                "malformed declaration in {}: {}".format(_plan_label, d)
+                for d in malformed_it_decls
             ]
             for rel_path in declared_it_paths:
                 abs_path = os.path.join(it_git_root, rel_path)
                 if not os.path.isfile(abs_path):
-                    it_problems.append("{}: missing on disk".format(rel_path))
+                    if os.path.isdir(abs_path):
+                        it_problems.append(
+                            "{}: is a directory, not a file".format(rel_path)
+                        )
+                    else:
+                        it_problems.append("{}: missing on disk".format(rel_path))
                 elif not _in_changeset(rel_path, effective_base, it_git_root):
                     msg = (
                         "{}: exists but is not part of this feature's changeset "

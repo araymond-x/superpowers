@@ -444,6 +444,73 @@ class TestC2Check10:
         assert "integration_test_present" not in out.get("blockers", [])
 
 
+class TestN25Diagnostics:
+    """N25(b,d,f): line-anchored frontmatter scan + directory/malformed diagnostics."""
+
+    # Reuse the TestC2Check10 git-repo harness for the directory/malformed
+    # Check-10 fixtures (a manifest-free repo + plan.md, run pre-completion).
+    _git = TestC2Check10._git
+    _setup_repo = TestC2Check10._setup_repo
+    _run_checkpoint = TestC2Check10._run_checkpoint
+
+    def test_frontmatter_line_anchored(self):
+        # A value containing '---' must not prematurely close the frontmatter.
+        content = (
+            "---\nschema_version: 1\n"
+            "note: 'see --- below'\n"
+            "tasks:\n  - id: 1\n    review_tier: minimum\n---\n# Plan\n"
+        )
+        ids, parsed = _vp_ckpt._task_ids_where([content], "review_tier", "minimum")
+        assert parsed is True and ids == {1}
+
+    def test_integration_test_frontmatter_line_anchored(self):
+        # The same premature-close hazard for the top-level integration_test
+        # field: a '---' inside a value must not truncate the frontmatter.
+        content = (
+            "---\nschema_version: 1\n"
+            "note: 'see --- below'\n"
+            "integration_test:\n  path: tests/e2e.sh\n"
+            "tasks:\n  - id: 1\n    title: T\n---\n# Plan\n"
+        )
+        paths, malformed = _vp_ckpt._integration_test_paths([content])
+        assert paths == ["tests/e2e.sh"] and malformed == []
+
+    def test_directory_path_says_is_a_directory(self, tmp_path):
+        # A declared path that exists but is a DIRECTORY → FAIL with a
+        # "is a directory, not a file" detail (not the misleading "missing").
+        self._setup_repo(tmp_path, _c2_plan(IT_PATH))
+        # Create IT_PATH as a directory (untracked, after the base commit).
+        (tmp_path / IT_PATH).mkdir(parents=True)
+        out = self._run_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        assert "is a directory, not a file" in check.get("detail", ""), check
+        assert "integration_test_present" in out.get("blockers", [])
+
+    def test_malformed_names_source_plan_file(self):
+        # Helper level: a bare-string declaration yields a non-empty malformed
+        # list whose message names the shape ("bare string").
+        bad = "---\nschema_version: 1\nintegration_test: just-a-string\n---\n# Plan\n"
+        paths, malformed = _vp_ckpt._integration_test_paths([bad])
+        assert paths == [] and malformed and "bare string" in malformed[0]
+
+    def test_malformed_check10_detail_names_plan_file(self, tmp_path):
+        # Check-10 caller level: the malformed-only FAIL detail must name the
+        # source plan file (N25f) so the author can locate the declaration.
+        plan = (
+            "---\nschema_version: 1\nfeature_archetype: extension\n"
+            "integration_test: just-a-string\n"
+            "tasks:\n  - id: 1\n    title: T\n---\n"
+            + f"# Plan\n\n**Source Contracts:** None\n\n{_H} 1: T\n- [x] done\n"
+        )
+        self._setup_repo(tmp_path, plan)
+        out = self._run_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        assert "plan.md" in check.get("detail", ""), check
+        assert "integration_test_present" in out.get("blockers", [])
+
+
 class TestGitRunSSOT:
     """N25(c): module-level _git_run swallows failures, returns CompletedProcess|None."""
 
