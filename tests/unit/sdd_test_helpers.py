@@ -5,10 +5,26 @@ Provides workspace setup, report generation, and hook input construction
 for testing sdd-pre-dispatch-hook.sh and sdd-report-guard.sh.
 """
 
+import importlib.util
 import json
 import os
 import subprocess
 from datetime import datetime, timezone
+
+ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+
+
+def _load_script(name, filename):
+    """Load a hyphenated SDD script (validate-plan.py, controller-checkpoint.py)
+    as an importable module. Single source of truth (D15) — previously
+    duplicated in test_fence_aware_parsing.py and test_c2_integration_gate.py."""
+    path = os.path.join(
+        ROOT, "skills", "subagent-driven-development", "scripts", filename
+    )
+    spec = importlib.util.spec_from_file_location(name, path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def make_hook_input(

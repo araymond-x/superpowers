@@ -28,7 +28,7 @@ from typing import Dict, List, Optional, Tuple
 
 # Sibling scripts dir — importlib-loaded consumers (tests) don't put it on sys.path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _report_utils import _unfenced_content  # noqa: E402  (single source of truth)
+from _report_utils import _unfenced_content, ends_in_open_fence  # noqa: E402  (single source of truth)
 
 # -----------------------------------------------------------------------
 # Thresholds
@@ -443,6 +443,21 @@ def check_integration_test_risk(content: str, frontmatter: Optional[Dict]) -> Li
     return warnings
 
 
+def check_unclosed_fence(content: str) -> List[str]:
+    """Advisory WARNING when a plan ends inside an unclosed code fence (N20).
+
+    A fence-shadowed tail hides task headers and checkboxes from the validator
+    AND from all_tasks_have_reports (which then silently skips those tasks).
+    """
+    if ends_in_open_fence(content):
+        return [
+            "unclosed_fence: Plan ends inside an unclosed code fence (``` or ~~~). "
+            "Content after the opening fence is invisible to the validator and to "
+            "all_tasks_have_reports — close the fence."
+        ]
+    return []
+
+
 # -----------------------------------------------------------------------
 # Main validation logic
 # -----------------------------------------------------------------------
@@ -710,6 +725,13 @@ def validate_plan(
             "status": "WARNING",
             "detail": " | ".join(it_warnings),
         }
+
+    # --- unclosed code-fence heuristic (N20) ---
+    fence_warnings = check_unclosed_fence(content)
+    for w in fence_warnings:
+        warnings.append(w)
+    if fence_warnings:
+        sections["unclosed_fence"] = {"status": "WARNING", "detail": fence_warnings[0]}
 
     # --- Overall status ---
     if blockers:

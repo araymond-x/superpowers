@@ -58,28 +58,61 @@ PROMPT_PLACEHOLDER_PHRASES = [
 ]
 
 
-def _unfenced_content(text: str) -> str:
-    """Return text with lines inside ``` fence blocks replaced by blank lines.
+_FENCE_RE = re.compile(r"^([`~]{3,})")
 
-    Preserves line count so that line-index-based logic (span measurement,
-    header positions) remains valid after filtering.
+
+def _fence_marker(line):
+    # type: (str) -> Optional[str]   # 3.9-safe type comment (PEP-604 unions fail regression Category-8)
+    """Return the fence marker char ('`' or '~') if the line is a fence
+    delimiter (>=3 of the same char after stripping), else None."""
+    stripped = line.strip()
+    return stripped[0] if _FENCE_RE.match(stripped) else None
+
+
+def _unfenced_content(text: str) -> str:
+    """Return text with lines inside code fences replaced by blank lines.
+
+    Recognizes both ``` and ~~~ fences (N20). A fence closes only on its OWN
+    marker type — a ~~~ line inside a ``` fence is content, not a close.
+    Preserves line count so line-index-based logic (span measurement, header
+    positions) stays valid. An unclosed fence at EOF blanks to end-of-document
+    (CommonMark: an unclosed code block runs to the end) — pinned by a
+    characterization test.
 
     Single source of truth — imported by validate-plan.py and
     controller-checkpoint.py for fence-aware task-header parsing (N5).
     """
-    lines = text.splitlines(keepends=True)
     result = []
-    in_fence = False
-    for line in lines:
-        stripped = line.strip()
-        if stripped.startswith("```"):
-            in_fence = not in_fence
-            result.append("\n")
-        elif in_fence:
-            result.append("\n")
+    fence_char = None  # None = outside a fence; '`' or '~' = inside that fence
+    for line in text.splitlines(keepends=True):
+        marker = _fence_marker(line)
+        if fence_char is None:
+            if marker is not None:
+                fence_char = marker
+                result.append("\n")
+            else:
+                result.append(line)
         else:
-            result.append(line)
+            if marker == fence_char:  # only the same marker type closes
+                fence_char = None
+            result.append("\n")
     return "".join(result)
+
+
+def ends_in_open_fence(text: str) -> bool:
+    """Return True if text ends while still inside an unclosed code fence (N20).
+
+    Shares fence semantics with _unfenced_content (same _fence_marker primitive).
+    """
+    fence_char = None
+    for line in text.splitlines(keepends=True):
+        marker = _fence_marker(line)
+        if fence_char is None:
+            if marker is not None:
+                fence_char = marker
+        elif marker == fence_char:
+            fence_char = None
+    return fence_char is not None
 
 
 def find_sections(content):

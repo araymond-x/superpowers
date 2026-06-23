@@ -2,22 +2,10 @@
 Run: .venv/bin/python3 -m pytest tests/unit/test_fence_aware_parsing.py -v
 """
 import argparse
-import importlib.util
-import os
-import re
 
 import pytest
 
-ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
-def _load_script(name, filename):
-    path = os.path.join(ROOT, "skills", "subagent-driven-development", "scripts", filename)
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
+from sdd_test_helpers import _load_script
 
 _vp = _load_script("validate_plan", "validate-plan.py")
 _ckpt = _load_script("controller_checkpoint", "controller-checkpoint.py")
@@ -113,3 +101,40 @@ class TestSourceContractsNonePass:
         result = run_pre_execution(args)
         sc = result["checks"].get("source_contracts", {})
         assert sc["status"] != "FAIL", f"Source Contracts: None should PASS, got {sc}"
+
+
+class TestFenceHelperEdges:
+    """N20: tilde fences, own-marker-type closing, unclosed-at-EOF, open-fence detector."""
+
+    def test_tilde_fence_blanked(self):
+        from _report_utils import _unfenced_content
+        text = "before\n~~~\nfenced line\n~~~\nafter\n"
+        out = _unfenced_content(text)
+        assert "fenced line" not in out
+        assert "before" in out and "after" in out
+
+    def test_backtick_not_closed_by_tilde(self):
+        from _report_utils import _unfenced_content
+        # A ~~~ line inside a ``` fence is content, not a close.
+        text = "```\nstill fenced\n~~~\nstill fenced too\n```\nout\n"
+        out = _unfenced_content(text)
+        assert "still fenced" not in out
+        assert "still fenced too" not in out
+        assert "out" in out
+
+    def test_unclosed_fence_blanks_to_eof(self):
+        from _report_utils import _unfenced_content
+        text = "head\n```\nshadowed 1\nshadowed 2\n"  # no closing fence
+        out = _unfenced_content(text)
+        assert "head" in out
+        assert "shadowed 1" not in out and "shadowed 2" not in out
+
+    def test_ends_in_open_fence_true(self):
+        from _report_utils import ends_in_open_fence
+        assert ends_in_open_fence("x\n```\nunclosed\n") is True
+        assert ends_in_open_fence("x\n~~~\nunclosed\n") is True
+
+    def test_ends_in_open_fence_false(self):
+        from _report_utils import ends_in_open_fence
+        assert ends_in_open_fence("x\n```\nclosed\n```\n") is False
+        assert ends_in_open_fence("no fences here\n") is False
