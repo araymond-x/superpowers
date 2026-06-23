@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "PASS",
+  "task_number": 1,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "SKIP",
+      "detail": "Task 0 precedes the active module's task_range (no-Task-0 plan) \u2014 nothing to verify"
+    },
+    "previous_task_report": {
+      "status": "SKIP",
+      "detail": "Task 0 precedes the active module's task_range (no-Task-0 plan) \u2014 nothing to verify"
+    },
+    "previous_report_complete": {
+      "status": "SKIP",
+      "detail": "Task 0 precedes the active module's task_range (no-Task-0 plan) \u2014 nothing to verify"
+    },
+    "previous_spec_review": {
+      "status": "SKIP",
+      "detail": "Task 0 precedes the active module's task_range (no-Task-0 plan) \u2014 nothing to verify"
+    },
+    "previous_quality_review": {
+      "status": "SKIP",
+      "detail": "Task 0 precedes the active module's task_range (no-Task-0 plan) \u2014 nothing to verify"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~40.6KB (~10,404 tokens, 2 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 4,
+    "tasks_completed": 0,
+    "checkboxes_total": 35,
+    "checkboxes_checked": 0,
+    "percentage": 0
+  }
+}
