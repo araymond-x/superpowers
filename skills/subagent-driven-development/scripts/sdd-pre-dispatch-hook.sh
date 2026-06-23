@@ -150,8 +150,34 @@ REVIEW_TASK=""
 REVIEW_TYPE="unknown"
 TASK_NUMBER=""
 
+# Stage 0: fix / re-review marker (N26a). Runs BEFORE reviewer detection (a
+# fix-REVIEW description contains "review" and would be consumed by Stage 1).
+# Markers: see references/dispatch-markers.md.
+MARKED_FIX=false
+if echo "$DESCRIPTION" | grep -qiE '\[task[[:space:]]+[0-9]+[[:space:]]+re-review:(spec|quality|partner)\]'; then
+  mkdir -p "$(dirname "$DISPATCH_LOG")"
+  touch "$DISPATCH_LOG"
+  RR_TASK=$(echo "$DESCRIPTION" | grep -oiE 'task[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  RR_KIND=$(echo "$DESCRIPTION" | grep -oiE 're-review:(spec|quality|partner)' | grep -oiE '(spec|quality|partner)' | head -1)
+  if [ -n "$RR_TASK" ] && [ -n "$RR_KIND" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$RR_TASK type=${RR_KIND}-review" >> "$DISPATCH_LOG"
+  fi
+  exit 0
+elif echo "$DESCRIPTION" | grep -qiE '\[task[[:space:]]+[0-9]+[[:space:]]+fix\]'; then
+  # Marked fix → log type=fix ONLY (skip Stage 2's type=implementer write so
+  # Check 9's window isn't moved — :324); then take the implementer path.
+  mkdir -p "$(dirname "$DISPATCH_LOG")"
+  touch "$DISPATCH_LOG"
+  TASK_NUMBER=$(echo "$DESCRIPTION" | grep -oiE 'task[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
+  if [ -n "$TASK_NUMBER" ]; then
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH fix task=$TASK_NUMBER type=fix" >> "$DISPATCH_LOG"
+  fi
+  IS_IMPLEMENTER=true
+  MARKED_FIX=true
+fi
+
 # Stage 1: Reviewer detection (by description).
-if echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit|partner.review)'; then
+if [ "$MARKED_FIX" = false ] && echo "$DESCRIPTION" | grep -qiE '(review|spec.compliance|code.quality|spec.review|quality.review|trace.audit|partner.review)'; then
   IS_REVIEWER=true
 fi
 
@@ -194,7 +220,7 @@ fi
 # Log implementer dispatch (gives git reality check reliable timestamps).
 # Written here in Stage 2 — BEFORE the enforcement gate below — so the
 # timestamp is recorded even when the dispatch is ultimately blocked.
-if [ "$IS_IMPLEMENTER" = true ] && [ -n "$TASK_NUMBER" ]; then
+if [ "$IS_IMPLEMENTER" = true ] && [ "$MARKED_FIX" = false ] && [ -n "$TASK_NUMBER" ]; then
   if [ -f "$DISPATCH_LOG" ]; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH implementer task=$TASK_NUMBER type=implementer" >> "$DISPATCH_LOG"
   elif [ -d "$(dirname "$DISPATCH_LOG")" ]; then
@@ -204,7 +230,15 @@ if [ "$IS_IMPLEMENTER" = true ] && [ -n "$TASK_NUMBER" ]; then
 fi
 
 # Stage 3: Not a reviewer, not an implementer → allow (Explore, Plan, ad-hoc).
+# N26a fallback: a markerless dispatch whose description matches the fix
+# heuristic logs an unattributed fix line — tamper-evidence that a fix cycle
+# happened, with no enforcement change and no (unknowable) task attribution.
 if [ "$IS_IMPLEMENTER" = false ]; then
+  if echo "$DESCRIPTION" | grep -qiE '\bfix\b|remediat'; then
+    mkdir -p "$(dirname "$DISPATCH_LOG")"
+    touch "$DISPATCH_LOG"
+    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH adhoc type=fix-unattributed" >> "$DISPATCH_LOG"
+  fi
   exit 0
 fi
 
@@ -401,7 +435,7 @@ if [ -d "$REPORTS_DIR" ]; then
     if [ -f "$rf" ]; then
       BASENAME=$(basename "$rf")
       # Allow: task-NNN-*, pre-execution-audit*, context-summary*
-      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch)'; then
+      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch|honesty-check-|execution-trace-audit\.md|final-code-review\.md)'; then
         NON_STANDARD_FILES+=("$BASENAME")
       fi
     fi
@@ -770,6 +804,8 @@ PR_CHECKPOINT=$(jq -r '.process_requirements.checkpoint_script' "$MANIFEST")
 PROCESS_CONTRACT="SDD SESSION CONTRACT (from .sdd-session.json): Tier: $MANIFEST_TIER | Subagent dispatch: $PR_DISPATCH | Spec review: $PR_SPEC | Quality review: $PR_QUALITY | Partner review: $PR_PARTNER | Deviations log: $PR_DEVLOG | Checkpoint script: $PR_CHECKPOINT"
 
 CONTEXT="$CONTEXT | $PROCESS_CONTRACT"
+
+CONTEXT="$CONTEXT | FIX/RE-REVIEW MARKERS: prefix a review-driven fix dispatch with [task N fix] and a re-review round with [task N re-review:{spec|quality|partner}] so the provenance log attributes the fix cycle (see references/dispatch-markers.md)."
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"

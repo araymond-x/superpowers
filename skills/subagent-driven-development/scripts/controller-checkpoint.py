@@ -204,33 +204,65 @@ def _review_tiers_per_task(reports_dir, review_type):
     Recognizes:
       quality-review: task-NNN-quality-review.md / task-NNN-quality-review-minimum-tier.md
       partner-review: partner-review-NNN.md       / partner-review-NNN-minimum-tier.md
+
+    Archive-aware (N27): globs the live reports dir AND reports/archive-*/ with
+    the same basename patterns, so the Check 7 ratio still covers reviews that
+    transition-module.py moved into archive-<module>/. Result is keyed by task
+    id; when a task id appears in both an archive and the live dir, the LIVE
+    entry wins (post-transition re-reviews are not double-counted). Task ids are
+    globally unique across modules, so archive-vs-archive collisions cannot
+    occur. One of the 5 documented archive-aware lookups (see CLAUDE.md).
     """
     if review_type == "quality-review":
-        full_pat = os.path.join(reports_dir, "task-*-quality-review.md")
-        min_pat = os.path.join(reports_dir, "task-*-quality-review-minimum-tier.md")
+        full_name = "task-*-quality-review.md"
+        min_name = "task-*-quality-review-minimum-tier.md"
         id_re = re.compile(r"task-(\d+)-quality-review(?:-minimum-tier)?\.md$")
     elif review_type == "partner-review":
-        full_pat = os.path.join(reports_dir, "partner-review-*.md")
-        min_pat = os.path.join(reports_dir, "partner-review-*-minimum-tier.md")
+        full_name = "partner-review-*.md"
+        min_name = "partner-review-*-minimum-tier.md"
         id_re = re.compile(r"partner-review-(\d+)(?:-minimum-tier)?\.md$")
     else:
         return []
 
-    min_paths = set(glob.glob(min_pat))
-    results = []
-    for path in min_paths:
-        m = id_re.search(os.path.basename(path))
-        if m:
-            results.append((int(m.group(1)), True))
-    # The full glob can also match -minimum-tier.md files (notably the partner
-    # pattern), so skip anything already captured as minimum via min_paths.
-    for path in glob.glob(full_pat):
-        if path in min_paths:
-            continue
-        m = id_re.search(os.path.basename(path))
-        if m:
-            results.append((int(m.group(1)), False))
-    return results
+    def _classify_dir(directory):
+        # type: (str) -> dict
+        """Return {task_id: is_minimum} for one directory."""
+        result = {}  # type: dict
+        min_paths = set(glob.glob(os.path.join(directory, min_name)))
+        for path in min_paths:
+            m = id_re.search(os.path.basename(path))
+            if m:
+                result[int(m.group(1))] = True
+        # The full glob can also match -minimum-tier.md files (notably the
+        # partner pattern), so skip anything already captured as minimum.
+        for path in glob.glob(os.path.join(directory, full_name)):
+            if path in min_paths:
+                continue
+            m = id_re.search(os.path.basename(path))
+            if m:
+                result.setdefault(int(m.group(1)), False)
+        return result
+
+    tiers = {}  # type: dict
+    # Archives first (sorted = module order), live dir LAST so live wins.
+    for archive_dir in sorted(glob.glob(os.path.join(reports_dir, "archive-*"))):
+        if os.path.isdir(archive_dir):
+            tiers.update(_classify_dir(archive_dir))
+    tiers.update(_classify_dir(reports_dir))
+
+    return [(tid, is_min) for tid, is_min in tiers.items()]
+
+
+def _frontmatter_block(content: str) -> Optional[str]:
+    """Return the YAML frontmatter body (between the opening and the first
+    line-anchored ^---$), or None. Line-anchored so a '---' inside a value or a
+    markdown hr does not prematurely close the block (N25b)."""
+    if not content or not content.startswith("---"):
+        return None
+    m = re.search(r"^---$", content[3:], re.MULTILINE)
+    if not m:
+        return None
+    return content[3 : 3 + m.start()]
 
 
 def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
@@ -245,13 +277,11 @@ def _task_ids_where(plan_contents: list, field: str, value: str) -> tuple:
     ids: set = set()
     parsed = False
     for content in plan_contents:
-        if not content or not content.startswith("---"):
-            continue
-        end = content.find("---", 3)
-        if end == -1:
+        block = _frontmatter_block(content)
+        if block is None:
             continue
         try:
-            fm = yaml.safe_load(content[3:end])
+            fm = yaml.safe_load(block)
         except Exception:
             continue
         tasks = fm.get("tasks") if isinstance(fm, dict) else None
@@ -302,6 +332,43 @@ def _load_all_plan_contents(manifest_data: dict, git_root: str) -> list:
     return contents
 
 
+def _merged_dispatch_times(dispatch_log_path):
+    # type: (str) -> dict
+    """Merge implementer dispatch timestamps from archived logs + the live log.
+
+    Reads reports/archive-*/.dispatch-log (lexicographic = module order) FIRST,
+    then the live dispatch log LAST, so a re-dispatched task id's latest
+    timestamp wins (preserves Check 9's latest-wins re-dispatch semantics).
+    Parses ONLY `type=implementer` lines — the shared dispatch-log contract with
+    N26: type=fix / type=fix-unattributed lines never open a verification
+    window. One of the 5 documented archive-aware lookups (see CLAUDE.md).
+    """
+    times = {}  # type: dict
+    reports_dir = os.path.dirname(dispatch_log_path)
+    log_re = re.compile(
+        r"(\S+)\s+DISPATCH\s+implementer\s+task=(\d+)\s+type=implementer"
+    )
+
+    def _ingest(path):
+        if not os.path.isfile(path):
+            return
+        try:
+            with open(path) as f:
+                for line in f:
+                    m = log_re.match(line)
+                    if m:
+                        times[int(m.group(2))] = m.group(1)
+        except OSError:
+            pass
+
+    for archive_log in sorted(
+        glob.glob(os.path.join(reports_dir, "archive-*", ".dispatch-log"))
+    ):
+        _ingest(archive_log)
+    _ingest(dispatch_log_path)
+    return times
+
+
 def _check_verification_git_reality(
     verification_ids,  # type: set
     dispatch_log_path,  # type: str
@@ -314,19 +381,14 @@ def _check_verification_git_reality(
     runs git log between consecutive task windows,
     returns findings for any file modifications detected.
     """
-    if not verification_ids or not os.path.isfile(dispatch_log_path):
+    if not verification_ids:
         return []
 
-    dispatch_times = {}  # type: dict
-    with open(dispatch_log_path) as f:
-        for line in f:
-            # Format mirrors the writer in sdd-pre-dispatch-hook.sh (~lines 191/194); keep in sync.
-            m = re.match(
-                r"(\S+)\s+DISPATCH\s+implementer\s+task=(\d+)\s+type=implementer",
-                line,
-            )
-            if m:
-                dispatch_times[int(m.group(2))] = m.group(1)
+    # Archive-aware (N27): merge archived dispatch logs + the live log. The
+    # parser inside _merged_dispatch_times matches ONLY type=implementer lines,
+    # so N26's type=fix / type=fix-unattributed entries never open a window.
+    # (Writer: sdd-pre-dispatch-hook.sh Stage 2; keep the format in sync.)
+    dispatch_times = _merged_dispatch_times(dispatch_log_path)
 
     findings = []
     sorted_tasks = sorted(dispatch_times.keys())
@@ -341,27 +403,21 @@ def _check_verification_git_reality(
             else None
         )
 
-        git_cmd = ["git", "log", "--oneline", f"--after={start_ts}"]
+        git_args = ["log", "--oneline", f"--after={start_ts}"]
         if end_ts:
-            git_cmd.append(f"--before={end_ts}")
-        git_cmd.extend(["--diff-filter=ACDMR", "--name-only"])
+            git_args.append(f"--before={end_ts}")
+        git_args.extend(["--diff-filter=ACDMR", "--name-only"])
 
-        if git_root:
-            git_cmd = ["git", "-C", git_root] + git_cmd[1:]
-
-        try:
-            result = subprocess.run(git_cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0 and result.stdout.strip():
-                findings.append(
-                    {
-                        "task": vid,
-                        "start": start_ts,
-                        "end": end_ts or "now",
-                        "commits": result.stdout.strip(),
-                    }
-                )
-        except (subprocess.TimeoutExpired, OSError):
-            pass
+        result = _git_run(git_args, cwd=git_root)
+        if result is not None and result.returncode == 0 and result.stdout.strip():
+            findings.append(
+                {
+                    "task": vid,
+                    "start": start_ts,
+                    "end": end_ts or "now",
+                    "commits": result.stdout.strip(),
+                }
+            )
 
     return findings
 
@@ -388,13 +444,11 @@ def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
     paths: list = []
     malformed: list = []
     for content in plan_contents:
-        if not content or not content.startswith("---"):
-            continue
-        end = content.find("---", 3)
-        if end == -1:
+        block = _frontmatter_block(content)
+        if block is None:
             continue
         try:
-            fm = yaml.safe_load(content[3:end])
+            fm = yaml.safe_load(block)
         except Exception:
             continue
         if not isinstance(fm, dict):
@@ -434,6 +488,63 @@ def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
     return paths, malformed
 
 
+def _git_run(args, cwd=None, timeout=10):
+    # type: (list, Optional[str], int) -> Optional[subprocess.CompletedProcess]
+    """Run a git subprocess; swallow TimeoutExpired/OSError (returns None).
+
+    Module-level SSOT (N25c) for the THREE git call sites that share identical
+    timeout + error-swallowing semantics: the inline call in
+    _check_verification_git_reality, _resolve_base_ref's git helper, and
+    _in_changeset's git helper. NOT used by _resolve_git_root, which keeps
+    no-timeout + error-propagation to drive its explicit fallback-with-warning
+    and bootstraps git_root before it is known (O4).
+    """
+    cmd = ["git", "-C", cwd] + args if cwd else ["git"] + args
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
+_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+
+
+def _merge_base_is_head(git_root, base_ref):
+    # type: (str, str) -> bool
+    """True when merge-base(base_ref, HEAD) == HEAD (we are ON the base branch),
+    so the diff window vs merge-base is empty and committed feature files are
+    invisible to _in_changeset (N25a triggers a feature-window base here)."""
+    mb = _git_run(["merge-base", base_ref, "HEAD"], cwd=git_root)
+    head = _git_run(["rev-parse", "HEAD"], cwd=git_root)
+    if mb is None or head is None or mb.returncode != 0 or head.returncode != 0:
+        return False
+    return bool(head.stdout.strip()) and mb.stdout.strip() == head.stdout.strip()
+
+
+def _feature_window_base(git_root, feature_dir):
+    # type: (str, str) -> Optional[str]
+    """Parent of the first commit touching feature_dir, or None (N25a).
+
+    Root-commit edge: the first feature commit has no parent → return the empty
+    tree SHA, which the caller's _in_changeset special-cases as a DIRECT diff
+    base (Step 3b) — it cannot flow through _in_changeset's merge-base path (a
+    tree object has no merge-base with HEAD). No commit touches feature_dir yet
+    → None (caller keeps the untracked-only changeset, on-main FAIL note).
+    """
+    if not feature_dir:
+        return None
+    log = _git_run(
+        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
+    )
+    if log is None or log.returncode != 0 or not log.stdout.strip():
+        return None
+    first = log.stdout.strip().splitlines()[0].strip()
+    parent = _git_run(["rev-parse", "--verify", "--quiet", first + "^"], cwd=git_root)
+    if parent is not None and parent.returncode == 0 and parent.stdout.strip():
+        return parent.stdout.strip()
+    return _EMPTY_TREE_SHA
+
+
 def _resolve_base_ref(git_root: str) -> Optional[str]:
     """Return the resolvable base ref whose merge-base with HEAD is newest.
 
@@ -452,15 +563,7 @@ def _resolve_base_ref(git_root: str) -> Optional[str]:
     """
 
     def _git(cmd_args: list):
-        try:
-            return subprocess.run(
-                ["git", "-C", git_root] + cmd_args,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return None
+        return _git_run(cmd_args, cwd=git_root)
 
     resolvable = []
     for ref in ("origin/HEAD", "main", "master"):
@@ -503,19 +606,19 @@ def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:
     """
 
     def _git(cmd_args: list):
-        try:
-            return subprocess.run(
-                ["git", "-C", git_root] + cmd_args,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return None
+        return _git_run(cmd_args, cwd=git_root)
 
     untracked = _git(["ls-files", "--others", "--exclude-standard", "--", path])
     if untracked is not None and untracked.returncode == 0 and untracked.stdout.strip():
         return True
+
+    if base_ref == _EMPTY_TREE_SHA:
+        # Root-commit feature window (N25a): diff the empty tree directly against
+        # the working tree — merge-base is undefined for a tree object, so the
+        # merge-base path below would silently fall back to diff-vs-HEAD and hide
+        # committed files.
+        diff = _git(["diff", "--name-only", _EMPTY_TREE_SHA, "--", path])
+        return diff is not None and diff.returncode == 0 and bool(diff.stdout.strip())
 
     merge_base = None
     mb = _git(["merge-base", base_ref, "HEAD"])
@@ -1287,10 +1390,14 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # Build all_plan_contents: manifest mode uses _load_all_plan_contents
     # (parent plan + module files, deduplicated); non-manifest mode uses the
     # primary plan + any --additional-plan-files.
+    manifest_feature_dir = ""
     if getattr(args, "manifest", None):
         try:
             _mp = Path(args.manifest)
             _md = json.loads(_mp.read_text(encoding="utf-8"))
+            # Capture feature_dir BEFORE _load_all_plan_contents so a failure in
+            # that call cannot silently disable the N25a feature-window base.
+            manifest_feature_dir = _md.get("paths", {}).get("feature_dir", "")
             _gr = _resolve_git_root(_mp)
             all_plan_contents = _load_all_plan_contents(_md, _gr)
         except Exception:
@@ -1581,6 +1688,12 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # MALFORMED declaration is a FAIL, never a skip — the author believes
     # they declared a gate.
     declared_it_paths, malformed_it_decls = _integration_test_paths(all_plan_contents)
+    # N25f: name the source plan file(s) the malformed declaration could live in
+    # so the author can locate it. _integration_test_paths takes no filenames, so
+    # the caller attributes the malformed declaration to the plan file(s) it
+    # loaded. In manifest mode all_plan_contents spans the parent plan + module
+    # files; args.plan_file names the active one the controller is driving.
+    _plan_label = os.path.basename(args.plan_file) if args.plan_file else "the plan"
     if not declared_it_paths and not malformed_it_decls:
         checks["integration_test_present"] = {
             "status": "PASS",
@@ -1592,7 +1705,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         checks["integration_test_present"] = {
             "status": "FAIL",
             "detail": (
-                "Malformed integration_test declaration(s): "
+                "Malformed integration_test declaration(s) in {}: ".format(_plan_label)
                 + "; ".join(malformed_it_decls)
                 + ". Expected shape: a mapping with a non-empty 'path' key "
                 "(integration_test: null or absent means no declaration)."
@@ -1614,27 +1727,56 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 "state, then re-run."
             )
             if malformed_it_decls:
-                detail += " Also malformed declaration(s): " + "; ".join(
-                    malformed_it_decls
-                )
+                detail += " Also malformed declaration(s) in {}: ".format(
+                    _plan_label
+                ) + "; ".join(malformed_it_decls)
             checks["integration_test_present"] = {
                 "status": "FAIL",
                 "detail": detail,
             }
             blockers.append("integration_test_present")
         else:
+            # N25(a): on-base-branch detection. merge-base(base, HEAD) == HEAD
+            # (SDD on main, remoteless) makes committed feature files invisible
+            # to _in_changeset. Recompute the effective base = parent of the
+            # first commit touching the feature dir.
+            effective_base = base_ref
+            on_base_no_window = False
+            # Only attempt the feature-window base when we know the feature dir
+            # (manifest mode). Without it (no manifest), there is nothing to look
+            # up, so the on-base note below would misattribute the cause.
+            if manifest_feature_dir and _merge_base_is_head(it_git_root, base_ref):
+                fw_base = _feature_window_base(it_git_root, manifest_feature_dir)
+                if fw_base:
+                    effective_base = fw_base
+                else:
+                    on_base_no_window = True
+
             it_problems = [
-                "malformed declaration: {}".format(d) for d in malformed_it_decls
+                "malformed declaration in {}: {}".format(_plan_label, d)
+                for d in malformed_it_decls
             ]
             for rel_path in declared_it_paths:
                 abs_path = os.path.join(it_git_root, rel_path)
                 if not os.path.isfile(abs_path):
-                    it_problems.append("{}: missing on disk".format(rel_path))
-                elif not _in_changeset(rel_path, base_ref, it_git_root):
-                    it_problems.append(
-                        "{}: exists but is not part of this feature's "
-                        "changeset (no diff vs {})".format(rel_path, base_ref)
+                    if os.path.isdir(abs_path):
+                        it_problems.append(
+                            "{}: is a directory, not a file".format(rel_path)
+                        )
+                    else:
+                        it_problems.append("{}: missing on disk".format(rel_path))
+                elif not _in_changeset(rel_path, effective_base, it_git_root):
+                    msg = (
+                        "{}: exists but is not part of this feature's changeset "
+                        "(no diff vs {})".format(rel_path, effective_base)
                     )
+                    if on_base_no_window:
+                        msg += (
+                            " — on the base branch (merge-base==HEAD) with no "
+                            "commit yet touching the feature dir; only untracked "
+                            "files are visible until the feature window opens"
+                        )
+                    it_problems.append(msg)
             if it_problems:
                 checks["integration_test_present"] = {
                     "status": "FAIL",
@@ -1652,7 +1794,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                     "detail": (
                         "{} declared integration test(s) exist and are in the "
                         "feature changeset (base: {})".format(
-                            len(declared_it_paths), base_ref
+                            len(declared_it_paths), effective_base
                         )
                     ),
                 }

@@ -263,3 +263,27 @@ def test_verification_task_exempt_from_reviews(tmp_path):
     (reports_dir / "task-003-implementer-report.md").write_text("# impl\n" + "x" * 100)
     result = run_transition(manifest_path, "Core", "API")
     assert result.returncode == 0, f"stderr={result.stderr}"
+
+
+def test_set_but_missing_module_file_falls_back_to_main_plan(tmp_path):
+    """N19: module.file set but absent on disk → fall back to the main plan for
+    verification-id lookup (matches the hook's -n + -f semantic). Mirrors N17,
+    except the completing module declares a per-module file that is never written
+    to disk. The OLD truthy `if module.file:` branch reads the missing file →
+    empty verif_ids → task 3 is not exempt → spec/quality review errors → FAIL.
+    """
+    manifest_path, reports_dir, feat_dir = create_manifest(tmp_path)
+    # Completing module declares a per-module file that does NOT exist on disk.
+    data = json.loads(manifest_path.read_text())
+    data["modules"][0]["file"] = "module-1.md"
+    manifest_path.write_text(json.dumps(data, indent=2))
+    # MAIN plan (manifest plan_file) declares task 3 as verification.
+    (feat_dir / "plan.md").write_text(
+        "---\nschema_version: 1\ntasks:\n"
+        "  - id: 0\n  - id: 1\n  - id: 2\n  - id: 3\n    task_type: verification\n"
+        "---\n# Plan\n")
+    # Tasks 0-2 full (reports + provenance); task 3 implementer report ONLY.
+    create_task_reports(reports_dir, [0, 1, 2])
+    (reports_dir / "task-003-implementer-report.md").write_text("# impl\n" + "x" * 100)
+    result = run_transition(manifest_path, "Core", "API")
+    assert result.returncode == 0, f"stderr={result.stderr}"

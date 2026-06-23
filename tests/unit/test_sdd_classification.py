@@ -292,3 +292,58 @@ class TestVerificationTaskCheckSkipping:
             description="Implement task 2", prompt="You are implementing task 2", cwd=tmpdir))
         assert result.returncode == 2, \
             f"Expected BLOCK (implementation still enforces reviews). stderr: {result.stderr}"
+
+
+def _read_log(tmpdir):
+    log_path = os.path.join(tmpdir, "reports", ".dispatch-log")
+    if not os.path.exists(log_path):
+        return ""
+    with open(log_path) as f:
+        return f.read()
+
+
+def test_marked_fix_logs_type_fix_not_implementer(tmp_path):
+    # N26a: [task N fix] → type=fix line, and NEVER a type=implementer line.
+    tmpdir = str(tmp_path)
+    setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=2)
+    run_hook(make_hook_input(
+        description="[task 3 fix] fix the parser regression",
+        prompt="", cwd=tmpdir))
+    log = _read_log(tmpdir)
+    assert "task=3 type=fix" in log
+    assert "task=3 type=implementer" not in log  # must NOT move Check 9 window
+
+
+def test_marked_rereview_logs_reviewer_passthrough(tmp_path):
+    # N26a: [task N re-review:quality] → reviewer log entry + passthrough (rc 0).
+    tmpdir = str(tmp_path)
+    setup_sdd_workspace(tmpdir, task_count=5)
+    result = run_hook(make_hook_input(
+        description="[task 4 re-review:quality] re-review after fix",
+        prompt="", cwd=tmpdir))
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "task=4 type=quality-review" in _read_log(tmpdir)
+
+
+def test_markerless_fix_logs_unattributed(tmp_path):
+    # N26a Stage-3 fallback: markerless fix → fix-unattributed, passthrough.
+    tmpdir = str(tmp_path)
+    setup_sdd_workspace(tmpdir, task_count=5)
+    result = run_hook(make_hook_input(
+        description="fix the broken merge logic", prompt="", cwd=tmpdir))
+    assert result.returncode == 0, f"stderr: {result.stderr}"
+    assert "type=fix-unattributed" in _read_log(tmpdir)
+
+
+def test_check3b_allows_gate_artifact_names(tmp_path):
+    # N26b: honesty-check-*, execution-trace-audit.md, final-code-review.md
+    # must not trip Check 3b non-standard-naming.
+    tmpdir = str(tmp_path)
+    setup_full_sdd_workspace(tmpdir, total_tasks=5, completed_tasks=2)
+    reports = os.path.join(tmpdir, "reports")
+    open(os.path.join(reports, "final-code-review.md"), "w").write("x" * 60)
+    open(os.path.join(reports, "execution-trace-audit.md"), "w").write("x" * 60)
+    open(os.path.join(reports, "honesty-check-2026.md"), "w").write("x" * 60)
+    result = run_hook(make_hook_input(
+        description="implement task 2", prompt="", cwd=tmpdir))
+    assert "non-standard naming" not in result.stderr

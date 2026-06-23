@@ -444,5 +444,129 @@ fi
 echo "PASS: Step 11 — declared integration test (untracked) passes Check 10"
 
 echo ""
-echo "E2E PIPELINE PASS - 12 steps composed correctly"
+# Step 12: archive-aware aggregate gates (N27) — Check 7 counts archived
+# minimum-tier reviews AND Check 9 sees an archived-module verification window.
+# The in-sprint archive-aware proof (H1 self-hosting hazard): this run's LIVE
+# hooks resolve to main's pre-N27 scripts, so this e2e step — which exercises
+# THIS checkout's $PROJECT controller-checkpoint.py — is the only place the
+# archive-aware aggregate fix runs end-to-end this sprint.
+echo "=== Step 12: Archive-aware aggregate gates (N27) ==="
+
+AV=docs/imp-plans/av-feature
+mkdir -p "$AV/reports/archive-Mod1"
+AV_DEV="$AV/deviations.md"; echo "# Deviations" > "$AV_DEV"
+
+cat > "$AV/plan.md" << 'INNER'
+---
+schema_version: 1
+feature_archetype: extension
+enforcement_tier: standard
+source_contracts: null
+modules:
+  - id: 1
+    title: "Mod1"
+    task_ids: [1, 2]
+    file: module-1.md
+  - id: 2
+    title: "Mod2"
+    task_ids: [3, 4]
+    file: module-2.md
+tasks:
+  - id: 1
+    title: "One"
+  - id: 2
+    title: "Two"
+  - id: 3
+    title: "Three"
+    task_type: verification
+  - id: 4
+    title: "Four"
+---
+# AV Feature
+**Source Contracts**: None
+**Feature Archetype**: Extension
+## Code Footprint
+INNER
+
+# Fixture adjustment vs. the plan snippet: the module plan files MUST exist on
+# disk. materialize-manifest.py sets active_module_file to the first module's
+# file, and pre-completion hard-errors ({"error": "Plan file not found"}) before
+# producing the checks dict if that file (or any declared module plan) is
+# missing. Minimal frontmatter + a task header is enough for the plan-file read
+# and _load_all_plan_contents. (We hand-build the archived state rather than
+# running transition-module.py — the N27 assertion is purely about the
+# checkpoint reading archived reports/logs, so a real transition adds heavy
+# completion-fixture overhead with no extra coverage.)
+cat > "$AV/module-1.md" << 'INNER'
+---
+schema_version: 1
+tasks:
+  - id: 1
+    title: "One"
+  - id: 2
+    title: "Two"
+---
+# Mod1
+### Task 1: One
+### Task 2: Two
+INNER
+cat > "$AV/module-2.md" << 'INNER'
+---
+schema_version: 1
+tasks:
+  - id: 3
+    title: "Three"
+    task_type: verification
+  - id: 4
+    title: "Four"
+---
+# Mod2
+### Task 3: Three
+### Task 4: Four
+INNER
+
+$PYTHON $PROJECT/skills/subagent-driven-development/scripts/materialize-manifest.py \
+  --plan-file "$AV/plan.md" --feature-dir "$AV" > /dev/null
+
+# Archived Module 1: both quality reviews minimum-tier (undeclared) → today the
+# flat glob would miss them; archive-aware Check 7 must count them.
+echo "x" > "$AV/reports/archive-Mod1/task-001-quality-review-minimum-tier.md"
+echo "x" > "$AV/reports/archive-Mod1/task-002-quality-review-minimum-tier.md"
+# Live Module 2: one full quality review.
+echo "x" > "$AV/reports/task-004-quality-review.md"
+
+# Archived dispatch log: verification task 3 implementer dispatch + bounding 4.
+cat > "$AV/reports/archive-Mod1/.dispatch-log" << 'INNER'
+2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer
+2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer
+INNER
+: > "$AV/reports/.dispatch-log"   # live log truncated (post-transition)
+
+# Commit a file INSIDE task 3's window so Check 9 (archive-aware) FAILs.
+git -C "$WORK" add -A
+GIT_AUTHOR_DATE="2026-03-01T10:30:00" GIT_COMMITTER_DATE="2026-03-01T10:30:00" \
+  git -C "$WORK" -c user.name=e2e -c user.email=e2e@test commit -q -m "in-window" --no-gpg-sign
+
+AVOUT=$(mktemp)
+# `|| true` REQUIRED — other pre-completion blockers (honesty, trace audit,
+# missing reports) FAIL in this stub fixture; we assert only Checks 7 + 9.
+$PYTHON $PROJECT/skills/subagent-driven-development/scripts/controller-checkpoint.py \
+  --phase pre-completion --manifest "$AV/.sdd-session.json" \
+  --deviations-file "$AV_DEV" --reports-dir "$AV/reports" > "$AVOUT" 2>&1 || true
+
+# Check 7: archived minimum-tier reviews counted. Considered = {1:min, 2:min,
+# 4:full} (task 3 has NO quality review — it is task_type: verification). 2/3 >
+# 50% → FAIL, proving the archived reviews are in the ratio.
+Q_STATUS=$(python3 -c "import json;print(json.load(open('$AVOUT'))['checks']['excessive_minimum_tier_quality']['status'])")
+# Check 9: archived-module verification window (the live log is truncated, so
+# only the merged archive log opens task 3's window) sees the in-window commit
+# → FAIL.
+G_STATUS=$(python3 -c "import json;print(json.load(open('$AVOUT'))['checks']['verification_git_reality']['status'])")
+rm "$AVOUT"
+[ "$Q_STATUS" = "FAIL" ] || { echo "FAIL: Check 7 not archive-aware (got $Q_STATUS)"; exit 1; }
+[ "$G_STATUS" = "FAIL" ] || { echo "FAIL: Check 9 not archive-aware (got $G_STATUS)"; exit 1; }
+echo "PASS: Step 12 — Check 7 + Check 9 are archive-aware after a transition"
+
+echo ""
+echo "E2E PIPELINE PASS - 13 steps composed correctly"
 rm -rf "$WORK"

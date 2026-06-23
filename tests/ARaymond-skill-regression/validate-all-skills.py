@@ -135,6 +135,11 @@ SKILL_V01_FILES = [
 # Regex for kebab-case: lowercase letters, digits, hyphens only; no spaces or caps
 KEBAB_CASE_RE = re.compile(r"^[a-z][a-z0-9\-]*$")
 
+# F6 (N8): structural "Direct entry" signal — a markdown heading or bold label —
+# in writing-plans/SKILL.md. Intent-based replacement for the brittle literal
+# phrases ("invoked directly" / "skipping brainstorming") a reword would FAIL.
+DIRECT_ENTRY_RE = re.compile(r"(?im)^#{1,6}.*direct entry|\*\*\s*direct entry")
+
 CATEGORY_1 = "Frontmatter Compliance"
 
 
@@ -565,8 +570,10 @@ def check_cross_references(skills_dir):
                 "writing-plans SKILL: missing reference to validate-plan.py — agents won't find the plan validator",
             )
 
-        # F6: standalone invocation guidance
-        if "skipping brainstorming" in wp_content or "invoked directly" in wp_content:
+        # F6: standalone invocation guidance — intent-based (N8). Keys on the
+        # structural "Direct entry" signal (bold label or heading) rather than
+        # brittle literal phrases. Scope stays writing-plans/SKILL.md ONLY.
+        if DIRECT_ENTRY_RE.search(wp_content):
             check_pass(
                 CATEGORY_4,
                 "writing-plans SKILL: has standalone invocation guidance",

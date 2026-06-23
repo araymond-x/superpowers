@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "FAIL",
+  "task_number": 14,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "PASS",
+      "detail": "Task 13: 4/4 checked"
+    },
+    "previous_task_report": {
+      "status": "PASS",
+      "detail": "/Users/araymond/projects/claude-custom/superpowers/.worktrees/sdd-aggregate-gate-visibility/docs/imp-plans/2026-06-10-sdd-aggregate-gate-visibility/reports/task-013-implementer-report.md exists"
+    },
+    "previous_report_complete": {
+      "status": "PASS",
+      "detail": "5/5 sections present"
+    },
+    "previous_spec_review": {
+      "status": "FAIL",
+      "detail": "No spec review report for Task 13. Dispatch spec compliance review and save to reports/task-013-spec-review.md"
+    },
+    "previous_quality_review": {
+      "status": "FAIL",
+      "detail": "No quality review report for Task 13. Dispatch code quality review and save to reports/task-013-quality-review.md (or save reports/task-013-quality-review-minimum-tier.md if minimum tier declared)"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~168.7KB (~43,179 tokens, 15 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [
+    "previous_spec_review",
+    "previous_quality_review"
+  ],
+  "progress": {
+    "tasks_total": 10,
+    "tasks_completed": 13,
+    "checkboxes_total": 69,
+    "checkboxes_checked": 54,
+    "percentage": 78
+  }
+}
