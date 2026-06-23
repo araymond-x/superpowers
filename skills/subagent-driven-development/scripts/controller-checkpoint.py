@@ -393,27 +393,21 @@ def _check_verification_git_reality(
             else None
         )
 
-        git_cmd = ["git", "log", "--oneline", f"--after={start_ts}"]
+        git_args = ["log", "--oneline", f"--after={start_ts}"]
         if end_ts:
-            git_cmd.append(f"--before={end_ts}")
-        git_cmd.extend(["--diff-filter=ACDMR", "--name-only"])
+            git_args.append(f"--before={end_ts}")
+        git_args.extend(["--diff-filter=ACDMR", "--name-only"])
 
-        if git_root:
-            git_cmd = ["git", "-C", git_root] + git_cmd[1:]
-
-        try:
-            result = subprocess.run(git_cmd, capture_output=True, text=True, timeout=10)
-            if result.returncode == 0 and result.stdout.strip():
-                findings.append(
-                    {
-                        "task": vid,
-                        "start": start_ts,
-                        "end": end_ts or "now",
-                        "commits": result.stdout.strip(),
-                    }
-                )
-        except (subprocess.TimeoutExpired, OSError):
-            pass
+        result = _git_run(git_args, cwd=git_root)
+        if result is not None and result.returncode == 0 and result.stdout.strip():
+            findings.append(
+                {
+                    "task": vid,
+                    "start": start_ts,
+                    "end": end_ts or "now",
+                    "commits": result.stdout.strip(),
+                }
+            )
 
     return findings
 
@@ -486,6 +480,24 @@ def _integration_test_paths(plan_contents: list) -> Tuple[list, list]:
     return paths, malformed
 
 
+def _git_run(args, cwd=None, timeout=10):
+    # type: (list, Optional[str], int) -> Optional[subprocess.CompletedProcess]
+    """Run a git subprocess; swallow TimeoutExpired/OSError (returns None).
+
+    Module-level SSOT (N25c) for the THREE git call sites that share identical
+    timeout + error-swallowing semantics: the inline call in
+    _check_verification_git_reality, _resolve_base_ref's git helper, and
+    _in_changeset's git helper. NOT used by _resolve_git_root, which keeps
+    no-timeout + error-propagation to drive its explicit fallback-with-warning
+    and bootstraps git_root before it is known (O4).
+    """
+    cmd = ["git", "-C", cwd] + args if cwd else ["git"] + args
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+
+
 def _resolve_base_ref(git_root: str) -> Optional[str]:
     """Return the resolvable base ref whose merge-base with HEAD is newest.
 
@@ -504,15 +516,7 @@ def _resolve_base_ref(git_root: str) -> Optional[str]:
     """
 
     def _git(cmd_args: list):
-        try:
-            return subprocess.run(
-                ["git", "-C", git_root] + cmd_args,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return None
+        return _git_run(cmd_args, cwd=git_root)
 
     resolvable = []
     for ref in ("origin/HEAD", "main", "master"):
@@ -555,15 +559,7 @@ def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:
     """
 
     def _git(cmd_args: list):
-        try:
-            return subprocess.run(
-                ["git", "-C", git_root] + cmd_args,
-                capture_output=True,
-                text=True,
-                timeout=10,
-            )
-        except (subprocess.TimeoutExpired, OSError):
-            return None
+        return _git_run(cmd_args, cwd=git_root)
 
     untracked = _git(["ls-files", "--others", "--exclude-standard", "--", path])
     if untracked is not None and untracked.returncode == 0 and untracked.stdout.strip():

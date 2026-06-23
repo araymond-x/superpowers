@@ -13,6 +13,7 @@ from plan import IntegrationTest, Plan
 from sdd_test_helpers import ROOT, _load_script
 
 _vp = _load_script("validate_plan_c2", "validate-plan.py")
+_vp_ckpt = _load_script("controller_checkpoint_n25", "controller-checkpoint.py")
 
 # SELF-HOSTING GUARD: _H avoids plan-validator false match on task headers in fixtures.
 _H = "##" + "# Task"
@@ -441,3 +442,22 @@ class TestC2Check10:
         check = out.get("checks", {}).get("integration_test_present", {})
         assert check.get("status") == "PASS", check
         assert "integration_test_present" not in out.get("blockers", [])
+
+
+class TestGitRunSSOT:
+    """N25(c): module-level _git_run swallows failures, returns CompletedProcess|None."""
+
+    def test_git_run_handles_failure(self):
+        # A failing git invocation (bad cwd) returns CompletedProcess(rc!=0) —
+        # git execs fine and exits 128 without raising, so subprocess.run does
+        # not throw. Callers gate on returncode. _git_run returns None ONLY on
+        # TimeoutExpired / OSError (the except branch).
+        result = _vp_ckpt._git_run(["status"], cwd="/no/such/dir/xyz")
+        assert result is None or result.returncode != 0
+
+    def test_git_run_returns_completed_process(self, tmp_path):
+        import subprocess
+        repo = str(tmp_path)
+        subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
+        result = _vp_ckpt._git_run(["rev-parse", "--is-inside-work-tree"], cwd=repo)
+        assert result is not None and result.returncode == 0
