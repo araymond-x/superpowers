@@ -279,11 +279,11 @@ python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controll
 ```
 Verify: plan readable, `<feature-dir>/deviations.md` exists, `<feature-dir>/reports/` exists, Task 0 present if needed. If FAIL, fix before proceeding.
 
-**Before each task dispatch**:
+**Before each task dispatch** — the pre-dispatch hook enforces this automatically (Check 5c needs the checkpoint, Check 6b a context summary past the midpoint); running it first is optional:
 ```bash
 python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number N --plan-file <plan.md> --feature-dir <feature-dir>
 ```
-Verify: previous task complete, report filed, no pending deviations from prior task, context load reasonable. If FAIL, address the blocker before dispatching. If WARNING about context load, run the context summary script to compress state.
+Verify: previous task complete, report filed.
 
 **Before declaring completion**:
 ```bash
@@ -425,9 +425,8 @@ See `references/report-naming-convention.md` for the complete naming convention 
 
 1. **After each implementer completes**: Save their report to `<feature-dir>/reports/task-NNN-implementer-report.md`
 2. **After each reviewer completes**: Save to `<feature-dir>/reports/task-NNN-spec-review.md` and `<feature-dir>/reports/task-NNN-quality-review.md`
-3. **Validate report completeness** using the validation script:
+3. **Validate report completeness** — the next dispatch's hook enforces this (Check 4b blocks a failing prior report); manual run is optional:
    `python ~/.claude/skills/superpowers/subagent-driven-development/scripts/validate-report.py --report-file <feature-dir>/reports/task-NNN-implementer-report.md`
-   If the script returns INCOMPLETE, do not proceed to review.
 
 Do NOT use module-prefixed names (`m2-task-1-*`), do NOT create symlinks between naming conventions. The hook enforces `task-NNN-*` — use it directly.
 
