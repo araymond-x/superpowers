@@ -2,7 +2,6 @@
 Run: .venv/bin/python3 -m pytest tests/unit/test_c2_integration_gate.py -v
 """
 
-import importlib.util
 import json
 import os
 import subprocess
@@ -11,19 +10,7 @@ import sys
 import pytest
 
 from plan import IntegrationTest, Plan
-
-ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
-
-
-def _load_script(name, filename):
-    path = os.path.join(
-        ROOT, "skills", "subagent-driven-development", "scripts", filename
-    )
-    spec = importlib.util.spec_from_file_location(name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
+from sdd_test_helpers import ROOT, _load_script
 
 _vp = _load_script("validate_plan_c2", "validate-plan.py")
 
@@ -145,6 +132,32 @@ class TestC2RiskSurfaceWarning:
         )
         section = result["sections"].get("integration_test_risk", {})
         assert section.get("status") == "WARNING"
+
+
+def _warns_risk(content):
+    """True if validate-plan emits the integration_test_risk_surface WARNING."""
+    return any(
+        "integration_test_risk_surface" in w
+        for w in _vp.check_integration_test_risk(content, {})
+    )
+
+
+class TestRiskSurfaceStemming:
+    def test_inflected_forms_match(self):
+        # Words the spec's stem patterns (D8) must match. NOTE: "security" matches
+        # securit\w* but "securing" does NOT (stem is securit, not secur) — keep
+        # test words aligned to the spec's chosen stems.
+        for kw in ("migrations", "caches", "routers", "authentication", "security"):
+            body = f"---\nschema_version: 1\n---\n# Plan\nThis touches {kw} logic.\n"
+            assert _warns_risk(body), f"{kw} should trigger the risk WARNING"
+
+    def test_fenced_only_keyword_does_not_warn(self):
+        body = "---\nschema_version: 1\n---\n# Plan\n```\nauth migration router\n```\nNo risk prose.\n"
+        assert not _warns_risk(body), "fence-only keywords must not warn"
+
+    def test_declared_integration_test_suppresses(self):
+        body = "# Plan\nTouches authentication.\n"
+        assert _vp.check_integration_test_risk(body, {"integration_test": {"path": "x"}}) == []
 
 
 # ---------------------------------------------------------------------------

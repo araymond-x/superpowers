@@ -418,7 +418,7 @@ def check_verification_keyword_heuristic(frontmatter: Optional[Dict]) -> List[st
 # -----------------------------------------------------------------------
 
 _C2_RISK_PATTERNS = re.compile(
-    r"\b(?:router|routes/|middleware|auth|migration|cache|cors|security)\b",
+    r"\b(?:auth\w*|migrat\w*|rout(?:e|er)\w*|cach\w*|middleware\w*|cors\b|securit\w*)",
     re.IGNORECASE,
 )
 
@@ -432,7 +432,7 @@ def check_integration_test_risk(content: str, frontmatter: Optional[Dict]) -> Li
     )
     if has_integration_test:
         return warnings
-    if _C2_RISK_PATTERNS.search(content):
+    if _C2_RISK_PATTERNS.search(_unfenced_content(content)):
         warnings.append(
             "integration_test_risk_surface: Plan content matches risk-surface patterns "
             "(router/middleware/auth/migration/cache/cors/security) but no "
