@@ -461,3 +461,201 @@ class TestGitRunSSOT:
         subprocess.run(["git", "-C", repo, "init", "-q"], check=True)
         result = _vp_ckpt._git_run(["rev-parse", "--is-inside-work-tree"], cwd=repo)
         assert result is not None and result.returncode == 0
+
+
+# N25(a): feature dir is a REAL subdir (not ".") so _feature_window_base's
+# `git log -- <feature_dir>` distinguishes the feature-dir commit from a
+# pre-window commit; "." would make every root commit the feature window.
+_FEATURE_DIR = "docs/imp-plans/feat"
+
+
+class TestFeatureWindowBase:
+    """N25(a): _merge_base_is_head, _feature_window_base, and on-main Check 10.
+
+    When SDD runs ON the base branch in a remoteless repo, _resolve_base_ref
+    picks "main" and merge-base(main, HEAD) == HEAD, so the diff window vs
+    merge-base is empty and committed feature files are invisible to
+    _in_changeset. N25(a) recomputes an effective base = parent of the first
+    commit touching the feature dir (root-commit edge → empty tree). Fail-closed
+    is preserved: a file committed BEFORE the feature window still FAILs.
+
+    Assertions target ONLY the integration_test_present check entry and blocker
+    (other pre-completion checks legitimately FAIL in these minimal fixtures).
+    """
+
+    def _git(self, repo, *args):
+        return subprocess.run(
+            ["git", "-C", str(repo)] + list(args),
+            capture_output=True,
+            text=True,
+            check=True,
+            env=_GIT_ENV,
+        )
+
+    def _init_main_repo(self, tmp_path):
+        """git init -b main, NO origin → _resolve_base_ref picks 'main' and
+        merge-base(main, HEAD) == HEAD (the on-base-branch precondition)."""
+        subprocess.run(
+            ["git", "init", "-q", "-b", "main", str(tmp_path)],
+            capture_output=True,
+            text=True,
+            check=True,
+            env=_GIT_ENV,
+        )
+        self._git(tmp_path, "config", "user.email", "test@example.com")
+        self._git(tmp_path, "config", "user.name", "Test")
+        self._git(tmp_path, "config", "commit.gpgsign", "false")
+
+    def _write_feat_manifest(self, tmp_path):
+        """Author the manifest at <root>/<_FEATURE_DIR>/.sdd-session.json with
+        feature_dir = _FEATURE_DIR and plan_file pointing at the committed
+        plan.md (so _load_all_plan_contents succeeds and manifest_feature_dir is
+        populated — pure file write, no git, so commit ordering stays ours)."""
+        from sdd_test_helpers import _write_manifest
+
+        _write_manifest(
+            root=str(tmp_path),
+            feature_dir=_FEATURE_DIR,
+            reports_rel=os.path.join(_FEATURE_DIR, "reports"),
+            deviations_rel=os.path.join(_FEATURE_DIR, "DEVIATIONS.md"),
+            plan_rel=os.path.join(_FEATURE_DIR, "plan.md"),
+            task_count=1,
+        )
+        # _write_manifest also drops a root-level .active-feature (hook input,
+        # NOT read by controller-checkpoint.py — it loads the manifest by
+        # explicit path). Remove it so the working tree stays clean for the
+        # _in_changeset untracked short-circuit precondition.
+        af = tmp_path / ".active-feature"
+        if af.exists():
+            af.unlink()
+
+    def _run_manifest_checkpoint(self, tmp_path):
+        manifest = os.path.join(tmp_path, _FEATURE_DIR, ".sdd-session.json")
+        cmd = [
+            sys.executable,
+            CHECKPOINT_SCRIPT,
+            "--phase",
+            "pre-completion",
+            "--manifest",
+            manifest,
+            "--plan-file",
+            os.path.join(tmp_path, _FEATURE_DIR, "plan.md"),
+            "--deviations-file",
+            os.path.join(tmp_path, _FEATURE_DIR, "DEVIATIONS.md"),
+            "--reports-dir",
+            os.path.join(tmp_path, _FEATURE_DIR, "reports"),
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        assert result.stdout.strip(), f"checkpoint produced no output: {result.stderr}"
+        return json.loads(result.stdout)
+
+    def test_feature_window_base_none_when_no_feature_commit(self, tmp_path):
+        repo = str(tmp_path)
+        subprocess.run(
+            ["git", "-C", repo, "init", "-q", "-b", "main"],
+            check=True,
+            env=_GIT_ENV,
+        )
+        assert _vp_ckpt._feature_window_base(repo, _FEATURE_DIR) is None
+
+    def test_on_main_committed_integration_test_passes(self, tmp_path):
+        """Remoteless repo, work on main, integration test COMMITTED in the
+        feature window → PASS (today FAILs — merge-base==HEAD hides it).
+
+        Feature dir committed FIRST (repo ROOT) → _feature_window_base returns
+        the empty-tree SHA; the IT committed as commit 2 → Step 3b's direct
+        diff(empty-tree, worktree) sees it. The IT is committed AND the tree is
+        clean, so _in_changeset's untracked short-circuit does NOT fire — the
+        new empty-tree path is what makes this PASS.
+        """
+        self._init_main_repo(tmp_path)
+        # Commit 1 (ROOT): the feature dir, including the plan.md that declares
+        # the integration test → becomes _feature_window_base's empty-tree edge.
+        feat = tmp_path / _FEATURE_DIR
+        feat.mkdir(parents=True)
+        (feat / "plan.md").write_text(_c2_plan(IT_PATH))
+        (feat / "DEVIATIONS.md").write_text("")
+        (feat / "reports").mkdir()
+        (feat / "reports" / ".keep").write_text("")
+        self._write_feat_manifest(tmp_path)
+        self._git(tmp_path, "add", _FEATURE_DIR)
+        self._git(tmp_path, "commit", "-q", "-m", "feature dir (root)")
+        # Commit 2: the declared integration test, inside the feature window.
+        it_file = tmp_path / IT_PATH
+        it_file.parent.mkdir(parents=True)
+        it_file.write_text("#!/bin/bash\necho e2e\n")
+        self._git(tmp_path, "add", IT_PATH)
+        self._git(tmp_path, "commit", "-q", "-m", "add integration test")
+        status = self._git(tmp_path, "status", "--porcelain")
+        assert status.stdout.strip() == "", "fixture requires a clean working tree"
+        out = self._run_manifest_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "PASS", check
+        assert "integration_test_present" not in out.get("blockers", [])
+
+    def test_on_main_prewindow_file_still_fails(self, tmp_path):
+        """Counter-fixture (fail-closed): a file committed BEFORE the feature
+        window still FAILs. The IT is committed as the ROOT (pre-window); the
+        feature dir is committed as commit 2 → _feature_window_base returns a
+        REAL parent (commit 1) → diff(commit1, HEAD) for the IT is empty → FAIL.
+        """
+        self._init_main_repo(tmp_path)
+        # Commit 1 (ROOT, PRE-WINDOW): the integration test, BEFORE the feature.
+        it_file = tmp_path / IT_PATH
+        it_file.parent.mkdir(parents=True)
+        it_file.write_text("#!/bin/bash\necho e2e\n")
+        self._git(tmp_path, "add", IT_PATH)
+        self._git(tmp_path, "commit", "-q", "-m", "pre-window integration test")
+        # Commit 2: the feature dir opens the window AFTER the IT already exists.
+        feat = tmp_path / _FEATURE_DIR
+        feat.mkdir(parents=True)
+        (feat / "plan.md").write_text(_c2_plan(IT_PATH))
+        (feat / "DEVIATIONS.md").write_text("")
+        (feat / "reports").mkdir()
+        (feat / "reports" / ".keep").write_text("")
+        self._write_feat_manifest(tmp_path)
+        self._git(tmp_path, "add", _FEATURE_DIR)
+        self._git(tmp_path, "commit", "-q", "-m", "feature dir (post-window)")
+        status = self._git(tmp_path, "status", "--porcelain")
+        assert status.stdout.strip() == "", "fixture requires a clean working tree"
+        out = self._run_manifest_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "FAIL", check
+        assert "changeset" in check.get("detail", "").lower(), check
+        assert "integration_test_present" in out.get("blockers", [])
+
+    def test_on_main_real_parent_window_passes(self, tmp_path):
+        """Real-parent path (non-root feature window) → PASS. The feature dir is
+        committed at commit 2 (a throwaway file is the pre-window ROOT), so
+        _feature_window_base returns commit 1's SHA (a real parent, NOT the empty
+        tree); the IT committed in-window (commit 3) is seen by
+        diff(real_parent, HEAD). Exercises the effective_base = real-parent branch
+        in the PASS direction (the most production-shaped on-base case).
+        """
+        self._init_main_repo(tmp_path)
+        # Commit 1 (ROOT, pre-window): a throwaway file unrelated to the feature.
+        (tmp_path / "README.md").write_text("pre-window\n")
+        self._git(tmp_path, "add", "README.md")
+        self._git(tmp_path, "commit", "-q", "-m", "pre-window root")
+        # Commit 2: the feature dir opens the window at a NON-root commit.
+        feat = tmp_path / _FEATURE_DIR
+        feat.mkdir(parents=True)
+        (feat / "plan.md").write_text(_c2_plan(IT_PATH))
+        (feat / "DEVIATIONS.md").write_text("")
+        (feat / "reports").mkdir()
+        (feat / "reports" / ".keep").write_text("")
+        self._write_feat_manifest(tmp_path)
+        self._git(tmp_path, "add", _FEATURE_DIR)
+        self._git(tmp_path, "commit", "-q", "-m", "feature dir (non-root)")
+        # Commit 3: the declared integration test, inside the feature window.
+        it_file = tmp_path / IT_PATH
+        it_file.parent.mkdir(parents=True)
+        it_file.write_text("#!/bin/bash\necho e2e\n")
+        self._git(tmp_path, "add", IT_PATH)
+        self._git(tmp_path, "commit", "-q", "-m", "add integration test")
+        status = self._git(tmp_path, "status", "--porcelain")
+        assert status.stdout.strip() == "", "fixture requires a clean working tree"
+        out = self._run_manifest_checkpoint(tmp_path)
+        check = out.get("checks", {}).get("integration_test_present", {})
+        assert check.get("status") == "PASS", check
+        assert "integration_test_present" not in out.get("blockers", [])

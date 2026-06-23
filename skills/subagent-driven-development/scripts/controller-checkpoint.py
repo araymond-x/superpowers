@@ -498,6 +498,45 @@ def _git_run(args, cwd=None, timeout=10):
         return None
 
 
+_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+
+
+def _merge_base_is_head(git_root, base_ref):
+    # type: (str, str) -> bool
+    """True when merge-base(base_ref, HEAD) == HEAD (we are ON the base branch),
+    so the diff window vs merge-base is empty and committed feature files are
+    invisible to _in_changeset (N25a triggers a feature-window base here)."""
+    mb = _git_run(["merge-base", base_ref, "HEAD"], cwd=git_root)
+    head = _git_run(["rev-parse", "HEAD"], cwd=git_root)
+    if mb is None or head is None or mb.returncode != 0 or head.returncode != 0:
+        return False
+    return bool(head.stdout.strip()) and mb.stdout.strip() == head.stdout.strip()
+
+
+def _feature_window_base(git_root, feature_dir):
+    # type: (str, str) -> Optional[str]
+    """Parent of the first commit touching feature_dir, or None (N25a).
+
+    Root-commit edge: the first feature commit has no parent → return the empty
+    tree SHA, which the caller's _in_changeset special-cases as a DIRECT diff
+    base (Step 3b) — it cannot flow through _in_changeset's merge-base path (a
+    tree object has no merge-base with HEAD). No commit touches feature_dir yet
+    → None (caller keeps the untracked-only changeset, on-main FAIL note).
+    """
+    if not feature_dir:
+        return None
+    log = _git_run(
+        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
+    )
+    if log is None or log.returncode != 0 or not log.stdout.strip():
+        return None
+    first = log.stdout.strip().splitlines()[0].strip()
+    parent = _git_run(["rev-parse", "--verify", "--quiet", first + "^"], cwd=git_root)
+    if parent is not None and parent.returncode == 0 and parent.stdout.strip():
+        return parent.stdout.strip()
+    return _EMPTY_TREE_SHA
+
+
 def _resolve_base_ref(git_root: str) -> Optional[str]:
     """Return the resolvable base ref whose merge-base with HEAD is newest.
 
@@ -564,6 +603,14 @@ def _in_changeset(path: str, base_ref: str, git_root: str) -> bool:
     untracked = _git(["ls-files", "--others", "--exclude-standard", "--", path])
     if untracked is not None and untracked.returncode == 0 and untracked.stdout.strip():
         return True
+
+    if base_ref == _EMPTY_TREE_SHA:
+        # Root-commit feature window (N25a): diff the empty tree directly against
+        # the working tree — merge-base is undefined for a tree object, so the
+        # merge-base path below would silently fall back to diff-vs-HEAD and hide
+        # committed files.
+        diff = _git(["diff", "--name-only", _EMPTY_TREE_SHA, "--", path])
+        return diff is not None and diff.returncode == 0 and bool(diff.stdout.strip())
 
     merge_base = None
     mb = _git(["merge-base", base_ref, "HEAD"])
@@ -1335,10 +1382,14 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     # Build all_plan_contents: manifest mode uses _load_all_plan_contents
     # (parent plan + module files, deduplicated); non-manifest mode uses the
     # primary plan + any --additional-plan-files.
+    manifest_feature_dir = ""
     if getattr(args, "manifest", None):
         try:
             _mp = Path(args.manifest)
             _md = json.loads(_mp.read_text(encoding="utf-8"))
+            # Capture feature_dir BEFORE _load_all_plan_contents so a failure in
+            # that call cannot silently disable the N25a feature-window base.
+            manifest_feature_dir = _md.get("paths", {}).get("feature_dir", "")
             _gr = _resolve_git_root(_mp)
             all_plan_contents = _load_all_plan_contents(_md, _gr)
         except Exception:
@@ -1671,6 +1722,22 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             }
             blockers.append("integration_test_present")
         else:
+            # N25(a): on-base-branch detection. merge-base(base, HEAD) == HEAD
+            # (SDD on main, remoteless) makes committed feature files invisible
+            # to _in_changeset. Recompute the effective base = parent of the
+            # first commit touching the feature dir.
+            effective_base = base_ref
+            on_base_no_window = False
+            # Only attempt the feature-window base when we know the feature dir
+            # (manifest mode). Without it (no manifest), there is nothing to look
+            # up, so the on-base note below would misattribute the cause.
+            if manifest_feature_dir and _merge_base_is_head(it_git_root, base_ref):
+                fw_base = _feature_window_base(it_git_root, manifest_feature_dir)
+                if fw_base:
+                    effective_base = fw_base
+                else:
+                    on_base_no_window = True
+
             it_problems = [
                 "malformed declaration: {}".format(d) for d in malformed_it_decls
             ]
@@ -1678,11 +1745,18 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 abs_path = os.path.join(it_git_root, rel_path)
                 if not os.path.isfile(abs_path):
                     it_problems.append("{}: missing on disk".format(rel_path))
-                elif not _in_changeset(rel_path, base_ref, it_git_root):
-                    it_problems.append(
-                        "{}: exists but is not part of this feature's "
-                        "changeset (no diff vs {})".format(rel_path, base_ref)
+                elif not _in_changeset(rel_path, effective_base, it_git_root):
+                    msg = (
+                        "{}: exists but is not part of this feature's changeset "
+                        "(no diff vs {})".format(rel_path, effective_base)
                     )
+                    if on_base_no_window:
+                        msg += (
+                            " — on the base branch (merge-base==HEAD) with no "
+                            "commit yet touching the feature dir; only untracked "
+                            "files are visible until the feature window opens"
+                        )
+                    it_problems.append(msg)
             if it_problems:
                 checks["integration_test_present"] = {
                     "status": "FAIL",
@@ -1700,7 +1774,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                     "detail": (
                         "{} declared integration test(s) exist and are in the "
                         "feature changeset (base: {})".format(
-                            len(declared_it_paths), base_ref
+                            len(declared_it_paths), effective_base
                         )
                     ),
                 }
