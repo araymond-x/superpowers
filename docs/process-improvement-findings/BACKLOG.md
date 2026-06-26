@@ -2,13 +2,12 @@
 
 Living ledger of open, in-flight, and completed process/tooling improvements for this fork. Items are derived from production SDD sessions and cross-repo evaluations (see **Sources** below). This is the durable, version-controlled tracker — individual planning memos are ephemeral.
 
-**Last updated:** 2026-06-23
-
 ## How to use this
 
 - **IDs are stable.** `B*` = items from the BTD consolidation assessment; `I*` = items inferred from that report's data; `C*` = net-new from cross-repo findings / deferred infra; `N*` = other net-new (N3–N9 = findings from the 2026-05-31 SSOT audit + pipeline-flexibility execution; N10–N17 = the 2026-06-01 sdd-enforcement-hardening feature; N18–N28 = the 2026-06-10 sdd-cleanup-and-integration-gate feature — N18 found live at the first module transition and fixed in-feature, N19–N28 are its accepted follow-ups; see that feature's deviations.md for full provenance); N29–N31 = the 2026-06-22 upstream v6 (obra/superpowers) sync assessment (see `docs/process-improvement-findings/2026-06-22-upstream-v6-sync-assessment.md`), N32 = shellcheck findings surfaced by the A2-ported `lint-shell.sh`; `P*` = process entry-point items. Reuse the same ID when an item moves to in-flight/done so history is traceable.
 - When an item ships, set **Status** to `done` and record the worktree/commit in **Where / Notes**. Don't delete done rows — they're the audit trail.
 - New items: append with the next ID in the relevant series and fill every column.
+- **Freshness / "last updated":** none is recorded inline, by design — git is the source of truth. For the last-edit date run `git log -1 --format=%cd -- docs/process-improvement-findings/BACKLOG.md` (or `git log --oneline -- docs/process-improvement-findings/BACKLOG.md` for history). Please don't re-add a hand-maintained date stamp — it only drifts, which is the SSOT anti-pattern this fork exists to fight.
 
 **Sizing rubric:** **S** = ~1 file, localized, low risk · **M** = a few files across model→script→skill, 2–4 tasks · **L** = cross-cutting / new infrastructure / many consumers / needs new test fixtures + design.
 
