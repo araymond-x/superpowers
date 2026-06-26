@@ -50,11 +50,28 @@ Honor any existing declared preference without asking. If the user declines cons
 
 ### 1a. Native Worktree Tools (preferred)
 
-The user has asked for an isolated workspace (Step 0 consent). Do you already have a way to create a worktree? It might be a tool with a name like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag. If you do, use it and skip to Step 3.
+The user has asked for an isolated workspace (Step 0 consent). Do you have a native worktree tool — something named like `EnterWorktree`, `WorktreeCreate`, a `/worktree` command, or a `--worktree` flag?
 
-Native tools handle directory placement, branch creation, and cleanup automatically. Using `git worktree add` when you have a native tool creates phantom state your harness can't see or manage.
+**Why prefer it:** a native tool switches *this* session's working directory into the worktree in place, so enforcement hooks (SDD, review gates, audit) re-root to the new directory automatically — **no new session needed.** Plain `git worktree add` alone cannot move the running session, which is why the Step 1b fallback requires a restart.
 
-Only proceed to Step 1b if you have no native worktree tool available.
+Choose by whether your instructions mandate a location or branch name:
+
+**Case A — no mandated location/branch.** Use the native tool's create-and-enter directly (e.g. `EnterWorktree { name: <feature> }`) and skip to Step 3. It handles placement, branch creation, and cleanup.
+
+**Case B — your instructions mandate a specific location and/or branch** (e.g. CLAUDE.md requires `.worktrees/<feature>/`, branch = feature). The native create path can't honor a custom location/branch — inside a git repo `EnterWorktree { name: x }` is fixed to `.claude/worktrees/worktree-x/` on branch `worktree-x`. If your native tool can **switch into an existing worktree by path** (e.g. `EnterWorktree { path: … }`), use the hybrid:
+
+```bash
+# 1. Verify the mandated dir is ignored (see Step 1b → Safety Verification), then:
+git worktree add <mandated-location>/<feature> -b <feature>   # exact location + branch (branches from local HEAD; add a base ref for a fresh base)
+# 2. Switch this session into it natively (no restart — hooks re-root):
+#    EnterWorktree { path: "<mandated-location>/<feature>" }
+```
+
+The native tool accepts an existing worktree as long as it appears in `git worktree list` (verified against current `EnterWorktree` behavior — entry from the main session into a `.worktrees/`-located worktree). Switching in place re-roots the **session** CWD (verified: `pwd` and `git rev-parse --show-toplevel` — the exact call the SDD hooks make — resolve to the worktree). PreToolUse hooks are spawned with the current session CWD (same as the Bash tool), so they bind to the worktree **without a new session.** Skip to Step 3.
+
+Cleanup is manual for a path-entered worktree: the native tool tracks the session switch but won't auto-remove it on exit. Use `git worktree remove` (or your finishing-a-development-branch flow) when done.
+
+If your native tool cannot switch into an existing worktree by path, fall through to Step 1b (git fallback + restart). Only proceed to Step 1b if you have no native worktree tool available.
 
 ### 1b. Git Worktree Fallback
 
@@ -133,6 +150,20 @@ npm test / cargo test / pytest / go test ./...
 
 ### Report
 
+**If you switched in place via a native tool (Step 1a, Case A or B):** the session is already inside the worktree and hooks have re-rooted — no new session needed. Report and continue working here:
+
+```
+ WORKTREE READY
+
+Worktree: <full-path>
+Branch:   <branch-name>
+Tests:    passing (<N> tests, 0 failures)
+
+Session is already working inside the worktree — continue here.
+```
+
+**If you used the pure-git fallback (Step 1b, no native tool):** the running session cannot be moved into the worktree, so enforcement hooks still bind to the launch directory. A new session is required:
+
 ```
  WORKTREE READY — NEW SESSION REQUIRED
 
@@ -145,12 +176,12 @@ working directory from session start — `! cd` does NOT change hook CWD. To
 ensure all enforcement hooks work correctly, you must start a new Claude Code
 session from inside the worktree:
 
-  cd <full-path> && claude
+  cd <full-path> && claude-picker   # stamps project/branch (=worktree) into telemetry
 
 Do not dispatch implementation tasks or invoke SDD from this session.
 ```
 
-**STOP after presenting this output.** The user must open a new session from inside the worktree. Do not proceed with implementation in the current session.
+**STOP after presenting this output** (git-fallback path only). The user must open a new session from inside the worktree. Do not proceed with implementation in the current session.
 
 ## Quick Reference
 
@@ -158,8 +189,9 @@ Do not dispatch implementation tasks or invoke SDD from this session.
 |-----------|--------|
 | Already in linked worktree | Skip creation (Step 0) |
 | In a submodule | Treat as normal repo (Step 0 guard) |
-| Native worktree tool available | Use it (Step 1a) |
-| No native tool | Git worktree fallback (Step 1b) |
+| Native tool, no mandated location | Create-and-enter natively (Step 1a Case A) |
+| Native tool + mandated location/branch | Hybrid: `git worktree add … -b <feature>` then native switch-by-path — no restart (Step 1a Case B) |
+| Native tool can't switch-by-path, or no native tool | Git worktree fallback + restart (Step 1b) |
 | `.worktrees/` exists | Use it (verify ignored) |
 | `worktrees/` exists | Use it (verify ignored) |
 | Both exist | Use `.worktrees/` |
@@ -173,8 +205,8 @@ Do not dispatch implementation tasks or invoke SDD from this session.
 
 ### Fighting the harness
 
-- **Problem:** Using `git worktree add` when the platform already provides isolation
-- **Fix:** Step 0 detects existing isolation. Step 1a defers to native tools.
+- **Problem:** Using `git worktree add` *alone* when the platform already provides isolation, leaving the session and harness unaware of the worktree
+- **Fix:** Step 0 detects existing isolation. Step 1a defers to native tools. (The Case B hybrid is not this — it hands the worktree to the native tool via `EnterWorktree { path: … }`, so the session switches in and the harness stays in sync.)
 
 ### Skipping detection
 
@@ -200,7 +232,7 @@ Do not dispatch implementation tasks or invoke SDD from this session.
 
 **Never:**
 - Create a worktree when Step 0 detects existing isolation
-- Use `git worktree add` when you have a native worktree tool (e.g., `EnterWorktree`). This is the #1 mistake — if you have it, use it.
+- Use plain `git worktree add` *instead of* a native switch when one is available (it strands the running session outside the worktree). Exception: the Step 1a Case B hybrid — `git worktree add` to honor a mandated path, immediately followed by the native switch-into-existing (e.g. `EnterWorktree { path: … }`) — is correct.
 - Skip Step 1a by jumping straight to Step 1b's git commands
 - Create worktree without verifying it's ignored (project-local)
 - Skip baseline test verification
