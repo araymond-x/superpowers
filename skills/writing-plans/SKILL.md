@@ -492,7 +492,7 @@ This checks: plan size (<800 lines), task size (<200 lines), required sections (
 
 The plan-document-reviewer dispatch below is the semantic layer. It reads source contracts independently and compares them against the plan's code snippets, field names, and assumptions. Both layers are required — do not skip the reviewer dispatch because the script passed.
 
-1. Dispatch a single plan-document-reviewer subagent (see plan-document-reviewer-prompt.md) with precisely crafted review context — never your session history. This keeps the reviewer focused on the plan, not your thought process.
+1. Dispatch a single plan-document-reviewer subagent (fill in the template at `~/.claude/skills/superpowers/writing-plans/plan-document-reviewer-prompt.md`) with precisely crafted review context — never your session history. This keeps the reviewer focused on the plan, not your thought process.
    - Provide: path to the plan document, path to spec document
 
 ### Reviewer Dispatch Example
@@ -501,7 +501,7 @@ The plan-document-reviewer dispatch below is the semantic layer. It reads source
 Agent tool (general-purpose):
   description: "Review plan document"
   prompt: |
-    [Fill in the template from plan-document-reviewer-prompt.md with:]
+    [Fill in the template from ~/.claude/skills/superpowers/writing-plans/plan-document-reviewer-prompt.md with:]
     - PLAN_FILE_PATH: path to the plan you wrote
     - SPEC_FILE_PATH: path to the spec (or distilled spec)
     - SOURCE_FILE_PATHS: paths to handoff/contract files (or "None")
@@ -519,27 +519,9 @@ Agent tool (general-purpose):
 
 ### Reviewer Checklist
 
-Dispatch the reviewer with the following expanded checklist. The reviewer checks all categories and flags only issues that would cause real problems during implementation.
+The complete review criteria — 15 check categories plus the Cross-Document Consistency Audit, Code Snippet Verification, and Size & Complexity Assessment — live in the dispatch template at `~/.claude/skills/superpowers/writing-plans/plan-document-reviewer-prompt.md`. That file is the single source of truth for what the reviewer checks; fill it in and dispatch it rather than reconstructing the checklist here. **Do not substitute an ad-hoc checklist for the template** — if the file appears missing, it is installed at the path above (a bare filename won't resolve from your project directory).
 
-| Category | What to Check |
-|----------|---------------|
-| Completeness | TODOs, placeholders, incomplete tasks, missing steps |
-| Spec Alignment | Plan covers spec requirements, no major scope creep |
-| Task Decomposition | Tasks have clear boundaries, steps are actionable |
-| Buildability | Could an engineer follow this plan without getting stuck? |
-| Contract Accuracy | Do code snippets match source contract types? Are field types verified against source files, not descriptions? |
-| Canonical Names | Do enum values, source names, and status strings match the actual codebase — not invented names? |
-| Snippet Safety | Are code snippets copy-safe? Required imports included? Paths match repo conventions? |
-| Query Cardinality | Are JOINs verified for 1:1 vs 1:many? History rows handled correctly? |
-| Schema Consistency | Do storage and API schemas use consistent naming? Is field mapping explicit? |
-| Write-Scope Disjointness | Do parallel tasks have disjoint write sets? Does the partitioning table reflect actual task boundaries? |
-| Spec Lock | Does the plan diverge from the approved spec? Are any deviations documented and intentional? |
-| Legacy Removal | Are removed features fully traced? Is there a grep step to catch stale references? |
-| Cross-Document Consistency | Do handoff package, spec, and plan agree on types, field names, behaviors, and naming conventions? |
-
-**Calibration:** Only flag issues that would cause real problems during implementation. An implementer building the wrong thing or getting stuck is an issue. Minor wording, stylistic preferences, and "nice to have" suggestions are not.
-
-Approve unless there are serious gaps — missing requirements from the spec, contradictory steps, placeholder content, type mismatches against source contracts, or tasks so vague they cannot be acted on.
+**Calibration:** Only flag issues that would cause real problems during implementation. An implementer building the wrong thing, using the wrong types, or getting stuck is an issue. Minor wording, stylistic preferences, and "nice to have" suggestions are not. Approve unless there are serious gaps — missing spec requirements, contradictory steps, placeholder content, type mismatches against source contracts, or tasks so vague they cannot be acted on.
 
 ## Execution Handoff
 

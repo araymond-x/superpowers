@@ -475,7 +475,7 @@ Before invoking `superpowers:finishing-a-development-branch`, verify all of the 
    ```bash
    python ~/.claude/skills/superpowers/subagent-driven-development/scripts/extract-execution-trace.py --session-file <session.jsonl> --feature-dir <feature-dir> --output <feature-dir>/reports/execution-trace.json
    ```
-   Then dispatch the trace auditor subagent (see `trace-auditor-prompt.md`) with the trace JSON and `<feature-dir>/deviations.md` contents. The auditor reviews for skipped reviews, unlogged concerns, missing reports, and other process anomalies. If the auditor returns ISSUES_FOUND, address the issues before proceeding.
+   Then dispatch the trace auditor subagent (see `./trace-auditor-prompt.md`) with the trace JSON and `<feature-dir>/deviations.md` contents. The auditor reviews for skipped reviews, unlogged concerns, missing reports, and other process anomalies. If the auditor returns ISSUES_FOUND, address the issues before proceeding.
 
    To find the current session file: `ls -t ~/.claude/projects/*/$(pwd | sed 's|/|%|g')/*.jsonl | head -1`
 

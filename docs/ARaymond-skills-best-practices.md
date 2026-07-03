@@ -342,6 +342,8 @@ scripts/validate-report.py
 
 Bare relative paths resolve from the project working directory, not the skill directory. The controller gets "file not found" and silently proceeds without validation (C1 in final audit).
 
+**The same rule applies to bundled prompt-template references, not just scripts** (2026-07-02). A SKILL.md that pointed a reviewer dispatch at a bare `plan-document-reviewer-prompt.md` caused two independent agents (running from a *foreign* project's CWD) to conclude the template "isn't in this fork" — it was installed and present the whole time — and silently degrade to a weaker inline "Reviewer Checklist" fallback. A bare `*-prompt.md` filename in skill text is a dangling pointer from any CWD except the skill dir itself; the agent looks in the project, finds nothing, and improvises. Two aggravating factors made it silent: (1) the reference gave no resolvable path, and (2) an inline duplicate of the review criteria sat right beside it as a tempting weaker substitute — which had also *drifted* out of sync with the template it shadowed (an SSOT violation). Fix: prefix every bundled-file reference with the full `~/.claude/skills/superpowers/<skill>/` install path (or `./`, which is live-proven for SDD's prompt refs), and keep review criteria in exactly one place (the template) with only a thin inline pointer + calibration summary. Guard: `validate-all-skills.py` Category 10 ("Bundled-File References") now FAILs on any bare `*-prompt.md` reference in a SKILL.md, so the class can't regress.
+
 ### Prompt Template Standards
 
 From the 2026-03-23 prompt optimization pass (171 changes across 8 areas):
@@ -360,7 +362,7 @@ From the 2026-03-23 prompt optimization pass (171 changes across 8 areas):
 
 | Layer | Script | Checks | Runtime | When to Run |
 |-------|--------|--------|---------|-------------|
-| **Static regression** | `tests/ARaymond-skill-regression/validate-all-skills.py` | 105 | <1s | After every skill edit |
+| **Static regression** | `tests/ARaymond-skill-regression/validate-all-skills.py` | 158 | <1s | After every skill edit |
 | **Static installation** | `tests/ARaymond-installation/verify-symlink-install.sh` | 95 | <1s | After installation changes |
 | **Behavioral API** | `tests/ARaymond-skill-behavior/run-all.sh` | 21+ | ~15 min | After skill content changes |
 

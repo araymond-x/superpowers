@@ -104,7 +104,7 @@ See `references/process-flow.dot` for the complete process flow diagram (Graphvi
 **Spec Review Loop:**
 After writing the spec document:
 
-1. Dispatch spec-document-reviewer subagent (see spec-document-reviewer-prompt.md)
+1. Dispatch spec-document-reviewer subagent (fill in the template at `~/.claude/skills/superpowers/brainstorming/spec-document-reviewer-prompt.md`)
 2. If Issues Found: fix, re-dispatch, repeat until Approved
 3. If loop exceeds 3 iterations, surface to human for guidance
 
@@ -191,7 +191,7 @@ Save to: `<feature-dir>/spec-distilled.md`
 
 ### Distillation Review
 
-After producing the distilled spec, dispatch a distillation reviewer subagent (see `distillation-reviewer-prompt.md`) to verify:
+After producing the distilled spec, dispatch a distillation reviewer subagent (fill in the template at `~/.claude/skills/superpowers/brainstorming/distillation-reviewer-prompt.md`) to verify:
 
 1. Every definitive decision from the original spec appears in the distilled version
 2. No decision was lost, inverted, or reinterpreted during distillation

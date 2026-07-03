@@ -21,6 +21,7 @@ Usage:
 """
 
 import argparse
+import glob
 import os
 import re
 import sys
@@ -1426,6 +1427,66 @@ def check_feature_dir_support(skills_dir):
 
 
 # ---------------------------------------------------------------------------
+# Category 10: Resolvable Bundled-File References
+# ---------------------------------------------------------------------------
+
+CATEGORY_10 = "Bundled-File References"
+
+# Matches a "*-prompt.md" filename together with any path characters that
+# immediately precede it (no whitespace/backtick/paren break). If the captured
+# token contains a "/", the reference carries a resolvable path prefix
+# (~/.claude/skills/superpowers/..., ./, or references/); a bare filename does
+# not and reads as a project-local file that won't resolve from a foreign CWD.
+_PROMPT_REF_RE = re.compile(r"[~\w./-]*-prompt\.md")
+
+
+def check_bundled_file_references(skills_dir):
+    """Category 10: Every '*-prompt.md' reference in a SKILL.md must carry a
+    resolvable path prefix.
+
+    A bare filename (e.g. 'plan-document-reviewer-prompt.md') loaded into an
+    agent whose CWD is the user's project is a dangling pointer — the agent
+    looks in the project, finds nothing, and concludes the bundled template
+    "isn't in this fork", silently degrading to a weaker inline fallback. This
+    guard catches the class mechanically so a future edit can't reintroduce it.
+    """
+    skill_paths = sorted(
+        glob.glob(os.path.join(skills_dir, "**", "SKILL.md"), recursive=True)
+    )
+    if not skill_paths:
+        check_fail(CATEGORY_10, "no SKILL.md files found under {}".format(skills_dir))
+        return
+
+    for path in skill_paths:
+        content = read_file(path)
+        if content is None:
+            continue
+        rel = os.path.relpath(path, skills_dir)
+        bare_hits = []
+        for i, line in enumerate(content.splitlines(), 1):
+            for match in _PROMPT_REF_RE.finditer(line):
+                if "/" not in match.group(0):
+                    bare_hits.append((i, match.group(0)))
+        if bare_hits:
+            locations = ", ".join(
+                "line {} ({})".format(ln, name) for ln, name in bare_hits
+            )
+            check_fail(
+                CATEGORY_10,
+                "{}: {} bare '*-prompt.md' reference(s): {} — prefix with the full "
+                "'~/.claude/skills/superpowers/<skill>/' install path (or './') so it "
+                "resolves outside the skill dir".format(rel, len(bare_hits), locations),
+            )
+        else:
+            check_pass(
+                CATEGORY_10,
+                "{}: all '*-prompt.md' references carry a resolvable path prefix".format(
+                    rel
+                ),
+            )
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -1484,6 +1545,7 @@ def main():
     check_prompt_templates(skills_dir)
     check_python39_compat(skills_dir)
     check_feature_dir_support(skills_dir)
+    check_bundled_file_references(skills_dir)
 
     print_results()
     sys.exit(exit_code())
