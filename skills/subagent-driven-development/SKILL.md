@@ -368,7 +368,7 @@ Set `task_type: verification` in your report frontmatter.
 
 ## Model Selection
 
-See `references/model-selection.md` for guidance on choosing models per role (haiku for mechanical tasks, standard for integration, most capable for architecture/review).
+See `references/model-selection.md` for choosing model tier *and* reasoning effort per role (capability for design/review; effort for closed verification — trace-audit, partner).
 
 ## Handling Implementer Status
 
