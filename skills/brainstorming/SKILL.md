@@ -74,7 +74,7 @@ See `references/process-flow.dot` for the complete process flow diagram (Graphvi
 - Once you believe you understand what you're building, present the design
 - Scale each section to its complexity: a few sentences if straightforward, up to 200-300 words if nuanced
 - Ask after each section whether it looks right so far
-- Cover: architecture, components, data flow, error handling, testing
+- Cover: scope boundaries (explicitly list what is out of scope or deferred), architecture, components, data flow, error handling, testing
 - For replacement, refactor, and migration archetypes: explicitly document which existing code/components become obsolete and what dependencies must be verified before removal
 - Be ready to go back and clarify if something doesn't make sense
 - Once the user has approved the design direction, commit to it. Write the spec from the approved design — do not re-open architectural questions during the writing phase.
@@ -141,15 +141,17 @@ The plan writer consumes the **distilled spec**, NOT the full design. The full d
 
 2. **Historical references removed**: Prior art, earlier designs, "we considered but rejected" text is stripped. Only the current design remains.
 
-3. **Contract facts promoted**: Any field types, format constraints, data shapes, or invariants are moved to a "Contract Facts" section at the TOP of the distilled spec — not buried in decision rationale.
+3. **Scope fences preserved**: Out-of-scope, non-goals, deferred-work, and "do not modify" lists are **negative contract material, not rationale** — they are what stops an implementation agent from "helpfully" building deferred work mid-task. Rule 2 strips WHY alternatives were rejected; it never strips WHAT is fenced out. Carry every fence item as its own line (keeping its deferral target) under the distilled spec's `## Out of scope — do not build` heading — do not merge, summarize, or demote fence items into prose in another section.
 
-4. **Ambiguity resolved or flagged**: Anything in the original spec that was ambiguous or had multiple valid interpretations is either:
+4. **Contract facts promoted**: Any field types, format constraints, data shapes, or invariants are moved to a "Contract Facts" section at the TOP of the distilled spec — not buried in decision rationale.
+
+5. **Ambiguity resolved or flagged**: Anything in the original spec that was ambiguous or had multiple valid interpretations is either:
    - Resolved in the distilled version with a definitive statement, OR
    - Flagged as "OPEN DECISION — plan writer must resolve" in a visible table
 
-5. **Component specifications preserved**: Technical details about what each component does, its inputs/outputs, and its behavior are preserved verbatim. These are implementation instructions, not exploration artifacts.
+6. **Component specifications preserved**: Technical details about what each component does, its inputs/outputs, and its behavior are preserved verbatim. These are implementation instructions, not exploration artifacts.
 
-6. **Size target**: Distilled spec should be <40% of original spec line count. A 1347-line spec -> ~400-500 lines distilled.
+7. **Size target**: Distilled spec should be <40% of original spec line count. A 1347-line spec -> ~400-500 lines distilled.
 
 ### Distilled Spec Template
 
@@ -161,6 +163,10 @@ Save to: `<feature-dir>/spec-distilled.md`
 > **Source**: `[path-to-full-design.md]` (v[X.Y], [N] decisions)
 > **Distilled**: [date]
 > **For**: Plan writer and implementation agents ONLY. For full rationale, see source.
+
+## Out of scope — do not build
+
+[Every out-of-scope / deferred / non-goals item from the source spec, one line each, keeping its deferral target (e.g. "→ Phase 3"). Omit this section ONLY if the source spec declares no scope boundary.]
 
 ## Contract Facts
 
@@ -198,14 +204,15 @@ After producing the distilled spec, dispatch a distillation reviewer subagent (f
 3. No historical/alternative text remains (no "Options Considered", no "Rationale", no "we considered")
 4. Contract facts are promoted to the top
 5. Total size is under 500 lines (or under 40% of original, whichever is smaller)
+6. Scope fences survived: every out-of-scope/non-goals/deferred item from the source appears under the distilled spec's `## Out of scope — do not build` heading, deferral targets intact
 
 Use the same dispatch pattern as the spec review loop — fix issues and re-dispatch until approved.
 
-After the distillation reviewer approves, run the artifact checker:
+After the distillation reviewer approves, run the artifact checker with BOTH paths:
 ```bash
-bash ~/.claude/skills/superpowers/brainstorming/scripts/check-distillation.sh <distilled-spec.md>
+bash ~/.claude/skills/superpowers/brainstorming/scripts/check-distillation.sh <distilled-spec.md> <full-spec.md>
 ```
-This greps for exploration artifact patterns ("Options Considered", "rationale", "we considered", etc.). Fix any findings before proceeding.
+This greps for exploration artifact patterns ("Options Considered", "rationale", "we considered", etc.) and FAILs if the full spec declares an out-of-scope/non-goals heading with no counterpart heading in the distilled spec. Fix any findings before proceeding.
 
 ## Key Principles
 

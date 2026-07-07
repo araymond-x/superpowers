@@ -35,10 +35,23 @@ Task tool (general-purpose):
       - References to prior/historical designs
       - "Earlier design work" or "prior art" sections
     - If ANY exploration artifact remains, flag it
+    - EXCEPTION: the "Out of scope — do not build" section is negative
+      contract material, NOT an exploration artifact. A compact
+      out-of-scope/deferred/non-goals list must stay — never flag it
+      for removal.
+
+    **Scope fence preservation:**
+    - If the full spec contains an out-of-scope / non-goals / deferred-work
+      section, verify the distilled spec carries a counterpart
+      "Out of scope — do not build" heading listing EVERY item, one line
+      each, deferral targets intact
+    - Flag any fence item that was dropped, merged away, or demoted into
+      prose buried in another section
 
     **Contract facts:**
     - Verify field types, format constraints, and data shapes are in the
-      Contract Facts section at the top
+      Contract Facts section near the top (the Out of scope fence may
+      precede it)
     - If contract-relevant information is buried in component specs
       instead of promoted to Contract Facts, flag it
 
@@ -64,6 +77,9 @@ Task tool (general-purpose):
     **Artifact check:**
     - Exploration artifacts found: [list, if any]
 
+    **Scope fence:**
+    - [intact | items dropped/demoted: list | N/A — source declares no fence]
+
     **Size:**
     - Full spec: [lines]
     - Distilled spec: [lines]
@@ -76,4 +92,4 @@ Task tool (general-purpose):
     - [suggestions]
 ```
 
-**Reviewer returns:** Status, decision audit, artifact check, size, issues
+**Reviewer returns:** Status, decision audit, artifact check, scope fence, size, issues
