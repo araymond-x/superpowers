@@ -525,19 +525,27 @@ The complete review criteria — 15 check categories plus the Cross-Document Con
 
 ## Execution Handoff
 
-After saving the plan, offer execution choice:
+After saving the plan, offer execution choice — always include all three options:
 
-**"Plan complete and saved to `<feature-dir>/plan.md`. Two execution options:**
+**"Plan complete and saved to `<feature-dir>/plan.md`. Execution options:**
 
 **1. Subagent-Driven (recommended)** - I dispatch a fresh subagent per task, review between tasks, fast iteration
 
-**2. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
+**2. Subagent-Driven, fresh session** - I build a `/handoff` bundle; a fresh session runs `/pickup` and orchestrates the SDD with a clean context window. Prefer when this planning session is already context-heavy or the plan is large/multi-module — the SDD controller is a sustained-context role.
+
+**3. Inline Execution** - Execute tasks in this session using executing-plans, batch execution with checkpoints
 
 **Which approach?"**
 
 **If Subagent-Driven chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:subagent-driven-development
 - Fresh subagent per task + two-stage review
+
+**If fresh-session Subagent-Driven chosen:**
+- Invoke the `handoff` skill to create the bundle with entry skill `superpowers:subagent-driven-development` (recorded in the manifest; `/pickup` invokes it via the Skill tool, which arms the SDD enforcement hooks)
+- Tell the user to start the fresh session FROM the worktree (hooks bind to session-start CWD), then run `/pickup`
+- Then STOP — do not begin execution in this session
+- If the handoff toolkit is unavailable, say so and offer options 1 or 3 instead
 
 **If Inline Execution chosen:**
 - **REQUIRED SUB-SKILL:** Use superpowers:executing-plans
