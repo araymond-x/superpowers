@@ -312,7 +312,7 @@ Key changes applied across all skills:
 | `subagent-driven-development/honesty-check-prompt.md` | SDD | User-facing compliance verification prompt. Mandatory before Pre-Completion Gate. | Controller outputs 7 questions for the user to paste back; controller then answers honestly. Has caught 3 major violations. |
 | `subagent-driven-development/trace-auditor-prompt.md` | SDD | NEW: execution trace review at pre-completion gate | Parses `.jsonl` session file via `extract-execution-trace.py`, checks for skipped reviews, unlogged concerns, missing reports |
 | `writing-plans/plan-document-reviewer-prompt.md` | writing-plans | 15-category mechanical review of draft plan | Cross-document consistency audit, snippet-vs-source verification, error name drift detection |
-| `brainstorming/distillation-reviewer-prompt.md` | brainstorming | Verifies distilled spec preserves all decisions | Checks for omitted decisions, altered rationale, added assumptions not in original |
+| `brainstorming/distillation-reviewer-prompt.md` | brainstorming | Verifies distilled spec preserves all decisions | Checks for omitted decisions, altered rationale, added assumptions not in original. **2026-07-07 (N38):** scope-fence preservation check (every out-of-scope/non-goals item must survive under the fence heading, deferral targets intact) + explicit not-an-artifact carve-out so a preserved fence is never flagged for removal + "near the top" Contract Facts tolerance (fence may precede it) |
 
 ---
 
@@ -381,7 +381,7 @@ All scripts live in `skills/<name>/scripts/`. Reference them via full absolute p
 
 ## Test Suites (4 custom)
 
-> **Current real counts (2026-06-10, sdd-cleanup-and-integration-gate):** unit **458** · e2e **12 steps** · regression **145 PASS / 3 WARN** · install **104**. The unit/e2e rows below predate the **pipeline-flexibility** (+29, 380) and **sdd-enforcement-hardening** (+25, 405; e2e 10→11) features and carry their own per-feature narrative — they are NOT updated in place to avoid contradicting that history. The authoritative running counts are maintained in `CLAUDE.md` "Testing".
+> **Current real counts (2026-07-07, post-N38 scope-fence preservation):** unit **509** · e2e **13 steps** · regression **158 PASS / 2 WARN** · install **104**. The unit/e2e rows below predate the **pipeline-flexibility** (+29, 380), **sdd-enforcement-hardening** (+25, 405; e2e 10→11), **sdd-cleanup-and-integration-gate** (458; e2e 12), **sdd-aggregate-gate-visibility** (497), and **N38** (+12 check-distillation tests, 509) features and carry their own per-feature narrative — they are NOT updated in place to avoid contradicting that history. The authoritative running counts are maintained in `CLAUDE.md` "Testing".
 
 | Suite | Location | Checks | Runtime | What It Tests |
 |-------|----------|--------|---------|---------------|
