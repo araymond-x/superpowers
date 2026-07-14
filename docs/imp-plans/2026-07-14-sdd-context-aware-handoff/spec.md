@@ -38,9 +38,9 @@ We want the controller to notice real context pressure at a clean boundary and, 
 | Path | Change |
 |---|---|
 | `skills/subagent-driven-development/scripts/context-probe.py` | **NEW** — vendored, stdlib-only token-count sensor |
-| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | Add two-tier context gate (block in the implementer path; nudge + observation log replace Check 7's byte-proxy warning) |
-| `skills/subagent-driven-development/references/context-handoff-protocol.md` | **NEW** — the controller's block-response protocol (also absorbs the offset content) |
-| `skills/subagent-driven-development/SKILL.md` | Short pointer to the protocol reference (offset an equal amount to another reference — file is at its word ceiling) |
+| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | Add a shared probe+observation-log helper at **all** dispatch exit paths; nudge/block only in the implementer new-task path. Keep Check 7's byte-sum as the fallback branch; retire only its standalone warning. |
+| `skills/subagent-driven-development/references/context-handoff-protocol.md` | **NEW** — the controller's block-response protocol only |
+| `skills/subagent-driven-development/SKILL.md` | Short pointer to the protocol reference. Offset the added words by extracting existing SKILL.md prose to a **separate** reference file (not the protocol doc) — the file is at its word ceiling. |
 | `tests/unit/` | New tests: `context-probe.py`, and the hook's context-gate branches |
 | `tests/integration/sdd-e2e-test.sh` | New step exercising an over-threshold reading → block |
 | `tests/ARaymond-hook-baseline/baseline.txt` | Re-capture (a baselined hook was edited) |
@@ -60,13 +60,14 @@ We want the controller to notice real context pressure at a clean boundary and, 
 | 8 | Sensor failure | fail-open · byte-proxy fallback | **Byte-proxy fallback** | Never fail open; preserve today's Check-7 behavior when the probe errors. |
 | 9 | Observation log location | extend `.dispatch-log` · separate file | **Separate `reports/context-observations.log`** | `.dispatch-log` has a parsed format that Check 9 / provenance depends on. |
 | 10 | SKILL.md addition | inline · `references/` extraction | **Reference file + short pointer** | The SDD SKILL.md is at its word-count ceiling; any addition must be offset. |
+| 11 | Transcript resolution | `CLAUDE_CODE_SESSION_ID` env var · hook stdin payload | **Hook stdin `.transcript_path` → probe `--transcript`** | The PreToolUse payload carries `transcript_path` (guaranteed); the env var is a different spawn path and is not guaranteed inside a hook — using it risks silently falling back to the byte-proxy every dispatch. Unifies with the test seam. |
 
 ## 5. Architecture
 
 ### 5.1 Context sensor — `context-probe.py`
 Stdlib-only Python (no pydantic/PyYAML), so it runs under bare `python3`. Logic mirrors the proven `claude-ctx-check`:
 
-- Resolve the transcript: `--transcript <path>` if given (the **test seam**), else find `~/.claude/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl`.
+- Resolve the transcript in priority order: (1) `--transcript <path>` if given (the **primary input** — the hook passes it, and it doubles as the **test seam**); (2) `--session-id <id>` → resolve `~/.claude/projects/*/<id>.jsonl`; (3) `$CLAUDE_CODE_SESSION_ID` via the same lookup (standalone/CLI use only). The hook uses (1), and only if the payload's `transcript_path` is empty falls to (2) — never the env-var path (see §5.2). All path-resolution logic lives solely in the probe (SSOT); the hook holds none.
 - Scan from the end for the most recent assistant message carrying a `usage` block.
 - Return `total_tokens = input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens`.
 - Output: the integer token count (or `--json`). Exit non-zero with a diagnostic when the session id is unset, no transcript exists, or no turn has completed — the hook treats any non-zero exit as "probe unavailable" and falls back (§7).
@@ -74,7 +75,11 @@ Stdlib-only Python (no pydantic/PyYAML), so it runs under bare `python3`. Logic 
 Deliberately **no window** and **no percentage** — the hook owns the thresholds.
 
 ### 5.2 Two-tier decision — in the hook
-The hook already classifies each dispatch (reviewer / implementer / passthrough). The context gate attaches to the **implementer enforcement path**, evaluated only at a **new-task boundary** (not fix/re-review cycles — identified via the existing dispatch markers):
+**Transcript resolution (guaranteed, no env var).** The hook already reads its stdin payload (`INPUT=$(cat)`; it parses `.session_id`, `.cwd`, `.tool_input.*` today at lines 44/200/53/56/59). It reads `.transcript_path` from that same payload — the PreToolUse payload carries it, and the sibling `sdd-skill-enforcement-hook.sh:35` already does exactly this — and passes it to `context-probe.py --transcript`. Only if the payload's `transcript_path` is empty does it instead pass `--session-id "$SESSION_ID"` (the id it already reads at line 200), letting the probe resolve the file — so the hook holds no path-resolution logic of its own. This avoids `CLAUDE_CODE_SESSION_ID` entirely (a hook is a different spawn path than the `!` passthrough, so the env var is not guaranteed there) and unifies with the `--transcript` test seam.
+
+**Shared probe+log helper.** The probe call and the observation-log append (§5.3) form a single helper invoked at **every** dispatch exit path — reviewer (`exit 0`, ~L208), fix/re-review (~L165), passthrough (~L242), and implementer — so the trajectory is captured for all dispatch types. This is *not* a single edit to Check 7; it is a helper threaded into multiple exit points. **Nudge and block apply only in the implementer new-task path** (predicate `IS_IMPLEMENTER && ! MARKED_FIX`); re-reviews and fixes already exit before that path, so they can never be blocked mid-task.
+
+The hook already classifies each dispatch (reviewer / implementer / passthrough). The block/nudge tier attaches to the **implementer enforcement path**, evaluated only at a **new-task boundary** (not fix/re-review cycles — identified via the existing dispatch markers):
 
 | Reading `T` | Action |
 |---|---|
@@ -94,6 +99,8 @@ This recovers the evidence the deferred "instrument-first" step would have provi
 ### 5.4 Handoff-response protocol — `references/context-handoff-protocol.md`
 The block's stderr is terse by necessity; the durable protocol lives in a reference the controller is pointed to from the SKILL body. It states: (1) the block is **not** a fix-and-retry — retrying is wrong; (2) commit any pending state; (3) invoke the `handoff` skill to build a bundle with entry skill `superpowers:subagent-driven-development` (the N39 flow); (4) tell the user to start a fresh session from the worktree and run `/pickup`; (5) then STOP — do not dispatch. Pairing the deterministic block with taught guidance is the standard fork pattern (advisory-in-skill + enforced-in-hook).
 
+**Guarantee boundary.** The hook guarantees the *next task will not dispatch*; it does not, by itself, guarantee a clean handoff — building the bundle and stopping still depends on the controller reading and following this protocol. The block is the hard stop; the clean handoff is the taught response. The plan must not over-promise that "the hook forces a handoff."
+
 ### 5.5 Resume — existing, no new code
 The fresh session's `/pickup` invokes SDD via the entry skill (arming the enforcement hooks). SDD resumes mid-plan per `references/session-recovery.md`: read plan checkboxes, `deviations.md`, and `reports/` (the flight recorder), then continue from the first unchecked task. `.sdd-session.json` is validated against the plan on resume.
 
@@ -111,8 +118,9 @@ Non-numeric or `HARD ≤ SOFT` overrides fall back to defaults with a stderr war
 controller about to dispatch task N (implementer)
   └─ PreToolUse → Agent → sdd-pre-dispatch-hook.sh
        ├─ existing enforcement checks (unchanged)
-       ├─ context-probe.py → total_tokens T   (fallback: byte-proxy on non-zero exit)
-       ├─ append observation-log line
+       ├─ read .transcript_path from stdin payload
+       ├─ context-probe.py --transcript <path> → total_tokens T   (fallback: byte-proxy on non-zero exit)
+       ├─ append observation-log line  (shared helper, every exit path)
        └─ T ≥ HARD?  ── yes → exit 2  (block: commit, build N39 handoff, STOP)
                      └─ no  → allow (+ nudge if T ≥ SOFT)
 controller (on block) → commit → handoff skill → STOP
@@ -153,5 +161,5 @@ you → fresh session → /pickup → SDD → session-recovery → first uncheck
 - [ ] SDD SKILL.md stays under the hard word limit; hook baseline re-captured; regression + unit + e2e green.
 
 ## 11. Open Questions
-- **Exact "new-task boundary" predicate** vs fix/re-review: nail the condition using the hook's existing dispatch-marker classification (`[task N fix]`, `[task N re-review:...]`) during planning.
-- **Hook test seam shape:** `context-probe.py --transcript <fixture>` covers the probe; for the *hook's* branch tests, decide between pointing the probe at a fixture vs a test-only token-override env var. Recommend the fixture path for fidelity, with an override only if the fixture path proves awkward in bash tests.
+- **"New-task boundary" predicate** (spec-review confirmed sound): `IS_IMPLEMENTER && ! MARKED_FIX` — re-reviews and fixes already exit before the implementer path, so they cannot be blocked. The plan finalizes the exact variable names against the hook's existing dispatch-marker classification (`[task N fix]`, `[task N re-review:...]`).
+- **Hook test seam** (resolved by the §5.2 transcript-from-stdin design): hook branch tests supply a stdin payload whose `.transcript_path` points at a fixture transcript built to yield a chosen token total (below / soft / hard). No separate override env var is needed — the same `--transcript` path serves production and tests. Remaining detail: author the small set of fixture transcripts at known totals.
