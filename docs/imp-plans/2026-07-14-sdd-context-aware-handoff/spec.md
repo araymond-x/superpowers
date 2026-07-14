@@ -44,7 +44,7 @@ We want the controller to notice real context pressure at a clean boundary and, 
 | `tests/unit/` | New tests: `context-probe.py`, and the hook's context-gate branches |
 | `tests/integration/sdd-e2e-test.sh` | New step exercising an over-threshold reading → block |
 | `tests/ARaymond-hook-baseline/baseline.txt` | Re-capture (a baselined hook was edited) |
-| `docs/ARaymond-customization-manifest.md`, `CLAUDE.md` | Documentation per the fork's doc-maintenance rule |
+| `docs/ARaymond-customization-manifest.md`, `CLAUDE.md`, `docs/ARaymond-skills-best-practices.md` | **Operational + troubleshooting docs** (see §12) — env vars, observation-log format/tuning, byte-proxy fallback diagnosis, disable path, identify/troubleshoot runbook. Not just an inventory entry. |
 
 ## 4. Key Design Decisions
 
@@ -159,7 +159,17 @@ you → fresh session → /pickup → SDD → session-recovery → first uncheck
 - [ ] `SUPERPOWERS_CTX_SOFT_TOKENS` / `_HARD_TOKENS` override the defaults; invalid values fall back with a warning.
 - [ ] `SUPERPOWERS_CTX_HANDOFF_BYPASS` skips the gate with a stderr warning.
 - [ ] SDD SKILL.md stays under the hard word limit; hook baseline re-captured; regression + unit + e2e green.
+- [ ] Operational + troubleshooting docs written per §12 (CLAUDE.md hook entry + `SUPERPOWERS_CTX_*` env-var list + test counts; skills-best-practices troubleshooting runbook; manifest inventory); BACKLOG N43 → done.
 
 ## 11. Open Questions
 - **"New-task boundary" predicate** (spec-review confirmed sound): `IS_IMPLEMENTER && ! MARKED_FIX` — re-reviews and fixes already exit before the implementer path, so they cannot be blocked. The plan finalizes the exact variable names against the hook's existing dispatch-marker classification (`[task N fix]`, `[task N re-review:...]`).
 - **Hook test seam** (resolved by the §5.2 transcript-from-stdin design): hook branch tests supply a stdin payload whose `.transcript_path` points at a fixture transcript built to yield a chosen token total (below / soft / hard). No separate override env var is needed — the same `--transcript` path serves production and tests. Remaining detail: author the small set of fixture transcripts at known totals.
+
+## 12. Operational Documentation (deliverable)
+
+So a future session can *identify and troubleshoot* the gate without re-deriving it, the implementation must document — not merely inventory:
+
+- **`CLAUDE.md`** — a Hooks-Based Enforcement entry for the context gate (what it does, where it lives, that it is manifest-gated to SDD sessions); the three `SUPERPOWERS_CTX_*` env vars added to the Hook Development Gotchas env-var list (alongside `SUPERPOWERS_VALIDATOR_BYPASS` / `SUPERPOWERS_SDD_BYPASS`); updated test counts.
+- **`docs/ARaymond-skills-best-practices.md`** — a troubleshooting/failure-modes runbook: *gate never fires* → check `transcript_path` resolution and the observation log for `action=fallback`; *falling back every dispatch* → probe exit code / stdlib-only; *fires too early/late* → tune thresholds from `context-observations.log`; *how to disable* → `SUPERPOWERS_CTX_HANDOFF_BYPASS`. Include the transcript-from-payload rationale (why not the env var) so it isn't "fixed" back to the fragile path.
+- **`docs/ARaymond-customization-manifest.md`** — inventory entry for `context-probe.py`, the hook change, the protocol reference, and the observation log.
+- **BACKLOG N43** — flip to `done` with the merge commit; note B10 is now ready as the fast-follow.

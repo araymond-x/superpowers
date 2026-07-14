@@ -80,4 +80,4 @@ Short pointer to the protocol reference. Offset the added words by extracting ex
 - [ ] `SUPERPOWERS_CTX_SOFT_TOKENS` / `_HARD_TOKENS` override defaults; invalid values fall back with a warning.
 - [ ] `SUPERPOWERS_CTX_HANDOFF_BYPASS` skips the gate with a stderr warning.
 - [ ] SDD SKILL.md stays under the hard word limit; hook baseline re-captured; regression + unit + e2e green.
-- [ ] `docs/ARaymond-customization-manifest.md` and `CLAUDE.md` updated per the fork's doc-maintenance rule.
+- [ ] Operational + troubleshooting docs: `CLAUDE.md` (context-gate hook entry + `SUPERPOWERS_CTX_*` env-var list + test counts), `docs/ARaymond-skills-best-practices.md` (troubleshooting runbook: `action=fallback` diagnosis, threshold tuning from `context-observations.log`, disable via bypass, transcript-from-payload design note), `docs/ARaymond-customization-manifest.md` (inventory). BACKLOG N43 → done.
