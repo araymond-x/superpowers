@@ -9,7 +9,7 @@ description: "Use when implementation is complete, all tests pass, and you need 
 
 Guide completion of development work by presenting clear options and handling chosen workflow.
 
-**Core principle:** Verify tests → Detect environment → Present options → Execute choice → Clean up.
+**Core principle:** Verify tests → Check external references → Detect environment → Present options → Execute choice → Clean up.
 
 **Announce at start:** "I'm using the finishing-a-development-branch skill to complete this work."
 
@@ -35,7 +35,17 @@ Cannot proceed with merge/PR until tests pass.
 
 Stop. Don't proceed to Step 2.
 
-**If tests pass:** Continue to Step 2.
+**If tests pass:** Continue to Step 1.5.
+
+### Step 1.5: Check for External References
+
+Check whether this feature's `spec.md` or `plan.md` points at a document outside its own feature directory — a program charter, a parent spec this module was carved from, a multi-module design doc. Look for a header line like `> **Charter:** ...` or a relative path pointing to a sibling `docs/imp-plans/<other-feature>/` directory.
+
+**If found:** ask the user — "This work referenced `<external doc>` as its source. Want me to update that doc's status (e.g. mark this module done, note anything downstream work should know) before finishing?" Handle it if they say yes; skip if no.
+
+**If not found:** continue silently — most features have no external doc to update.
+
+This is advisory, not a gate — never block completion on it.
 
 ### Step 2: Detect Environment
 

@@ -293,6 +293,8 @@ All 14 upstream SKILL.md files + `handoff-acceptance` received 171 changes in 3 
 | `verification-before-completion` | De-escalated XML tags, direct imperatives |
 | `writing-skills` | De-escalated XML tags, direct imperatives |
 
+**`finishing-a-development-branch` update (2026-07-14):** Added Step 1.5 ("Check for External References") — an advisory, non-blocking reminder to update an external charter/parent-doc's status when the completed feature's spec/plan pointed at one outside its own feature directory. Surfaced by a telemetry-exp charter-module handoff where a completed module's status went stale in its program charter after merge, with nothing in the pipeline prompting a fix.
+
 Key changes applied across all skills:
 - `<EXTREMELY-IMPORTANT>` → `<important>` (single emphasis level)
 - "MUST ALWAYS NEVER" → direct imperatives ("Do X")
