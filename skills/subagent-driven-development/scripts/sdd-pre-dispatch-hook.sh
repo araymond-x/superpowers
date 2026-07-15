@@ -22,10 +22,6 @@ set -uo pipefail
 # Real review reports are 500+ bytes.
 MIN_REPORT_BYTES=50
 
-# Context load threshold (bytes) above which a compression warning is injected.
-# 400KB of accumulated files is roughly 100K tokens.
-CONTEXT_LOAD_WARNING_BYTES=$((400 * 1024))
-
 # Resolve the superpowers repo root. Self-resolves from script location by default;
 # set SUPERPOWERS_ROOT env var to override (e.g., for team distribution).
 SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}"
@@ -39,6 +35,20 @@ fi
 
 # Script paths derived from repo root (no hardcoded absolute paths)
 VALIDATE_REPORT_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/validate-report.py"
+
+# ─── Context-pressure gate configuration ──────────────────────────────────
+# Probe invoked with system python3 (stdlib-only). Thresholds parsed from env
+# with defaults; invalid (non-numeric or HARD <= SOFT) reverts BOTH to defaults.
+CONTEXT_PROBE_SCRIPT="$SUPERPOWERS_ROOT/skills/subagent-driven-development/scripts/context-probe.py"
+CTX_SOFT="${SUPERPOWERS_CTX_SOFT_TOKENS:-300000}"
+CTX_HARD="${SUPERPOWERS_CTX_HARD_TOKENS:-400000}"
+CTX_STREAK="${SUPERPOWERS_CTX_FALLBACK_STREAK:-3}"
+if ! [[ "$CTX_SOFT" =~ ^[0-9]+$ ]] || ! [[ "$CTX_HARD" =~ ^[0-9]+$ ]] || [ "$CTX_HARD" -le "$CTX_SOFT" ]; then
+  echo "WARNING: invalid SUPERPOWERS_CTX thresholds (SOFT=$CTX_SOFT HARD=$CTX_HARD) — reverting to defaults 300000/400000." >&2
+  CTX_SOFT=300000; CTX_HARD=400000
+fi
+[[ "$CTX_STREAK" =~ ^[0-9]+$ ]] || CTX_STREAK=3
+CTX_T=0; CTX_SOURCE="probe"   # globals, set by ctx_probe_tokens before use
 
 # Read stdin
 INPUT=$(cat)
@@ -92,10 +102,16 @@ PR_DEVLOG=""
 PR_CHECKPOINT=""
 PROCESS_CONTRACT=""
 SENTINEL_LINE=""
-SESSION_ID=""
+# Hoist .session_id here (INPUT is parsed above) so it survives into dispatch
+# classification and the context gate. Replacing the old SESSION_ID="" init is
+# the clobber-proof fix — an extraction right after INPUT=$(cat) would be reset
+# to "" by this var-init block.
+SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // ""' 2>/dev/null)
 SENTINEL_HASH=""
 SENTINEL=""
 TEMP_LOG=""
+OBS_LOG=""
+CTX_NUDGE=""
 
 if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
   FEAT_FROM_ROOT=$(cat "$GIT_ROOT/.active-feature" 2>/dev/null | tr -d '\n' | sed 's|/$||')
@@ -106,6 +122,7 @@ if [ -n "$GIT_ROOT" ] && [ -f "$GIT_ROOT/.active-feature" ]; then
     FEAT="$FEAT_FROM_ROOT"
     DEVIATIONS_FILE="$GIT_ROOT/$(jq -r '.paths.deviations_file' "$MANIFEST")"
     REPORTS_DIR="$GIT_ROOT/$(jq -r '.paths.reports_dir' "$MANIFEST")"
+    OBS_LOG="$REPORTS_DIR/context-observations.log"
     DISPATCH_LOG="$GIT_ROOT/$(jq -r '.paths.dispatch_log' "$MANIFEST")"
     # Read enforcement and tier
     MANIFEST_TIER=$(jq -r '.tier' "$MANIFEST")
@@ -141,6 +158,55 @@ if [ "$MANIFEST_MODE" = false ]; then
   exit 0
 fi
 
+# ─── Context-pressure helpers (probe + observation log) ───────────────────
+# Defined after the manifest guard (so OBS_LOG/REPORTS_DIR are set) and BEFORE
+# the Stage-0 block — the re-review branch is the first caller.
+ctx_byte_estimate() {  # repurposed Check-7 byte-sum (bytes/4 ~= tokens), advisory
+  local total=0 sz
+  for pf in "$MANIFEST_PLAN_FILE" "$MANIFEST_MODULE_FILE" "$DEVIATIONS_FILE"; do
+    [ -n "$pf" ] && [ -f "$pf" ] && { sz=$(wc -c < "$pf" 2>/dev/null | tr -d ' '); total=$((total + sz)); }
+  done
+  if [ -d "$REPORTS_DIR" ]; then
+    for rf in "$REPORTS_DIR"/*.md; do
+      [ -f "$rf" ] && { sz=$(wc -c < "$rf" 2>/dev/null | tr -d ' '); total=$((total + sz)); }
+    done
+  fi
+  echo $((total / 4))
+}
+ctx_tier() {  # $1=T -> below|soft|hard
+  if [ "$1" -ge "$CTX_HARD" ] 2>/dev/null; then echo hard
+  elif [ "$1" -ge "$CTX_SOFT" ] 2>/dev/null; then echo soft
+  else echo below; fi
+}
+ctx_probe_tokens() {  # $1=transcript_path. Sets CTX_T + CTX_SOURCE. 0=probe, 1=fallback.
+  local tpath="$1" out rc=1
+  if [ -n "$tpath" ]; then
+    out=$(python3 "$CONTEXT_PROBE_SCRIPT" --transcript "$tpath" 2>/dev/null); rc=$?
+  elif [ -n "$SESSION_ID" ]; then
+    out=$(python3 "$CONTEXT_PROBE_SCRIPT" --session-id "$SESSION_ID" 2>/dev/null); rc=$?
+  fi
+  if [ "$rc" -eq 0 ] && [[ "$out" =~ ^[0-9]+$ ]]; then
+    CTX_T="$out"; CTX_SOURCE="probe"; return 0
+  fi
+  CTX_T=$(ctx_byte_estimate); CTX_SOURCE="byte-proxy"; return 1
+}
+ctx_log() {  # $1=type $2=source $3=tier $4=action $5=tokens
+  local line
+  line="$(date -u +%Y-%m-%dT%H:%M:%SZ) task=${TASK_NUMBER:-} type=$1 tokens=$5 source=$2 tier=$3 action=$4"
+  { mkdir -p "$REPORTS_DIR" && printf '%s\n' "$line" >> "$OBS_LOG"; } 2>/dev/null \
+    || echo "WARNING: context-observations append failed ($OBS_LOG)" >&2
+}
+ctx_observe_and_log() {  # $1=dispatch type. Probe + log only (no nudge/block).
+  local dtype="$1" tpath
+  if [ -n "${SUPERPOWERS_CTX_HANDOFF_BYPASS:-}" ]; then ctx_log "$dtype" bypass below allow 0; return; fi
+  tpath=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null)
+  if ctx_probe_tokens "$tpath"; then
+    ctx_log "$dtype" probe "$(ctx_tier "$CTX_T")" allow "$CTX_T"
+  else
+    ctx_log "$dtype" byte-proxy "$(ctx_tier "$CTX_T")" fallback "$CTX_T"
+  fi
+}
+
 # ─── Manifest-mode dispatch classification (3-stage pipeline) ───────────────
 # Order is load-bearing: reviewers are logged BEFORE any passthrough so that
 # general-purpose reviewers (the post-2026-05-07 default) are recorded.
@@ -162,6 +228,7 @@ if echo "$DESCRIPTION" | grep -qiE '\[task[[:space:]]+[0-9]+[[:space:]]+re-revie
   if [ -n "$RR_TASK" ] && [ -n "$RR_KIND" ]; then
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH reviewer task=$RR_TASK type=${RR_KIND}-review" >> "$DISPATCH_LOG"
   fi
+  ctx_observe_and_log other
   exit 0
 elif echo "$DESCRIPTION" | grep -qiE '\[task[[:space:]]+[0-9]+[[:space:]]+fix\]'; then
   # Marked fix → log type=fix ONLY (skip Stage 2's type=implementer write so
@@ -197,14 +264,14 @@ if [ "$IS_REVIEWER" = true ]; then
   # Sentinel — write on first reviewer dispatch.
   SENTINEL_LINE=$(head -1 "$DISPATCH_LOG" 2>/dev/null)
   if ! echo "$SENTINEL_LINE" | grep -q "^# sdd-hook-sentinel "; then
-    SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "unknown"' 2>/dev/null)
-    SENTINEL_HASH=$(echo -n "${SESSION_ID}-$(date -u +%Y%m%d%H%M%S)" | shasum -a 256 | cut -d' ' -f1)
+    SENTINEL_HASH=$(echo -n "${SESSION_ID:-unknown}-$(date -u +%Y%m%d%H%M%S)" | shasum -a 256 | cut -d' ' -f1)
     SENTINEL="# sdd-hook-sentinel $SENTINEL_HASH"
     TEMP_LOG=$(mktemp)
     echo "$SENTINEL" > "$TEMP_LOG"
     cat "$DISPATCH_LOG" >> "$TEMP_LOG"
     mv "$TEMP_LOG" "$DISPATCH_LOG"
   fi
+  REVIEW_TYPE_LOG="${REVIEW_TYPE}"; [ "$REVIEW_TYPE_LOG" = "unknown" ] && REVIEW_TYPE_LOG=other; ctx_observe_and_log "$REVIEW_TYPE_LOG"
   exit 0
 fi
 
@@ -239,6 +306,7 @@ if [ "$IS_IMPLEMENTER" = false ]; then
     touch "$DISPATCH_LOG"
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) DISPATCH adhoc type=fix-unattributed" >> "$DISPATCH_LOG"
   fi
+  ctx_observe_and_log other
   exit 0
 fi
 
@@ -751,43 +819,6 @@ if [ ${#ERRORS[@]} -gt 0 ]; then
   exit 2
 fi
 
-# ─── Check 7: Context load estimate (non-blocking) ───────────────────────
-# Estimate accumulated file sizes across plan, deviations, and reports.
-# If above threshold, inject a compression warning into additionalContext.
-
-CONTEXT_LOAD_WARNING=""
-if [ -d "$REPORTS_DIR" ]; then
-  TOTAL_BYTES=0
-
-  # Sum plan files (from the manifest: plan file + active module file)
-  for pf in "$MANIFEST_PLAN_FILE" "$MANIFEST_MODULE_FILE"; do
-    if [ -n "$pf" ] && [ -f "$pf" ]; then
-      PF_SIZE=$(wc -c < "$pf" 2>/dev/null | tr -d ' ')
-      TOTAL_BYTES=$((TOTAL_BYTES + PF_SIZE))
-    fi
-  done
-
-  # Sum DEVIATIONS file
-  if [ -f "$DEVIATIONS_FILE" ]; then
-    DEV_SIZE=$(wc -c < "$DEVIATIONS_FILE" 2>/dev/null | tr -d ' ')
-    TOTAL_BYTES=$((TOTAL_BYTES + DEV_SIZE))
-  fi
-
-  # Sum all report files
-  for rf in "${REPORTS_DIR}"/*.md; do
-    if [ -f "$rf" ]; then
-      RF_SIZE=$(wc -c < "$rf" 2>/dev/null | tr -d ' ')
-      TOTAL_BYTES=$((TOTAL_BYTES + RF_SIZE))
-    fi
-  done
-
-  if [ "$TOTAL_BYTES" -ge "$CONTEXT_LOAD_WARNING_BYTES" ] 2>/dev/null; then
-    TOTAL_KB=$((TOTAL_BYTES / 1024))
-    APPROX_TOKENS=$((TOTAL_BYTES / 4))
-    CONTEXT_LOAD_WARNING="CONTEXT LOAD WARNING: Accumulated SDD files total ~${TOTAL_KB}KB (~${APPROX_TOKENS} tokens). Consider running context-summary.py to compress completed task reports before response quality degrades."
-  fi
-fi
-
 # ─── All checks passed — inject reminder context and allow ────────────────
 
 # Build additionalContext with SDD reminder + optional token warning
@@ -809,10 +840,6 @@ CONTEXT="$CONTEXT | FIX/RE-REVIEW MARKERS: prefix a review-driven fix dispatch w
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
-fi
-
-if [ -n "$CONTEXT_LOAD_WARNING" ]; then
-  CONTEXT="$CONTEXT | $CONTEXT_LOAD_WARNING"
 fi
 
 # Use python to safely JSON-encode the context string

@@ -32,6 +32,8 @@ def make_hook_input(
     prompt: str = "",
     cwd: str = "",
     subagent_type: str = "",
+    transcript_path: str = "",
+    session_id: str = "",
 ) -> str:
     """JSON payload matching Claude Code PreToolUse hook input.
 
@@ -40,6 +42,8 @@ def make_hook_input(
         prompt: The tool_input.prompt field (first 500 chars used by hook).
         cwd: Working directory for the hook. Empty string if not needed.
         subagent_type: Optional subagent_type for manifest-mode passthrough check.
+        transcript_path: Optional top-level .transcript_path field (context probe).
+        session_id: Optional top-level .session_id field (context probe fallback).
 
     Returns:
         JSON string ready to pipe to the hook via stdin.
@@ -54,6 +58,10 @@ def make_hook_input(
         "tool_input": tool_input,
         "cwd": cwd,
     }
+    if transcript_path:
+        payload["transcript_path"] = transcript_path
+    if session_id:
+        payload["session_id"] = session_id
     return json.dumps(payload)
 
 

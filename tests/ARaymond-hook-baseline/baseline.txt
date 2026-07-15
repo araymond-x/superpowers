@@ -3,7 +3,7 @@
 
 ## Hook script hashes (sha256)
 bd0936b6d70a4fae5152a4c9c3ab384dff64d4c4f4bf88a7e45ee8cd7323a81d  hooks/session-start
-df958cc6b935987b55f4f6012299e17557cc10338f9649eaefe21b97d20d4da9  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
+b12150584aabd6cebafe5ee28c2e270d79121ad4495bd9266e00fae917419018  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
 0a2aa424ae18615af035727aaf63f039b796e42ef1cec134895f9a9917ef45f4  skills/subagent-driven-development/scripts/sdd-report-guard.sh
 871128f8b2826c1328366f7679d5969716545715743180df073928f8b688412b  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
 95c1d9580b9cb6278f9be844d5b71f1d126034d336bc08aad4c580d1e20ca44b  skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
