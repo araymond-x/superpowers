@@ -1,9 +1,13 @@
 # Context Handoff Protocol (controller block-response)
 
-The pre-dispatch hook has BLOCKED the next new-task implementer dispatch because
-the controller's context reached the hard threshold (default 400k tokens). This
-is a deterministic stop at a clean task boundary — the previous task is fully
-committed and reviewed. Follow this protocol. Do NOT improvise.
+The pre-dispatch hook has BLOCKED the next new-task implementer dispatch. The
+usual cause is context pressure: the controller's context reached the hard
+threshold (default 400k tokens) at a clean task boundary — the previous task is
+reviewed and at a clean boundary. Follow this protocol. Do NOT improvise. (A
+different block — "the context gate has run blind for N consecutive dispatches" —
+means `context-probe.py` itself is failing; that one is NOT a handoff. Fix the
+probe or set `SUPERPOWERS_CTX_HANDOFF_BYPASS`, per the blind-streak message,
+rather than following the steps below.)
 
 **1. This is NOT a fix-and-retry.** Retrying the dispatch is wrong — the block
 is not caused by a missing report or a failed review. Do not edit files to "get

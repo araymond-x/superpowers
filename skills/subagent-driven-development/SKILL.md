@@ -271,7 +271,7 @@ This is a deterministic, hook-enforced check — do not reproduce it by hand, an
 
 ## Controller Health Checkpoints
 
-See `references/controller-health-checkpoints.md` for the three deterministic `controller-checkpoint.py` invocations (pre-execution, pre-dispatch, pre-completion) and what each verifies. The pre-dispatch hook enforces the pre-dispatch checkpoint (Check 5c) and the pre-completion gate automatically.
+See `references/controller-health-checkpoints.md` for the three deterministic `controller-checkpoint.py` invocations (pre-execution, pre-dispatch, pre-completion) and what each verifies. The pre-dispatch hook enforces the pre-dispatch checkpoint (Check 5c) and the context-summary check (Check 6b) automatically at dispatch time; the pre-completion gate is enforced separately at completion.
 
 ## Context Health Protocol
 
