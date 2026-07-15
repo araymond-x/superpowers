@@ -271,29 +271,13 @@ This is a deterministic, hook-enforced check — do not reproduce it by hand, an
 
 ## Controller Health Checkpoints
 
-The controller runs a deterministic checkpoint script at three critical moments. These are not optional — they replace self-assessment with mechanical verification.
-
-**Before execution begins** (after Plan Ingestion):
-```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-execution --manifest <feature-dir>/.sdd-session.json --deviations-file <feature-dir>/deviations.md --reports-dir <feature-dir>/reports
-```
-Verify: plan readable, `<feature-dir>/deviations.md` exists, `<feature-dir>/reports/` exists, Task 0 present if needed. If FAIL, fix before proceeding.
-
-**Before each task dispatch** — the pre-dispatch hook enforces this automatically (Check 5c needs the checkpoint, Check 6b a context summary past the midpoint); running it first is optional:
-```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-dispatch --task-number N --manifest <feature-dir>/.sdd-session.json --deviations-file <feature-dir>/deviations.md --reports-dir <feature-dir>/reports
-```
-Verify: previous task complete, report filed.
-
-**Before declaring completion**:
-```bash
-python ~/.claude/skills/superpowers/subagent-driven-development/scripts/controller-checkpoint.py --phase pre-completion --manifest <feature-dir>/.sdd-session.json --deviations-file <feature-dir>/deviations.md --reports-dir <feature-dir>/reports
-```
-Verify: all checkboxes, all reports, no pending deviations. This is the mechanical equivalent of the Pre-Completion Gate — the script checks what the Gate describes.
+See `references/controller-health-checkpoints.md` for the three deterministic `controller-checkpoint.py` invocations (pre-execution, pre-dispatch, pre-completion) and what each verifies. The pre-dispatch hook enforces the pre-dispatch checkpoint (Check 5c) and the pre-completion gate automatically.
 
 ## Context Health Protocol
 
 See `references/context-health-protocol.md` for managing controller context accumulation, signs of context pressure, and when to generate context summaries.
+
+When the pre-dispatch hook BLOCKS a dispatch for context pressure (hard threshold), follow `references/context-handoff-protocol.md` — the block is not a fix-and-retry; commit, build a fresh-session handoff, and stop.
 
 ## Review Enforcement — Non-Negotiable
 
