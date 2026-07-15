@@ -819,13 +819,30 @@ if [ ${#ERRORS[@]} -gt 0 ]; then
   exit 2
 fi
 
-# Context observation for the implementer/fix dispatch (logged once).
-# Task 5 replaces this stub with the full nudge/block tier logic.
+# ─── Context-pressure gate (implementer new-task path only) ───────────────
 if [ "$IS_IMPLEMENTER" = true ]; then
   if [ "$MARKED_FIX" = true ]; then
-    ctx_observe_and_log other        # fix dispatch: log only, never gated
+    ctx_observe_and_log other            # fix dispatch: log only, never gated
+  elif [ -n "${SUPERPOWERS_CTX_HANDOFF_BYPASS:-}" ]; then
+    echo "WARNING: SUPERPOWERS_CTX_HANDOFF_BYPASS set — context gate skipped." >&2
+    ctx_log implementer bypass below allow 0
   else
-    ctx_observe_and_log implementer
+    TPATH=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null)
+    if ctx_probe_tokens "$TPATH"; then
+      CTX_TIER=$(ctx_tier "$CTX_T")
+      if [ "$CTX_TIER" = hard ]; then
+        ctx_log implementer probe hard block "$CTX_T"
+        echo "BLOCKED (context): controller context is ~$CTX_T tokens (>= HARD $CTX_HARD). Do NOT retry this dispatch — retrying is wrong. This is a clean task boundary: commit pending state, build a fresh-session handoff (invoke the handoff skill, entry skill superpowers:subagent-driven-development), tell the user to start a fresh session from the worktree and run /pickup, then STOP. See skills/subagent-driven-development/references/context-handoff-protocol.md." >&2
+        exit 2
+      elif [ "$CTX_TIER" = soft ]; then
+        ctx_log implementer probe soft nudge "$CTX_T"
+        CTX_NUDGE="CONTEXT NUDGE: controller context is ~$CTX_T tokens — this is a clean task boundary. Consider handing off to a fresh session now (see references/context-handoff-protocol.md) rather than starting task ${TASK_NUMBER}."
+      else
+        ctx_log implementer probe below allow "$CTX_T"
+      fi
+    else
+      ctx_log implementer byte-proxy "$(ctx_tier "$CTX_T")" fallback "$CTX_T"
+    fi
   fi
 fi
 
@@ -850,6 +867,10 @@ CONTEXT="$CONTEXT | FIX/RE-REVIEW MARKERS: prefix a review-driven fix dispatch w
 
 if [ -n "$TOKEN_WARNING" ]; then
   CONTEXT="$CONTEXT | $TOKEN_WARNING"
+fi
+
+if [ -n "${CTX_NUDGE:-}" ]; then
+  CONTEXT="$CONTEXT | $CTX_NUDGE"
 fi
 
 # Use python to safely JSON-encode the context string
