@@ -68,7 +68,9 @@ def test_verification_task_is_eligible_for_block(tmp_path):
         "---\nschema_version: 1\ntasks:\n  - id: 0\n    title: t0\n"
         "  - id: 1\n    title: t1\n    task_type: verification\n---\n\n"
         "**Source Contracts:** None\n\n### Task 1 -- verify\n- [ ] check\n")
-    assert run_hook(_impl(tmp_path, "hard.jsonl"), str(tmp_path)).returncode == 2
+    r = run_hook(_impl(tmp_path, "hard.jsonl"), str(tmp_path))
+    assert r.returncode == 2
+    assert "context" in r.stderr.lower()
 
 
 def test_bypass_skips_gate(tmp_path):
@@ -84,6 +86,7 @@ def test_env_override_lowers_threshold(tmp_path):
     r = run_hook(_impl(tmp_path, "below.jsonl"), str(tmp_path),
                  env_extra={"SUPERPOWERS_CTX_SOFT_TOKENS": "100000", "SUPERPOWERS_CTX_HARD_TOKENS": "130000"})
     assert r.returncode == 2
+    assert "context" in r.stderr.lower()
 
 
 def test_invalid_env_reverts_to_defaults(tmp_path):
