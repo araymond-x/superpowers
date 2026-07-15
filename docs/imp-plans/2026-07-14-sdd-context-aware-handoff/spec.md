@@ -20,7 +20,7 @@ We want the controller to notice real context pressure at a clean boundary and, 
 
 ### In scope
 - A **deterministic context sensor** in `sdd-pre-dispatch-hook.sh` that reads the controller's *actual* accumulated token count.
-- A **two-tier response**: an informational nudge, and a hard block that forces a fresh-session handoff.
+- A **two-tier response**: an informational nudge, and a hard block that stops the next new-task dispatch and instructs a fresh-session handoff (it stops the dispatch; it does not, by itself, force the handoff — see §5.4).
 - An **observation log** capturing every reading, so thresholds are tuned from real data after the first run.
 - The controller's **handoff-response protocol**, reusing the existing N39 fresh-session bundle and the existing SDD mid-plan resume.
 
@@ -57,7 +57,7 @@ We want the controller to notice real context pressure at a clean boundary and, 
 | 5 | Thresholds | (see §5.6) | **Absolute: soft 300k / hard 400k, catch-early, env-overridable, log-tuned** | Optimized for the common 1M window; conservative enough to catch degradation, high enough not to nag from 13%. |
 | 6 | Where nudge/block apply | every dispatch · implementer new-task dispatches only | **Implementer new-task boundary only** (observation log on all) | Blocking a reviewer/partner/fix dispatch would strand a half-done task. The new-task implementer dispatch is the clean pause point (prior task committed). |
 | 7 | Handoff + resume | build new · reuse N39 + `session-recovery.md` | **Reuse existing** | The fresh-session bundle (entry skill `subagent-driven-development`) and mid-plan resume already exist. SSOT. |
-| 8 | Sensor failure | fail-open · byte-proxy fallback | **Byte-proxy fallback** | Never fail open; preserve today's Check-7 behavior when the probe errors. |
+| 8 | Sensor failure | fail-open · byte-proxy advisory · fail-closed | **Byte-proxy advisory + persistent-fallback escalation** | The byte-proxy is non-blocking, so a single probe failure degrades to *advisory* (honestly NOT a hard ceiling — it undercounts and only warns). `K` consecutive fallbacks (`SUPERPOWERS_CTX_FALLBACK_STREAK`, default 3) escalate to a block + loud diagnostic, so a systematically-broken gate cannot stay silently inert. Chosen over strict fail-closed (which over-blocks on a transient hiccup). |
 | 9 | Observation log location | extend `.dispatch-log` · separate file | **Separate `reports/context-observations.log`** | `.dispatch-log` has a parsed format that Check 9 / provenance depends on. |
 | 10 | SKILL.md addition | inline · `references/` extraction | **Reference file + short pointer** | The SDD SKILL.md is at its word-count ceiling; any addition must be offset. |
 | 11 | Transcript resolution | `CLAUDE_CODE_SESSION_ID` env var · hook stdin payload | **Hook stdin `.transcript_path` → probe `--transcript`** | The PreToolUse payload carries `transcript_path` (guaranteed); the env var is a different spawn path and is not guaranteed inside a hook — using it risks silently falling back to the byte-proxy every dispatch. Unifies with the test seam. |
@@ -72,12 +72,14 @@ Stdlib-only Python (no pydantic/PyYAML), so it runs under bare `python3`. Logic 
 - Return `total_tokens = input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens`.
 - Output: the integer token count (or `--json`). Exit non-zero with a diagnostic when the session id is unset, no transcript exists, or no turn has completed — the hook treats any non-zero exit as "probe unavailable" and falls back (§7).
 
+- **Parity contract:** the transcript scan + 4-field sum mirror `claude-ctx-check` exactly; record the source version the copy was vendored from. Missing or non-numeric `usage` fields count as 0; a malformed trailing JSONL line is skipped. Differential/shared-fixture tests pin parity so the external tool and the vendored copy cannot silently diverge.
+
 Deliberately **no window** and **no percentage** — the hook owns the thresholds.
 
 ### 5.2 Two-tier decision — in the hook
-**Transcript resolution (guaranteed, no env var).** The hook already reads its stdin payload (`INPUT=$(cat)`; it parses `.session_id`, `.cwd`, `.tool_input.*` today at lines 44/200/53/56/59). It reads `.transcript_path` from that same payload — the PreToolUse payload carries it, and the sibling `sdd-skill-enforcement-hook.sh:35` already does exactly this — and passes it to `context-probe.py --transcript`. Only if the payload's `transcript_path` is empty does it instead pass `--session-id "$SESSION_ID"` (the id it already reads at line 200), letting the probe resolve the file — so the hook holds no path-resolution logic of its own. This avoids `CLAUDE_CODE_SESSION_ID` entirely (a hook is a different spawn path than the `!` passthrough, so the env var is not guaranteed there) and unifies with the `--transcript` test seam.
+**Transcript resolution (guaranteed, no env var).** The hook already reads its stdin payload (`INPUT=$(cat)`; it parses `.session_id`, `.cwd`, `.tool_input.*` today at lines 44/200/53/56/59). It reads `.transcript_path` from that same payload — the PreToolUse payload carries it, and the sibling `sdd-skill-enforcement-hook.sh:35` already does exactly this — and passes it to `context-probe.py --transcript`. Only if the payload's `transcript_path` is empty does it instead pass `--session-id "$SESSION_ID"`, letting the probe resolve the file — so the hook holds no path-resolution logic of its own. **The hook must hoist `.session_id` extraction to immediately after the `INPUT=$(cat)` parse, before dispatch classification.** Today `SESSION_ID` is assigned only inside the reviewer sentinel branch (~L200), so implementer / fix / partner / passthrough dispatches would reach this fallback with an empty id and the probe would fail — silently degrading to the byte-proxy on exactly the dispatches the gate targets. This avoids `CLAUDE_CODE_SESSION_ID` entirely (a hook is a different spawn path than the `!` passthrough, so the env var is not guaranteed there) and unifies with the `--transcript` test seam.
 
-**Shared probe+log helper.** The probe call and the observation-log append (§5.3) form a single helper invoked at **every** dispatch exit path — reviewer (`exit 0`, ~L208), fix/re-review (~L165), passthrough (~L242), and implementer — so the trajectory is captured for all dispatch types. This is *not* a single edit to Check 7; it is a helper threaded into multiple exit points. **Nudge and block apply only in the implementer new-task path** (predicate `IS_IMPLEMENTER && ! MARKED_FIX`); re-reviews and fixes already exit before that path, so they can never be blocked mid-task.
+**Shared probe+log helper.** The probe call and the observation-log append (§5.3) form a single helper invoked at **every** dispatch exit path — reviewer (`exit 0`, ~L208), fix/re-review (~L165), passthrough (~L242), and implementer — so the trajectory is captured for all dispatch types. This is *not* a single edit to Check 7; it is a helper threaded into multiple exit points. **Nudge and block apply only in the implementer new-task path** (predicate `IS_IMPLEMENTER && ! MARKED_FIX`); re-reviews and fixes already exit before that path, so they can never be blocked mid-task. A `task_type: verification` task IS an implementer dispatch and a clean new-task boundary, so it is **eligible** for nudge/block — only reviewer / partner / fix / re-review dispatches are exempt.
 
 The hook already classifies each dispatch (reviewer / implementer / passthrough). The block/nudge tier attaches to the **implementer enforcement path**, evaluated only at a **new-task boundary** (not fix/re-review cycles — identified via the existing dispatch markers):
 
@@ -92,9 +94,13 @@ On every dispatch of any type, the gate appends one line to the observation log 
 ### 5.3 Observation log — `reports/context-observations.log`
 One line per dispatch, greppable, distinct from `.dispatch-log`:
 ```
-<ISO-8601> task=<N> type=<implementer|spec-review|quality-review|partner|other> tokens=<T> tier=<below|soft|hard> action=<allow|nudge|block|fallback>
+<ISO-8601> task=<N> type=<implementer|spec-review|quality-review|partner|other> tokens=<T> source=<probe|byte-proxy|bypass> tier=<below|soft|hard> action=<allow|nudge|block|fallback>
 ```
-This recovers the evidence the deferred "instrument-first" step would have provided, so thresholds are set from data after run 1. The hook already records its own output as an `attachment` record in the transcript, so the trace-audit step can later cross-reference.
+The `source` field is load-bearing: **threshold tuning consumes only `source=probe` rows** — byte-proxy and bypass rows don't reflect the real count and are excluded from the analysis. This recovers the evidence the deferred "instrument-first" step would have provided, so thresholds are set from data after run 1.
+
+- **Append is best-effort:** a write failure (unwritable/missing `reports/` path) logs to stderr and **never breaks the dispatch**.
+- **Scope:** the shared helper runs only after `INPUT` and the manifest have parsed. Pre-parse early exits (missing `jq` / CWD / manifest) happen before the helper and cannot log — they are not SDD-enforced dispatches, so they are out of scope.
+- The hook already records its own output as an `attachment` record in the transcript, so the trace-audit step can later cross-reference.
 
 ### 5.4 Handoff-response protocol — `references/context-handoff-protocol.md`
 The block's stderr is terse by necessity; the durable protocol lives in a reference the controller is pointed to from the SKILL body. It states: (1) the block is **not** a fix-and-retry — retrying is wrong; (2) commit any pending state; (3) invoke the `handoff` skill to build a bundle with entry skill `superpowers:subagent-driven-development` (the N39 flow); (4) tell the user to start a fresh session from the worktree and run `/pickup`; (5) then STOP — do not dispatch. Pairing the deterministic block with taught guidance is the standard fork pattern (advisory-in-skill + enforced-in-hook).
@@ -110,8 +116,11 @@ The fresh session's `/pickup` invokes SDD via the entry skill (arming the enforc
 | `SUPERPOWERS_CTX_SOFT_TOKENS` | `300000` | Soft-nudge threshold |
 | `SUPERPOWERS_CTX_HARD_TOKENS` | `400000` | Hard-block threshold |
 | `SUPERPOWERS_CTX_HANDOFF_BYPASS` | unset | When set, skip the gate entirely (stderr warning), matching the `SUPERPOWERS_*_BYPASS` pattern |
+| `SUPERPOWERS_CTX_FALLBACK_STREAK` | `3` | Consecutive byte-proxy fallbacks after which the hook escalates to a block + diagnostic (persistent-failure surface) |
 
-Non-numeric or `HARD ≤ SOFT` overrides fall back to defaults with a stderr warning. Defaults are optimized for the common 1M window; on a 200k session `HARD=400000` is unreachable (auto-compaction backstops there) — set a lower per-session override to protect those runs.
+Non-numeric or `HARD ≤ SOFT` overrides fall back to defaults with a stderr warning.
+
+**Window policy (explicit).** The defaults (300k/400k) are tuned for the common **1M** window. The hard-block guarantee applies only to sessions large enough to reach `HARD` before their window forces auto-compaction — i.e. 1M sessions. On a **200k** session `HARD=400000` is unreachable; those runs are backstopped by their own (lossy) auto-compaction, and a user who wants active protection sets a lower per-session override (e.g. `HARD=130000`). **Auto-compaction interaction:** when a window auto-compacts, the latest transcript `usage` shrinks, so the probe reading drops and the tier resets — the gate will not fire post-compaction. This is documented behavior and must be covered by a reading-across-compaction test.
 
 ## 6. Data Flow
 ```
@@ -128,23 +137,25 @@ you → fresh session → /pickup → SDD → session-recovery → first uncheck
 ```
 
 ## 7. Error Handling & Edge Cases
-- **Probe unavailable** (no session id / no transcript / no completed turn / malformed) → **byte-proxy fallback**: compute today's Check-7 estimate, warn if over its threshold, log `action=fallback`. Never fail open, never crash the dispatch.
-- **Bypass set** → skip the gate, stderr warning, `action=` not logged (or logged as `bypass`).
+- **Probe unavailable** (no session id / no transcript / no completed turn / malformed) → **byte-proxy advisory (degraded — honestly NOT the hard ceiling):** compute the Check-7 byte estimate, warn if over its threshold, log `source=byte-proxy action=fallback`, and never crash the dispatch. The byte-proxy undercounts and only warns, so this is *not* a deterministic block — do not describe it as "never fail open." **Persistent failure is surfaced:** after `SUPERPOWERS_CTX_FALLBACK_STREAK` (default 3) consecutive fallbacks, the hook escalates to a block with a diagnostic ("context gate has run blind for N dispatches — the probe is failing"), so a systematically-inert gate cannot hide.
+- **Bypass set** → skip the gate, stderr warning, log `source=bypass action=allow`.
+- **Observation-log append failure** → stderr note, dispatch proceeds (never breaks a dispatch); see §5.3.
 - **Mid-task pressure** → the in-flight task's reviewer/fix dispatches are never blocked, so the task completes cleanly; the block fires at the *next* new-task boundary. Correct by construction.
 - **First task** → thresholds naturally unmet (context is small); no special-casing.
 - **Subagents** → the gate runs only in the controller session and measures the controller; subagent prompts and dispatch are untouched.
-- **Repeated nudges** → informational only; the controller may keep going until the hard block. Acceptable (the block is the guarantee).
+- **Repeated nudges** → informational only; the controller may keep going until the hard block. Acceptable (the block is the hard stop; the clean handoff remains the taught response — §5.4).
+- **Post-block evasion** → the block stops the next *classified new-task* dispatch; a determined controller could still retry, dispatch an unclassified passthrough, set the bypass, or commit without a bundle. Honest scoping (no durable handoff-required state this spine); the objective and acceptance criteria are worded to match what the block actually delivers. Retry and bypass behavior are tested.
 
 ## 8. Testing Strategy
-- **Unit — `context-probe.py`:** fixture transcript → correct `total_tokens`; empty/malformed → non-zero exit; missing session id → non-zero exit. (`--transcript` seam.)
-- **Unit — hook context gate:** below / soft / hard branches; block only on implementer new-task dispatch, never on reviewer/partner/fix; env-override parsing incl. invalid values; bypass; byte-proxy fallback when the probe fails. Feed a deterministic reading via a test seam (`--transcript` fixture, or a test-only token override consumed by the hook).
-- **Integration — e2e:** a step drives an over-threshold reading and asserts the dispatch is blocked with the non-retryable handoff instruction, and that an observation-log line was written.
+- **Unit — `context-probe.py`:** fixture transcript → correct `total_tokens`; empty/malformed → non-zero exit; missing session id → non-zero exit. **Parity/differential:** missing or non-numeric `usage` fields count as 0; a malformed trailing JSONL line is skipped; a shared fixture cross-checks parity with `claude-ctx-check`. (`--transcript` seam.)
+- **Unit — hook context gate:** below / soft / hard branches; block only on implementer new-task dispatch, **never** on reviewer/partner/fix/re-review; **verification task IS eligible** (block/nudge fires); **`--session-id` fallback works for every dispatch class** with `transcript_path` omitted (proves the hoist — the pre-fix version fails here); **persistent fallback** — `K` consecutive probe failures escalate to a block; env-override parsing incl. invalid values; bypass logs `source=bypass`; observation-log append failure (unwritable `reports/` path) → dispatch proceeds; **retry + bypass** behavior after a block. Feed a deterministic reading via the `--transcript` fixture on the stdin payload.
+- **Integration — e2e:** a step drives an over-threshold reading and asserts the dispatch is blocked with the non-retryable handoff instruction, and that an observation-log line (with `source=probe`) was written. **This is checkout-path proof only** — the live hook resolves to the main checkout via settings.json, so the e2e exercises *this checkout*, not the installed live hook (see §9).
 - **Regression:** `validate-all-skills.py` — SDD SKILL.md must stay under the hard word limit (offset the pointer with a `references/` extraction).
 - **Baseline:** `check-hooks.sh --capture` in the same change (a baselined hook was edited).
 
 ## 9. Constraints
 1. **SDD SKILL.md is at its word ceiling** — the protocol pointer must be offset by extracting existing content to `references/`.
-2. **Self-hosting hazard (H1)** — the live hook resolves to this main checkout via settings.json absolute paths, so editing it affects the running session. Implement in a worktree; the e2e tests *this checkout*, not the live hook.
+2. **Self-hosting hazard (H1)** — the live hook resolves to this main checkout via settings.json absolute paths, so editing it affects the running session. Implement in a worktree; the e2e tests *this checkout*, not the live hook. Baseline re-capture alone does not validate the active settings path, so add a **post-merge live-hook smoke check** (or explicitly label the e2e as checkout-path proof only) to confirm the installed path fires.
 3. **Test seam is a first-class design element**, not an afterthought — `context-probe.py` must accept a fixture transcript so tests never depend on real context.
 4. **Stdlib-only probe** — `context-probe.py` must not import pydantic/PyYAML (it may be invoked with bare `python3`).
 
@@ -153,12 +164,16 @@ you → fresh session → /pickup → SDD → session-recovery → first uncheck
 - [ ] Hook allows with a normal reminder when `T < SOFT`.
 - [ ] Hook injects a nudge when `SOFT ≤ T < HARD` on an implementer new-task dispatch.
 - [ ] Hook blocks (`exit 2`, non-retryable message) when `T ≥ HARD` on an implementer new-task dispatch.
-- [ ] Hook never blocks on reviewer / partner / fix / re-review dispatches.
-- [ ] Every dispatch appends one line to `reports/context-observations.log`.
-- [ ] Probe failure → byte-proxy fallback (no fail-open, no crash), logged `action=fallback`.
-- [ ] `SUPERPOWERS_CTX_SOFT_TOKENS` / `_HARD_TOKENS` override the defaults; invalid values fall back with a warning.
+- [ ] Hook never blocks on reviewer / partner / fix / re-review dispatches; a `verification` task IS eligible for nudge/block.
+- [ ] `--session-id` fallback resolves the transcript for **every** dispatch class with `transcript_path` omitted (`.session_id` hoisted before classification).
+- [ ] Every dispatch appends one line (with `source=<probe|byte-proxy|bypass>`) to `reports/context-observations.log`; append failure never breaks a dispatch; tuning excludes non-`probe` rows.
+- [ ] Probe failure → byte-proxy advisory (degraded, logged `source=byte-proxy action=fallback`, no crash); `K` consecutive fallbacks escalate to a block + diagnostic.
+- [ ] `context-probe.py` parity with `claude-ctx-check` (missing/non-numeric usage → 0; malformed trailing JSONL skipped) is pinned by a differential test.
+- [ ] Reading-across-auto-compaction behavior (reading drops, tier resets) is covered by a test.
+- [ ] Retry + bypass behavior after a hard block is tested.
+- [ ] `SUPERPOWERS_CTX_SOFT_TOKENS` / `_HARD_TOKENS` / `_FALLBACK_STREAK` override the defaults; invalid values fall back with a warning.
 - [ ] `SUPERPOWERS_CTX_HANDOFF_BYPASS` skips the gate with a stderr warning.
-- [ ] SDD SKILL.md stays under the hard word limit; hook baseline re-captured; regression + unit + e2e green.
+- [ ] SDD SKILL.md stays under the hard word limit; hook baseline re-captured; e2e labeled checkout-path proof + post-merge live-hook smoke check; regression + unit + e2e green.
 - [ ] Operational + troubleshooting docs written per §12 (CLAUDE.md hook entry + `SUPERPOWERS_CTX_*` env-var list + test counts; skills-best-practices troubleshooting runbook; manifest inventory); BACKLOG N43 → done.
 
 ## 11. Open Questions
