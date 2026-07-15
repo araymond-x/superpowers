@@ -819,6 +819,16 @@ if [ ${#ERRORS[@]} -gt 0 ]; then
   exit 2
 fi
 
+# Context observation for the implementer/fix dispatch (logged once).
+# Task 5 replaces this stub with the full nudge/block tier logic.
+if [ "$IS_IMPLEMENTER" = true ]; then
+  if [ "$MARKED_FIX" = true ]; then
+    ctx_observe_and_log other        # fix dispatch: log only, never gated
+  else
+    ctx_observe_and_log implementer
+  fi
+fi
+
 # ─── All checks passed — inject reminder context and allow ────────────────
 
 # Build additionalContext with SDD reminder + optional token warning
