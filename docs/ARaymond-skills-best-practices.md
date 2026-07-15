@@ -281,6 +281,22 @@ Session 2 must be started with `cd /path/to/worktree && claude` — not from the
 
 When the controller's context gets heavy during a long SDD execution, it may hand off to a new session. Current gap: no standardized template for mid-execution handoffs. The resume prompt MUST include `/superpowers:subagent-driven-development` (or use the Skill tool to invoke it) as the FIRST ACTION before any code work. Identified as a future improvement to build into the SDD skill.
 
+**Now enforced (2026-07-14, N43):** the pre-dispatch hook's context-pressure gate turns that advisory into a mechanical stop — it reads the controller's real token count via `context-probe.py` and, on the implementer new-task path, nudges at the SOFT threshold and BLOCKS at HARD, directing the controller to `references/context-handoff-protocol.md`. See the troubleshooting runbook below.
+
+---
+
+## Context Gate Troubleshooting (2026-07-14, N43)
+
+The context-pressure gate in `sdd-pre-dispatch-hook.sh` reads the controller's actual accumulated tokens via `context-probe.py` and, on an implementer NEW-TASK dispatch, nudges at `SUPERPOWERS_CTX_SOFT_TOKENS` (default 300000) and blocks at `SUPERPOWERS_CTX_HARD_TOKENS` (default 400000). Every dispatch appends one line to `reports/context-observations.log` (`... tokens=<T> source=<probe|byte-proxy|bypass> tier=<below|soft|hard> action=<allow|nudge|block|fallback>`), separate from `.dispatch-log`. Diagnose from that log first.
+
+- **Gate never fires** → confirm `.transcript_path` is resolving (it comes from the PreToolUse payload). `grep action=fallback reports/context-observations.log`: if the gate is falling back, the probe is failing and the gate has degraded to the advisory byte-proxy (which won't block until the fallback streak escalates). Also confirm the session actually reaches HARD *before* auto-compaction — on a 200k-window session the window compacts before 400k tokens, so the default thresholds never trip (lower BOTH via env override for such sessions).
+- **Falling back every dispatch** → run `context-probe.py --transcript <path>` by hand and check its exit code (1 = no transcript resolvable or no `usage` block yet). Confirm it is invoked under bare `python3` and stays **stdlib-only** (no pydantic/PyYAML import creeping in — the hook runs it with system `python3`, not the venv). Confirm the PreToolUse payload actually carries `.transcript_path`.
+- **Fires too early / too late** → tune `SUPERPOWERS_CTX_SOFT_TOKENS` / `SUPERPOWERS_CTX_HARD_TOKENS` from real `source=probe` rows in `reports/context-observations.log`. Exclude `source=byte-proxy` and `source=bypass` rows from the analysis — only `probe` rows carry a true token count.
+- **How to disable** → `SUPERPOWERS_CTX_HANDOFF_BYPASS=1` (skips the gate with a stderr warning; logs `source=bypass`). Use only to recover from a diagnosed probe fault, not to push through a legitimate context block.
+- **Design note (transcript source)** — the transcript comes from the PreToolUse stdin payload (`.transcript_path`, then the hoisted `.session_id`), NOT `CLAUDE_CODE_SESSION_ID`. A hook is a different spawn path and that env var is not guaranteed there; the hook always passes an explicit `--transcript`/`--session-id`. (The probe itself lists `CLAUDE_CODE_SESSION_ID` as its last resolution fallback, but the hook never reaches it.) Do not "simplify" the hook back to the env var.
+- **Design note (per-dispatch cost)** — the probe `read_text()`s the WHOLE transcript on **every** dispatch (strict parity with `claude-ctx-check` was chosen over a bounded tail-read, which would break the differential parity test). On a large (1M-token) session the transcript can be tens of MB, so each dispatch pays that read — an accepted trade-off for parity. If it ever becomes a latency problem, a bounded reverse-read is the optimization, but it must be re-pinned against `claude-ctx-check` to preserve parity.
+- **Design note (observation-log scope)** — an implementer dispatch blocked by a *prior* enforcement check (`ERRORS` → `exit 2`) does NOT log a context observation: the context gate sits **after** the ERRORS report by design, so a half-reviewed prior task can't be stranded by a context block. The clean re-dispatch (once the prior blockers are cleared) logs normally. Do not "fix" this by moving the gate before the ERRORS report.
+
 ---
 
 ## Self-Modifying Enforcement Runs (2026-05-29 lessons)
