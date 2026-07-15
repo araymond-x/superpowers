@@ -23,8 +23,8 @@ differential parity test (Task 2) therefore compares the two only on
 well-formed fixtures.
 
 Resolution priority: `--transcript` → `--session-id` → $CLAUDE_CODE_SESSION_ID.
-Task 1 implements ONLY the `--transcript` path; `--session-id` and env-var
-resolution are Task 2 (resolve_transcript currently returns None for those).
+`--session-id` and $CLAUDE_CODE_SESSION_ID both resolve by globbing
+~/.claude/projects/*/<id>.jsonl by filename (the session UUID is unique).
 
 Exit codes:
     0  printed the token total (bare int, or JSON with --json)
@@ -77,22 +77,44 @@ def find_latest_total(transcript_path: Path) -> Optional[int]:
     return None
 
 
-def resolve_transcript(args) -> Optional[Path]:
-    """Task-1 stub: resolves ONLY --transcript to a file path.
+def find_transcript(session_id: str) -> Optional[Path]:
+    """Glob ~/.claude/projects/*/<session_id>.jsonl by filename.
 
-    Task 2 extends this with --session-id / env-var resolution.
+    Mirrors claude-ctx-check's resolver: the session id is a globally unique
+    UUID, so a filename search across project dirs is exact and immune to
+    Claude Code's sanitized-cwd directory-naming rule (which is deliberately
+    NOT reconstructed here). Returns None if no matching transcript exists.
+    """
+    if not PROJECTS_DIR.is_dir():
+        return None
+    for project_dir in PROJECTS_DIR.iterdir():
+        if not project_dir.is_dir():
+            continue
+        candidate = project_dir / f"{session_id}.jsonl"
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def resolve_transcript(args) -> Optional[Path]:
+    """Resolve a transcript path by priority: --transcript → --session-id →
+    $CLAUDE_CODE_SESSION_ID. Returns None if none resolves to an existing file.
     """
     if args.transcript:
         p = Path(args.transcript)
         return p if p.is_file() else None
-    return None
+    session_id = args.session_id or os.environ.get("CLAUDE_CODE_SESSION_ID")
+    if not session_id:
+        return None
+    return find_transcript(session_id)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Context-window token sensor.")
     parser.add_argument("--transcript", help="path to a transcript JSONL file")
     parser.add_argument(
-        "--session-id", help="session UUID (Task 2 — not yet resolved)"
+        "--session-id",
+        help="session UUID; resolved via ~/.claude/projects/*/<id>.jsonl",
     )
     parser.add_argument(
         "--json", action="store_true", help="emit machine-readable JSON"
