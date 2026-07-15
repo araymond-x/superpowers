@@ -196,6 +196,11 @@ ctx_log() {  # $1=type $2=source $3=tier $4=action $5=tokens
   { mkdir -p "$REPORTS_DIR" && printf '%s\n' "$line" >> "$OBS_LOG"; } 2>/dev/null \
     || echo "WARNING: context-observations append failed ($OBS_LOG)" >&2
 }
+ctx_fallback_streak() {
+  # Trailing consecutive action=fallback rows (a non-fallback row breaks the
+  # streak). Includes the row just written. tac is absent on macOS -> awk.
+  awk '{a[NR]=$0} END{c=0; for(i=NR;i>=1;i--){ if(a[i] ~ /action=fallback/) c++; else break } print c}' "$OBS_LOG" 2>/dev/null || echo 0
+}
 ctx_observe_and_log() {  # $1=dispatch type. Probe + log only (no nudge/block).
   local dtype="$1" tpath
   if [ -n "${SUPERPOWERS_CTX_HANDOFF_BYPASS:-}" ]; then ctx_log "$dtype" bypass below allow 0; return; fi
@@ -842,6 +847,11 @@ if [ "$IS_IMPLEMENTER" = true ]; then
       fi
     else
       ctx_log implementer byte-proxy "$(ctx_tier "$CTX_T")" fallback "$CTX_T"
+      STREAK_N=$(ctx_fallback_streak)
+      if [ "${STREAK_N:-0}" -ge "$CTX_STREAK" ] 2>/dev/null; then
+        echo "BLOCKED (context): the context gate has run blind for $STREAK_N consecutive dispatches — context-probe.py is failing (check .transcript_path resolution and that the probe is stdlib-only). A silently-inert gate is not allowed. Fix the probe, or set SUPERPOWERS_CTX_HANDOFF_BYPASS=1 to proceed without the gate. See references/context-handoff-protocol.md." >&2
+        exit 2
+      fi
     fi
   fi
 fi
