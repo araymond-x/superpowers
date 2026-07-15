@@ -111,9 +111,16 @@ def count_tasks(plan_content: str) -> int:
 
 
 def count_checkboxes(plan_content: str) -> dict:
-    """Return counts of checked and unchecked checkboxes in the plan."""
-    checked = len(CHECKED_PATTERN.findall(plan_content))
-    unchecked = len(UNCHECKED_PATTERN.findall(plan_content))
+    """Return counts of checked and unchecked checkboxes in the plan.
+
+    Strip fenced code blocks first (consistent with count_tasks): checkboxes
+    inside ```fences``` are deliverable *content* — a runbook's operator
+    checklist, a decision-template's blanks — not SDD plan-progress boxes, and
+    must not count toward the pre-completion "all checkboxes checked" gate.
+    """
+    unfenced = _unfenced_content(plan_content)
+    checked = len(CHECKED_PATTERN.findall(unfenced))
+    unchecked = len(UNCHECKED_PATTERN.findall(unfenced))
     return {"checked": checked, "unchecked": unchecked, "total": checked + unchecked}
 
 
