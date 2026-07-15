@@ -45,8 +45,12 @@ if [ -n "$integrity_failures" ]; then
     warning_message="${warning_message}\n\n<important-reminder>IN YOUR FIRST REPLY AFTER SEEING THIS MESSAGE YOU MUST TELL THE USER: WARNING: Superpowers installation integrity check failed. The following issues were detected:${integrity_failures}\n\nRun the verification steps in the CLAUDE.md for this fork to diagnose.</important-reminder>"
 fi
 
-# Read using-superpowers content
-using_superpowers_content=$(cat "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md" 2>&1 || echo "Error reading using-superpowers skill")
+# Read using-superpowers content, stripped of YAML frontmatter.
+# Frontmatter's `name: using-superpowers` is the bare directory name, not
+# the fully-qualified `superpowers:using-superpowers` the Skill tool
+# actually registers (see command stubs in ~/.claude/commands/superpowers/).
+# Leaving it in would show the model a skill name that fails if invoked.
+using_superpowers_content=$(bash "${PLUGIN_ROOT}/skills/scripts/strip-frontmatter.sh" "${PLUGIN_ROOT}/skills/using-superpowers/SKILL.md" 2>&1 || echo "Error reading using-superpowers skill")
 
 # Escape string for JSON embedding using bash parameter substitution.
 # Each ${s//old/new} is a single C-level pass - orders of magnitude
