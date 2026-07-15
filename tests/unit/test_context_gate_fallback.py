@@ -134,3 +134,30 @@ def test_bypass_after_block_allows(tmp_path):
         ).returncode
         == 0
     )
+
+
+def test_nondefault_streak_threshold_blocks_earlier(tmp_path):
+    """SUPERPOWERS_CTX_FALLBACK_STREAK=2 -> 1 seeded fallback + this bad-probe dispatch
+    (streak 2) blocks, proving the env override lowers the escalation threshold below
+    the default 3."""
+    setup_full_sdd_workspace(str(tmp_path), 4, 1)
+    _seed(tmp_path, 1)  # 1 prior + this = 2 = the overridden streak
+    r = run_hook(
+        _bad_probe(tmp_path),
+        str(tmp_path),
+        env_extra={"SUPERPOWERS_CTX_FALLBACK_STREAK": "2"},
+    )
+    assert r.returncode == 2 and "blind" in r.stderr.lower()
+
+
+def test_nondefault_streak_threshold_allows_below(tmp_path):
+    """SUPERPOWERS_CTX_FALLBACK_STREAK=5 -> 3 seeded fallbacks + this bad-probe dispatch
+    (streak 4 < 5) still allows, proving a raised threshold defers the block."""
+    setup_full_sdd_workspace(str(tmp_path), 4, 1)
+    _seed(tmp_path, 3)  # 3 prior + this = 4 < 5
+    r = run_hook(
+        _bad_probe(tmp_path),
+        str(tmp_path),
+        env_extra={"SUPERPOWERS_CTX_FALLBACK_STREAK": "5"},
+    )
+    assert r.returncode == 0
