@@ -1,0 +1,4 @@
+docs/imp-plans/2026-07-14-sdd-context-aware-handoff/plan.md
+docs/imp-plans/2026-07-14-sdd-context-aware-handoff/module-1-probe.md
+docs/imp-plans/2026-07-14-sdd-context-aware-handoff/module-2-hook-gate.md
+docs/imp-plans/2026-07-14-sdd-context-aware-handoff/module-3-docs-integration.md

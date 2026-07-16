@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":"hi"}}
+{"type":"assistant","session_id":"fixture-soft","message":{"role":"assistant","model":"claude-opus-4-8","usage":{"input_tokens":150000,"cache_creation_input_tokens":50000,"cache_read_input_tokens":140000,"output_tokens":10000}}}

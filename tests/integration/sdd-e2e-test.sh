@@ -568,5 +568,44 @@ rm "$AVOUT"
 echo "PASS: Step 12 — Check 7 + Check 9 are archive-aware after a transition"
 
 echo ""
-echo "E2E PIPELINE PASS - 13 steps composed correctly"
+echo "=== Step 13: context gate blocks over-HARD implementer dispatch (checkout-path proof) ==="
+# NOTE: this exercises THIS checkout's hook, not the installed live hook
+# (settings.json resolves the live hook to the main checkout). A post-merge
+# live-hook smoke check is required separately (see spec §9 constraint 2).
+CTX_WORK=$(mktemp -d)
+# Minimal manifest workspace with task 0 complete, dispatching task 1.
+# setup_full_sdd_workspace does its own git init + checkout + initial commit,
+# so no manual git setup is needed here.
+PYTHONPATH="$PROJECT/tests/unit" $PYTHON - "$CTX_WORK" "$PROJECT" << 'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[2] + "/tests/unit")
+from sdd_test_helpers import setup_full_sdd_workspace
+setup_full_sdd_workspace(sys.argv[1], total_tasks=4, completed_tasks=1)
+PYEOF
+CTX_FIX="$PROJECT/tests/unit/fixtures/context-probe/hard.jsonl"
+CTX_PAYLOAD=$($PYTHON - "$CTX_WORK" "$CTX_FIX" << 'PYEOF'
+import json, sys
+print(json.dumps({
+  "tool_input": {"description": "Implement task 1", "prompt": "You are implementing task 1"},
+  "cwd": sys.argv[1],
+  "transcript_path": sys.argv[2],
+}))
+PYEOF
+)
+CTX_OUT=$(mktemp)
+# `|| CTX_RC=$?` REQUIRED — the hook exits 2 by design here; the script runs
+# under `set -e` + an ERR trap, so a bare invocation would abort before the
+# exit code is captured (Steps 11/12 guard their non-zero calls the same way).
+CTX_RC=0
+SUPERPOWERS_ROOT="$PROJECT" bash "$PROJECT/skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh" \
+  <<< "$CTX_PAYLOAD" > "$CTX_OUT" 2>"$CTX_OUT.err" || CTX_RC=$?
+grep -qi "do not retry" "$CTX_OUT.err" || { echo "FAIL: block message missing non-retryable text"; exit 1; }
+[ "$CTX_RC" -eq 2 ] || { echo "FAIL: expected exit 2, got $CTX_RC"; exit 1; }
+grep -q "source=probe" "$CTX_WORK/reports/context-observations.log" || { echo "FAIL: no source=probe observation line"; exit 1; }
+grep -q "action=block" "$CTX_WORK/reports/context-observations.log" || { echo "FAIL: no action=block observation line"; exit 1; }
+rm -rf "$CTX_WORK" "$CTX_OUT" "$CTX_OUT.err"
+echo "PASS: Step 13 — context gate blocks over-HARD implementer dispatch + logs source=probe"
+
+echo ""
+echo "E2E PIPELINE PASS - 14 steps composed correctly"
 rm -rf "$WORK"
