@@ -73,3 +73,15 @@ None of these change any documented value; all are placement/completeness judgme
 ## Concerns
 
 - None blocking. Minor: the e2e Step 13 description in CLAUDE.md and the manifest is written against Task 9's planned behavior; if Task 9's implementation diverges (e.g., different assertion or step number), those two prose mentions would need a one-line reconciliation. Flagging so the Task 9/10 reviewer cross-checks the e2e prose against the actual step that lands.
+
+## Fix Cycle
+
+Doc-review fixes applied post-review (marker `[task 8 fix]`), DOC-ONLY:
+
+1. **B10 absolute-threshold reconciliation** (`docs/process-improvement-findings/BACKLOG.md`): the B10 row described N43's shipped thresholds as percentages ("fire report-compression at a low rung, e.g. ~40%, below N43's 50% nudge / 65% block"). N43 shipped ABSOLUTE tokens (soft 300k / hard 400k) by explicit design (absolute count, not percent-of-window). Changed to "at a lower absolute rung, below N43's 300k nudge / 400k block". Row status/framing unchanged; no other percentage refs to N43 thresholds in the B10 row.
+2. **CLAUDE.md context-gate cross-reference**: added a `- **Context-pressure gate** (added 2026-07-14, N43)` bullet in the "Hooks-Based Enforcement" check cluster (right after Check 6b), pointing a reader scanning "what the pre-dispatch hook blocks on" to the full N43 feature entry below.
+3. **Check-7 disambiguation** (CLAUDE.md): qualified the N43-authored "repurposed Check-7 byte-proxy fallback" as **"the hook's** repurposed Check-7 byte-proxy fallback" so it isn't conflated with controller-checkpoint.py's Check 7 (min-tier ratio). controller-checkpoint's Check 7 mentions (lines ~209/215) left unchanged.
+
+Files changed: `CLAUDE.md`, `docs/process-improvement-findings/BACKLOG.md`.
+
+Verify: B10 row grep for `50%`/`65%`/`~40%` → NONE; `validate-all-skills.py` → 159 PASS / 0 FAIL / 2 advisory WARNING; `check-hooks.sh` → PASS (no hook touched). Fix commit: `1c2c4ee`.
