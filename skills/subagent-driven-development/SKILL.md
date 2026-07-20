@@ -208,7 +208,7 @@ After reading the plan and before creating TodoWrite:
 
 If `.sdd-session.json` already exists (resume scenario), validate it matches the plan frontmatter.
 
-**Step 7: Create TodoWrite with all tasks.**
+**Step 7: Create the task list with all tasks** using this session's task-tracking tool (TodoWrite, or your harness's equivalent such as TaskCreate/TaskUpdate — "TodoWrite" throughout this skill means whichever tracker the session provides; if the session offers none, the plan-file checkboxes below are the tracker).
 If the plan has a Task 0 (Contract Verification), it should be the first item. Mark it as the current task.
 
 ## Pre-Execution Audit (Mandatory)
@@ -271,7 +271,7 @@ This is a deterministic, hook-enforced check — do not reproduce it by hand, an
 
 ## Controller Health Checkpoints
 
-See `references/controller-health-checkpoints.md` for the three deterministic `controller-checkpoint.py` invocations (pre-execution, pre-dispatch, pre-completion) and what each verifies. The pre-dispatch hook enforces the pre-dispatch checkpoint (Check 5c) and the context-summary check (Check 6b) automatically at dispatch time; the pre-completion gate is enforced separately at completion.
+See `references/controller-health-checkpoints.md` for the three deterministic `controller-checkpoint.py` invocations (pre-execution, pre-dispatch, pre-completion) and what each verifies. Run the pre-dispatch checkpoint script yourself before each dispatch — the hook does **not** run it; it only verifies your saved checkpoint output (Check 5c) and the context summary (Check 6b) exist, and blocks (with the exact remediation command) if either is missing. The pre-completion gate is enforced separately at completion.
 
 ## Context Health Protocol
 
@@ -416,7 +416,7 @@ Do NOT use module-prefixed names (`m2-task-1-*`), do NOT create symlinks between
 
 The `<feature-dir>/reports/` directory is the controller's flight recorder. If the session crashes, a new session can read these files to understand what happened and resume execution.
 
-**Report file format**: Implementer report files must begin with YAML frontmatter (between `---` delimiters) containing structured fields (schema_version, task_id, status, files_changed, tests, contract_compliance), followed by prose sections. Reviewer and spec-review reports retain their existing markdown format.
+**Report file format**: Implementer report files must begin with YAML frontmatter (between `---` delimiters) in the **exact, strictly-typed** shape shown under "Report Format" in `./implementer-prompt.md` — `files_changed` is a list of `{path, description}` objects (not bare path strings), `tests` is `{written, passing, command, result}`, and `contract_compliance` is a list of `{constraint, status, detail}`; extra keys are rejected. When you persist a report on the subagent's behalf, copy that structure verbatim; `validate-report.py` rejects looser shapes and blocks the next dispatch. Reviewer and spec-review reports retain their existing markdown format.
 
 ## Plan Status Tracking
 
@@ -424,7 +424,7 @@ After marking each task complete in TodoWrite, the controller MUST also update t
 - Check off completed checkboxes: `- [ ]` becomes `- [x]`
 - If the task was completed with modifications, add a brief inline note: `- [x] Task 3: implemented using regex fallback (see deviations.md)`
 
-This ensures that anyone reading the plan file — including you, after context loss — can see exactly what was done and what remains. Do not rely on TodoWrite alone; it does not persist beyond the session.
+This ensures that anyone reading the plan file — including you, after context loss — can see exactly what was done and what remains. The plan-file checkboxes are the **durable source of truth**; the in-session tracker (TodoWrite or equivalent) is a convenience only and does not persist beyond the session.
 
 ## Module Transition (multi-module plans only)
 
@@ -441,7 +441,7 @@ Do not manually archive reports or update the manifest — the script handles al
 
 ## Honesty Check (Mandatory before Pre-Completion Gate)
 
-See `references/honesty-check-block.md` for the full prompt. Output the block exactly and STOP. The user will paste the questions back to you — then answer each one honestly based on what actually happened. After answering, save to `<feature-dir>/reports/honesty-check-YYYY-MM-DD.md` (gate-required) and add uncertainties from answers 5-9 to `<feature-dir>/deviations.md` as "Pending." The stop hook copies to the vault automatically.
+See `references/honesty-check-block.md` for the full prompt. Output the block exactly and STOP. The user will paste the questions back to you — then answer each one honestly based on what actually happened. After answering, save to `<feature-dir>/reports/honesty-check-YYYY-MM-DD.md` — append a `-module-N`/`-session-N` suffix if more than one honesty check runs in a day, since the gate and stop hook match `honesty-check-*.md` (gate-required) — and add uncertainties from answers 5-9 to `<feature-dir>/deviations.md` as "Pending." The stop hook copies to the vault automatically.
 
 ## Pre-Completion Gate
 

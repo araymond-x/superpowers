@@ -38,8 +38,9 @@ Output this block exactly:
       proceed directly to the implementer?
 10. Save the COMPLETE, VERBATIM output of your answers to
     questions 1-9 above to this feature's
-    `reports/honesty-check.md`. Do not summarize, paraphrase,
-    or omit any part of your responses.
+    `reports/honesty-check-<YYYY-MM-DD>.md` (add a `-module-N`
+    suffix if you run more than one in a day). Do not
+    summarize, paraphrase, or omit any part of your responses.
 
  After saving, prepare a remediation recommendation grouped by:
  - High-priority: Must address before declaring feature complete.
@@ -55,7 +56,7 @@ Output this block exactly:
 ```
 
 After answering honestly:
-1. Save the complete response to `reports/honesty-check.md` (required by the pre-completion gate).
+1. Save the complete response to `reports/honesty-check-<YYYY-MM-DD>.md` — add a `-module-N` or `-session-N` suffix if you run more than one honesty check in a day (required by the pre-completion gate, which matches `honesty-check-*.md`; the undated `honesty-check.md` is rejected).
 2. Prepare the prioritized remediation recommendation and present to the user.
 3. Add any uncertainties from answers 5-9 to deviations.md as "Pending — needs review."
 4. Proceed to the Pre-Completion Gate.
