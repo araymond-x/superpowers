@@ -25,13 +25,13 @@ This feature closes both: vendor the official cmux agent skills (A), and make th
 - **B — Auto-spawn handoff.** A deterministic `spawn-handoff-session.sh` in the SDD skill's `scripts/`, invoked by the rewritten protocol step 4. **Fully automatic** (user decision): the successor launches and `/pickup` submits without human confirmation. Safeguards: fail-closed preconditions, hop limit, minimal fail-open cupace quota check, `cmux notify` on every hop, manual-instructions fallback on every non-spawn path.
 
 ### Out of scope — do not build
-- **C** — SDD sidebar telemetry (`set-progress`/`set-status` from controller or hooks) → future feature.
-- **D** — live artifact panels (`cmux markdown open` for plan/deviations, `cmux diff` at finish) → future feature.
-- **E** — worktree-workspace customization (one-click worktree agent buttons) → future feature.
-- **F** — fleet orchestration (parallel Claude sessions as cmux workspaces) → needs its own design; bypasses Agent-tool hook enforcement.
+- SDD sidebar telemetry (`set-progress`/`set-status` from controller or hooks) → future feature.
+- Live artifact panels (`cmux markdown open` for plan/deviations, `cmux diff` at finish) → future feature.
+- Worktree-workspace customization (one-click worktree agent buttons) → future feature.
+- Fleet orchestration (parallel Claude sessions as cmux workspaces) → needs its own design; bypasses Agent-tool hook enforcement.
 - The other 3 cmux skills (`cmux-browser`, `cmux-settings`, `cmux-customization`) → install later if needed.
 - Codex-side symlinks (`~/.agents/skills`) → later.
-- **N43 component (C)** — full pace-aware pause/resume via `cupace` (sleep-until-reset remedy) → its own spec. This feature takes only a minimal spawn-time quota precondition.
+- **N43 component (C)** — full pace-aware pause/resume via `cupace` (the user's `claude-usage-pace` personal CLI; "cupace" throughout this spec) with its sleep-until-reset remedy → its own spec. This feature takes only a minimal spawn-time quota precondition.
 - **B10** — pressure-conditional context-summary gate → separate fast-follow, unchanged by this feature.
 - Any change to the context gate's thresholds, tiers, probe, or observation-log format.
 - Auto-spawn from `writing-plans`/`brainstorming` sessions → later; this feature targets the SDD controller seam only.
@@ -46,7 +46,7 @@ This feature closes both: vendor the official cmux agent skills (A), and make th
 | `~/.claude/skills/{cmux,cmux-workspace,cmux-markdown,cmux-diagnostics}` | **NEW symlinks** (install step, documented in CLAUDE.md; outside the repo) |
 | `skills/subagent-driven-development/scripts/spawn-handoff-session.sh` | **NEW** — the auto-spawn tool (§5) |
 | `skills/subagent-driven-development/references/context-handoff-protocol.md` | Rewrite steps 4–5: run the spawn script; manual path becomes the documented fallback; note the script also serves the soft-nudge early handoff |
-| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | **Expected: no change.** Only if the HARD-block message lacks a protocol pointer does it gain one line — then re-capture the hook baseline in the same change |
+| `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` | **No change** (verified at spec review: the HARD-block message already ends with a pointer to the protocol doc, sdd-pre-dispatch-hook.sh:840). No baseline re-capture |
 | `tests/unit/test_spawn_handoff.py` | **NEW** — stub-cmux unit suite (§7) |
 | `tests/integration/sdd-e2e-test.sh` | **NEW Step 14** (banner 14→15) — end-to-end spawn with stub cmux |
 | `tests/ARaymond-installation/verify-symlink-install.sh` | Add: 4 symlink checks, `external-skills/` presence, VENDOR.md SHA recorded |
@@ -102,6 +102,8 @@ The plan writer must inspect live `claude-usage-pace --json` output and pin: (a)
 4. Append one line to `<feature-dir>/reports/handoff-spawn.log`: ISO-8601 timestamp, hop number, workspace ref, bundle path, quota status.
 5. Print the workspace ref and exit 0. The controller reports it and **STOPs** (protocol step 5 unchanged).
 
+**Git treatment of spawn artifacts:** `.handoff-hops` and `handoff-spawn.log` are **tracked** — the `reports/` convention (`.dispatch-log` and `context-observations.log` are committed; only root-level workspace state like `.active-feature` is gitignored). The dying session necessarily leaves them uncommitted (they are written *after* the clean-tree check); the successor's normal step-2 commit folds them in, and if it doesn't, the next hop's clean-tree refusal self-corrects.
+
 When `BUNDLE_PATH` was supplied, the launch prompt becomes `claude "/pickup <path>"`; the default path avoids interpolation entirely (`/pickup` resolves latest itself).
 
 ### 5.5 Exit codes and fallback behavior
@@ -128,6 +130,8 @@ Every non-spawn path prints the manual instructions — the protocol never dead-
 
 ## 7. Testing
 
+**Plan ordering note:** vendor component A first and verify the cmux CLI surface (`new-workspace --focus/--command`, `notify`, `ping`) against the vendored skill docs or live `cmux --help` *before* freezing component B's composed argv — otherwise the exact-argv unit assertions risk a rework loop.
+
 - **Unit — `tests/unit/test_spawn_handoff.py`** (pytest, stub `cmux` on PATH recording argv; stub `claude-usage-pace`): not-in-cmux → exit 3 + instructions; ping failure → exit 3; dirty tree → exit 1; missing bundle → exit 1; missing `.active-feature` → exit 1; hop limit reached → exit 3 + notice; quota below threshold → exit 3 + notice; quota tool absent → spawn proceeds with `quota=unchecked`; success → exact `new-workspace`/`notify` argv asserted, `.handoff-hops` incremented, spawn-log line appended; `--dry-run` → all preconditions evaluated, zero spawn argv recorded; unsafe explicit bundle path → exit 1.
 - **Installation — `verify-symlink-install.sh`:** 4 symlinks resolve into `external-skills/`; VENDOR.md exists with a SHA; vendored SKILL.md files present.
 - **e2e — `sdd-e2e-test.sh` Step 14** (banner 14→15): fixture repo + fixture bundle + stub cmux; drive the script end-to-end; assert composed spawn command, notify, hop counter.
@@ -152,6 +156,6 @@ Every non-spawn path prints the manual instructions — the protocol never dead-
 - [ ] `spawn-handoff-session.sh --dry-run` passes all preconditions in a real cmux SDD session.
 - [ ] One real spawn: successor workspace opens, `claude` launches via the wrapper, `/pickup` ingests the bundle, SDD resumes at the first unchecked task.
 - [ ] Non-cmux terminal: script exits 3 and prints the manual instructions (behavior parity with today).
-- [ ] Hop limit: third consecutive spawn attempt beyond the max falls back to manual with a notification.
+- [ ] Hop limit: spawn attempt max+1 (the 4th, with the default max of 3) falls back to manual with a notification.
 - [ ] All suites green: unit, regression (`validate-all-skills.py` unchanged counts), installation, e2e (15 steps).
 - [ ] CLAUDE.md, customization manifest, and BACKLOG updated; hook baseline re-captured only if the hook changed.
