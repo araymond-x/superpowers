@@ -50,7 +50,7 @@ This feature closes both: vendor the official cmux agent skills (A), and make th
 | `tests/unit/test_spawn_handoff.py` | **NEW** — stub-cmux unit suite (§7) |
 | `tests/integration/sdd-e2e-test.sh` | **NEW Step 14** (banner 14→15) — end-to-end spawn with stub cmux |
 | `tests/ARaymond-installation/verify-symlink-install.sh` | Add: 4 symlink checks, `external-skills/` presence, VENDOR.md SHA recorded |
-| `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | New "cmux Integration" section; inventory entries; close N43(D) lineage with a new row |
+| `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | New "cmux Integration" section (`SUPERPOWERS_CMUX_MAX_HOPS` joins the Hook Development Gotchas env-var list); inventory entries; close N43(D) lineage with a new row |
 
 `skills/subagent-driven-development/SKILL.md` body: **no change** (at its word ceiling; the protocol reference doc is the integration point, already reached from the hook's block message).
 
