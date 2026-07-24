@@ -564,9 +564,70 @@ def _fallback_spawn_id(cmd):
 
 
 def _spawn_log_records(ctx):
-    """[(record_type, spawn_id)] from handoff-spawn.log, in file order."""
+    """[(record_type, spawn_id, fields)] from handoff-spawn.log, in file order.
+
+    `fields` is the record's trailing `k=v` payload (§5.4d Log format: hop for
+    every record; workspace/launch/bundle/quota for outcomes) — carried here so
+    value assertions have ONE parser instead of a per-field one-off.
+    """
     lines = (ctx["reports"] / "handoff-spawn.log").read_text().splitlines()
-    return [(f[2], f[1]) for f in (ln.split() for ln in lines) if len(f) > 2]
+    return [
+        (f[2], f[1], dict(p.split("=", 1) for p in f[3:] if "=" in p))
+        for f in (ln.split() for ln in lines)
+        if len(f) > 2
+    ]
+
+
+def _spawn_log_fields(ctx, kind):
+    """Fields of the single record of type `kind` (asserts there is exactly one)."""
+    recs = [fl for k, _, fl in _spawn_log_records(ctx) if k == kind]
+    assert len(recs) == 1, f"expected exactly one {kind} record, got {len(recs)}"
+    return recs[0]
+
+
+def _worktree_root(ctx):
+    """The path the script itself computes (`git rev-parse --show-toplevel`).
+
+    NOT `realpath(ctx['wt'])`: git canonicalizes macOS's /var -> /private/var, so
+    a realpath-derived expectation can drift from what the script passes.
+    """
+    import subprocess
+
+    return subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        cwd=str(ctx["wt"]),
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+
+
+def _cmux_stub_recording_argv():
+    """cmux stub that records each subcommand's argv ONE ELEMENT PER LINE.
+
+    The default stub's `echo "$@"` flattens argv into a space-joined line, which
+    cannot distinguish a flag's VALUE from the next token — `--name "SDD resume:
+    feat"` and `--cwd <path>` both carry spaces. Per-subcommand files keep the
+    new-workspace and notify argvs from interleaving.
+    """
+    return (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'printf \'%s\\n\' "$@" >> "$CMUX_LOG.$1.argv"\n'
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+
+
+def _recorded_argv(tmp_path, subcmd):
+    p = Path(str(tmp_path / "cmux.log") + f".{subcmd}.argv")
+    assert p.exists(), f"cmux stub recorded no `{subcmd}` call"
+    return p.read_text().splitlines()
+
+
+def _flag_value(argv, flag):
+    """Value FOLLOWING `flag` in a recorded argv (asserts the flag is present)."""
+    assert flag in argv, f"{flag} absent from argv: {argv!r}"
+    i = argv.index(flag)
+    assert i + 1 < len(argv), f"{flag} has no value in argv: {argv!r}"
+    return argv[i + 1]
 
 
 def test_dry_run_spawns_nothing(tmp_path):
@@ -589,11 +650,16 @@ def test_auto_spawn_success_exit_0(tmp_path):
     assert r.returncode == 0
     logged = (tmp_path / "cmux.log").read_text()
     assert "new-workspace" in logged
-    for tok in ["--name", "--cwd", "--command", "--focus false"]:
-        assert tok in logged
-    assert "notify" in logged and "--title" in logged
+    # Consume the Task-0 frozen contract constants (SSOT) rather than restating
+    # them: if cmux renames a flag, exactly one place changes. Values are pinned
+    # separately in test_new_workspace_and_notify_argv_values_match_spec.
+    for flag in CMUX_NEW_WORKSPACE_FLAGS:
+        assert flag in logged
+    assert "notify" in logged
+    for flag in CMUX_NOTIFY_FLAGS:
+        assert flag in logged
     records = _spawn_log_records(ctx)
-    kinds = [k for k, _ in records]
+    kinds = [k for k, _, _ in records]
     assert kinds.index("intent") < kinds.index("outcome")
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
     # §5.4d: ONE spawn id ties the whole hop together — the intent record, the
@@ -601,11 +667,58 @@ def test_auto_spawn_success_exit_0(tmp_path):
     # the composed fallback tail. Assert identity across all three, not shape:
     # two independently generated uuids satisfy every "is a uuid" check while
     # destroying the correlation the id exists for.
-    ids = {i for _, i in records}
+    ids = {i for _, i, _ in records}
     assert len(ids) == 1, f"spawn ids diverge across records: {records}"
     spawn_id = ids.pop()
     assert UUID_RE.fullmatch(spawn_id)
     assert _fallback_spawn_id(_successor_cmd(r)) == spawn_id
+
+
+def test_new_workspace_and_notify_argv_values_match_spec(tmp_path):
+    # Flag PRESENCE is not coverage: `--cwd /tmp`, `--name BOGUS` and
+    # `--title "BOGUS TITLE"` all survive a presence-only check. Each of these is
+    # a spec-named string (§5.4d steps 2-3), and a wrong --cwd is not cosmetic —
+    # per CLAUDE.md "Worktree Sessions" hooks resolve CWD from session start, so
+    # the successor's whole SDD session would be silently mis-rooted.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=_cmux_stub_recording_argv(),
+    )
+    assert r.returncode == 0
+
+    nw = _recorded_argv(tmp_path, "new-workspace")
+    for flag in CMUX_NEW_WORKSPACE_FLAGS:  # Task-0 frozen contract (SSOT)
+        assert flag in nw
+    assert _flag_value(nw, "--name") == f"SDD resume: {Path(ctx['feat']).name}"
+    assert _flag_value(nw, "--cwd") == _worktree_root(ctx)
+    assert _flag_value(nw, "--focus") == "false"
+    assert _flag_value(nw, "--command") == _successor_cmd(r)
+
+    notify = _recorded_argv(tmp_path, "notify")
+    for flag in CMUX_NOTIFY_FLAGS:
+        assert flag in notify
+    assert _flag_value(notify, "--title") == "SDD handoff"
+    assert _flag_value(notify, "--body").startswith("Hop 1/3 ")
+
+
+def test_spawn_log_record_fields_match_spec_log_format(tmp_path):
+    # §5.4d Log format pins hop on every record and workspace/launch/bundle/quota
+    # on outcomes. Only `workspace=` was ever checked, so corrupting any other
+    # field left the suite green.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    assert r.returncode == 0
+    assert _spawn_log_fields(ctx, "intent") == {"hop": "1"}
+    outcome = _spawn_log_fields(ctx, "outcome")
+    assert outcome["hop"] == "1"
+    assert outcome["workspace"] == "(spawned)"  # stub emits no `OK <ref>`
+    assert outcome["launch"] == "auto"
+    assert outcome["bundle"] == "b1"
+    assert outcome["quota"].startswith("ok:")  # PACE_OK => remaining 63.0%
 
 
 def test_spawn_failure_keeps_hop_exits_3(tmp_path):
@@ -623,9 +736,15 @@ def test_spawn_failure_keeps_hop_exits_3(tmp_path):
     # reservation ran first. This, not log ordering, is Decision 21's real guard.
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
     assert "spawn-failed" in (ctx["reports"] / "handoff-spawn.log").read_text()
-    assert "/pickup b1" in (r.stdout + r.stderr)
+    # Spec §5.5: every non-spawn path prints the manual instructions — the
+    # protocol never dead-ends. Asserted on text ONLY print_manual_instructions
+    # emits, and on r.stdout ALONE: `/pickup b1` against stdout+stderr is already
+    # satisfied by the Task-5 `successor command:` echo on stderr, so it never
+    # observed this call at all (the Task-5 test-echo collision class).
+    assert "Manual resume required" in r.stdout
+    assert "Then STOP the current session" in r.stdout
     records = _spawn_log_records(ctx)
-    ids = {i for _, i in records}
+    ids = {i for _, i, _ in records}
     assert len(ids) == 1, f"spawn ids diverge across records: {records}"
     assert UUID_RE.fullmatch(ids.pop())
 
@@ -698,7 +817,7 @@ def test_fallback_tail_spawn_id_correlates_with_intent_record(tmp_path):
     ctx = setup_worktree(tmp_path)
     r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
     assert r.returncode == 0
-    intent = [i for k, i in _spawn_log_records(ctx) if k == "intent"]
+    intent = [i for k, i, _ in _spawn_log_records(ctx) if k == "intent"]
     assert len(intent) == 1
     assert _fallback_spawn_id(_successor_cmd(r)) == intent[0]
 
@@ -743,12 +862,7 @@ def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
 
 def _outcome_workspace(ctx):
     """`workspace=` value of the outcome record (spec §5.4d Log format)."""
-    for ln in (ctx["reports"] / "handoff-spawn.log").read_text().splitlines():
-        f = ln.split()
-        if len(f) > 2 and f[2] == "outcome":
-            kv = dict(p.split("=", 1) for p in f[3:] if "=" in p)
-            return kv.get("workspace")
-    return None
+    return _spawn_log_fields(ctx, "outcome").get("workspace")
 
 
 def _notify_line(tmp_path):

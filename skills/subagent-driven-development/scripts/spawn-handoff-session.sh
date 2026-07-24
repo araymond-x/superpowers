@@ -356,7 +356,11 @@ echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 
 # --- Generic, extraction-ready workspace-spawn core (Decision 15) ----------
 # spawn_claude_workspace CWD LAUNCH_COMMAND WORKSPACE_NAME NOTIFY_TEXT
-# Pure mechanics (no SDD policy). Returns cmux new-workspace's exit code and
+# Pure mechanics: no SDD *sequencing* policy (reservation, hop accounting, exit
+# ladder and launch composition all live in the caller). The one caller-specific
+# string still inside is the notify `--title "SDD handoff"` below — the single
+# line an extractor must parameterize; the notify BODY is already parameterized
+# via the {workspace} token. Returns cmux new-workspace's exit code and
 # publishes the created workspace's ref in the global SPAWN_WORKSPACE_REF.
 #
 # `cmux new-workspace` DOES report the workspace it created: it prints
