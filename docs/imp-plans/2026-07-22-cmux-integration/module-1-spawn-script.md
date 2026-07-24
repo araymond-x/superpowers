@@ -59,7 +59,7 @@ Tasks 1–6 write the same script and are strictly serialized (never parallel).
 - Create: `tests/unit/spawn_handoff_helpers.py`
 - Create: `tests/unit/test_spawn_handoff.py` (contract-assertion section only; grows in later tasks)
 
-- [ ] **Step 1: Assert prerequisites are live (repos 1+2 landed).**
+- [x] **Step 1: Assert prerequisites are live (repos 1+2 landed).**
 
 Run each; all must pass. If any fails, STOP and report `DONE_WITH_CONCERNS` naming the missing prerequisite — do not fabricate fixtures around an absent contract.
 
@@ -71,7 +71,7 @@ done
 test "$(cmux ping 2>/dev/null)" = "PONG" && echo "cmux OK" || echo "note: not in a cmux workspace (fine for unit tests)"
 ```
 
-- [ ] **Step 2: Freeze the bundle contract into fixtures.**
+- [x] **Step 2: Freeze the bundle contract into fixtures.**
 
 Create `tests/unit/fixtures/spawn-handoff/valid-manifest.json` — a minimal valid `work`/SDD manifest. `__REPO_ID__` is a sentinel rewritten per-test to the test repo's real git-common-dir:
 
@@ -93,7 +93,7 @@ Create the three invalid variants by copying it and changing exactly one field:
 - `wrong-skill-manifest.json`: `session.entry_skill` = `"superpowers:brainstorming"`.
 - `foreign-repo-manifest.json`: `project.repo_id` = `"/some/other/repo/.git"` (never equals the test repo's git-common-dir).
 
-- [ ] **Step 3: Create the shared test harness.**
+- [x] **Step 3: Create the shared test harness.**
 
 Create `tests/unit/spawn_handoff_helpers.py` — the single source of harness truth for every task (mirrors `sdd_test_helpers.py`). It exposes all `run_spawn` knobs upfront so later tasks never mutate the harness:
 
@@ -188,7 +188,7 @@ def run_spawn(ctx, tmp_path, *args, env_extra=None, in_cmux=True,
                           capture_output=True, text=True, env=env)
 ```
 
-- [ ] **Step 4: Write the contract-fact test.**
+- [x] **Step 4: Write the contract-fact test.**
 
 Create `tests/unit/test_spawn_handoff.py`:
 
@@ -231,16 +231,18 @@ def test_fixtures_shape_matches_contract():
     assert "CLAUDE_CODE_PICKER_APPEND_PROMPT" in PICKER_EXPORTS  # 4th export is consumed (Task 4)
 ```
 
-- [ ] **Step 5: Verify plan snippets against source.**
+- [x] **Step 5: Verify plan snippets against source.**
 
 Confirm the parent plan's cmux argv surface (`new-workspace --name/--cwd/--command/--focus`, `notify --title/--body`) and picker contract against the live sources: `claude-picker --handoff-contract`→`1`; the **four** exports in `_set_picker_env` (read `telemetry-exp/launchers/claude-picker` — `VERSION`, `LABEL`, `ARGS`, `APPEND_PROMPT`); the append-file exit-3 is `--non-interactive`-only; and `versions/<v>` is an executable file (`find -type f -perm -u+x`). Any difference → report `DONE_WITH_CONCERNS` (the launch-composition tasks depend on these).
 
-- [ ] **Step 6: Run and verify.**
+**Also freeze the `--command` execution semantics** (the whole `launch=auto` design depends on it): confirm from `cmux new-workspace --help` that `--command <text>` means **"Send text+Enter to the new workspace after creation"** — i.e. the string is typed into the new workspace's *interactive shell* and executed, NOT exec'd directly by cmux. This is why the composed successor command may be a single-line compound (`<picker cmd> || { …; claude-picker …; }`) with quotes and `$(…)`: the workspace's shell re-parses it. Record in the Task 0 report that (a) `--command` is text+Enter into the workspace shell, and (b) that shell is the user's login shell (zsh here), so the composed command must be POSIX/zsh-safe (it is: `||`, `{ ;}`, `printf`, `$(…)`, and `shlex.quote`d args are all portable). If `--help` instead indicates cmux exec's the value directly without a shell, report `DONE_WITH_CONCERNS` — the compound-command fallback in Task 5 would not survive.
+
+- [x] **Step 6: Run and verify.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -v`
 Expected: `test_fixtures_shape_matches_contract` PASS. (Import assertions: N/A — no importable code constants; cmux flags are external CLI strings frozen as module constants, the picker contract is an integer probe.)
 
-- [ ] **Step 7: Commit.**
+- [x] **Step 7: Commit.**
 
 ```bash
 git add tests/unit/fixtures/spawn-handoff tests/unit/spawn_handoff_helpers.py tests/unit/test_spawn_handoff.py
@@ -258,7 +260,7 @@ git commit -m "test(cmux-int): contract fixtures + prerequisite assertions + har
 
 **Pattern References:** `sdd-pre-dispatch-hook.sh` (house bash style); `tests/unit/test_context_gate_tier.py` (subprocess+PATH-stub harness).
 
-- [ ] **Step 1: Write the failing basic-refusal tests.**
+- [x] **Step 1: Write the failing basic-refusal tests.**
 
 Append to `test_spawn_handoff.py`:
 
@@ -302,7 +304,7 @@ def test_dirty_tree_exits_1(tmp_path):
 
 (Add `import subprocess` to the test module's imports.) Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -v` → new tests FAIL (script absent).
 
-- [ ] **Step 2: Write the script foundation.**
+- [x] **Step 2: Write the script foundation.**
 
 Create `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`:
 
@@ -385,12 +387,12 @@ echo "[spawn-handoff] basic preconditions passed (skeleton — later tasks compl
 exit 0
 ```
 
-- [ ] **Step 3: Run tests → pass.**
+- [x] **Step 3: Run tests → pass.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -v`
 Expected: all Task-0 + Task-1 tests PASS.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
@@ -405,7 +407,7 @@ git commit -m "feat(cmux-int): spawn-handoff foundation + basic-refusal precondi
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
 - Modify: `tests/unit/test_spawn_handoff.py`
 
-- [ ] **Step 1: Write the failing tests.**
+- [x] **Step 1: Write the failing tests.**
 
 Append to `test_spawn_handoff.py`:
 
@@ -457,7 +459,7 @@ def test_hop_limit_exits_3(tmp_path):
 
 Run the suite → new tests FAIL (skeleton exits 0 after clean-tree).
 
-- [ ] **Step 2: Insert bundle validation + preconditions 2–4.**
+- [x] **Step 2: Insert bundle validation + preconditions 2–4.**
 
 Replace the `# (Task 2 inserts bundle validation + cmux + hop preconditions here.)` marker with:
 
@@ -523,11 +525,11 @@ if [ "$HOPS" -ge "$MAX_HOPS" ]; then
 fi
 ```
 
-- [ ] **Step 3: Run tests → pass.**
+- [x] **Step 3: Run tests → pass.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -v` → all Task-0/1/2 tests PASS.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py

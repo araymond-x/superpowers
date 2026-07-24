@@ -129,7 +129,7 @@ Expected: PASS (with the known advisory WARNINGs; no new FAIL).
 
 ```bash
 git add skills/subagent-driven-development/references/context-handoff-protocol.md
-git commit -m "docs(cmux-int): protocol steps 3-5 drive spawn-handoff-session.sh (Task 5)"
+git commit -m "docs(cmux-int): protocol steps 3-5 drive spawn-handoff-session.sh (Task 7)"
 ```
 
 ---
@@ -250,7 +250,7 @@ Expected: **empty** (neither file changed). If either appears, revert it — thi
 
 ```bash
 git add tests/integration/sdd-e2e-test.sh
-git commit -m "test(cmux-int): e2e Step 14 spawn end-to-end + banner 15 (Task 6)"
+git commit -m "test(cmux-int): e2e Step 14 spawn end-to-end + banner 15 (Task 8)"
 ```
 
 ---
@@ -302,5 +302,5 @@ Expected: all green (regression with known advisory WARNINGs only). Confirm the 
 
 ```bash
 git add CLAUDE.md docs/ARaymond-customization-manifest.md docs/process-improvement-findings/BACKLOG.md
-git commit -m "docs(cmux-int): CLAUDE.md cmux section, manifest, close N43(D) (Task 7)"
+git commit -m "docs(cmux-int): CLAUDE.md cmux section, manifest, close N43(D) (Task 9)"
 ```
