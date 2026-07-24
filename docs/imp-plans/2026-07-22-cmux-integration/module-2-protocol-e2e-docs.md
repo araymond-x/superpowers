@@ -4,7 +4,7 @@
 > **Module:** 2 of 2
 > **For agentic workers:** Before implementing, invoke `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` via the Skill tool. Do not begin implementation without loading the skill first — direct implementation bypasses review enforcement, quality gates, and hooks.
 
-**Module Goal:** Wire the finished `spawn-handoff-session.sh` into the live pipeline: rewrite `context-handoff-protocol.md` steps 3–5 to capture the bundle id and drive the script, add e2e Step 14 (spawn end-to-end with stubs, banner `14`→`15`), and update the three docs (CLAUDE.md, customization manifest, BACKLOG).
+**Module Goal:** Close the Module-1 test debt (Tasks 7–8), then wire the finished `spawn-handoff-session.sh` into the live pipeline: rewrite `context-handoff-protocol.md` steps 3–5 to capture the bundle id and drive the script (Task 9), add e2e Step 14 (spawn end-to-end with stubs, banner `14`→`15`, Task 10), and update the three docs (CLAUDE.md, customization manifest, BACKLOG — Task 11).
 
 **Source Contracts:** None
 
@@ -18,6 +18,10 @@ _This module consumes Module 1's internal output (the completed `spawn-handoff-s
 
 | File | Responsibility |
 |------|----------------|
+| `tests/unit/test_spawn_handoff.py` | Module-1 test-debt sweep: new regression + mutation-proven tests (Tasks 7, 8) |
+| `tests/unit/spawn_handoff_helpers.py` | Sweep harness knobs — picker-absent, non-executable version (Task 7) |
+| `skills/subagent-driven-development/scripts/spawn-handoff-session.sh` | Sweep hardening: reservation-write rc checks + Task-4 cleanup trio (Task 8) |
+| `docs/imp-plans/2026-07-22-cmux-integration/module-1-spawn-script.md` | Owed plan-doc corrections (Task 8) |
 | `skills/subagent-driven-development/references/context-handoff-protocol.md` | Steps 3–5 rewrite (steps 1–2 byte-identical) |
 | `tests/integration/sdd-e2e-test.sh` | New Step 14 (spawn end-to-end) + banner `14`→`15` |
 | `CLAUDE.md` | New "cmux Integration" section; env vars into Hook Dev Gotchas list |
@@ -28,46 +32,49 @@ _This module consumes Module 1's internal output (the completed `spawn-handoff-s
 
 | Task | Owned Files (write) | Read-Only Files | Depends On |
 |------|---------------------|-----------------|------------|
-| Task 7 | `context-handoff-protocol.md` | `spawn-handoff-session.sh` | Task 6 |
-| Task 8 | `tests/integration/sdd-e2e-test.sh` | `spawn-handoff-session.sh` | Task 7 |
-| Task 9 | `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | all above | Task 8 |
-| **Sweep** (pre-Task-7) | `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `spawn-handoff-session.sh` | — | Task 6 |
+| Task 7 (sweep A) | `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py` | `spawn-handoff-session.sh` | Task 6 |
+| Task 8 (sweep B) | `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`, `tests/unit/test_spawn_handoff.py`, `docs/imp-plans/2026-07-22-cmux-integration/module-1-spawn-script.md` | `tests/unit/spawn_handoff_helpers.py` | Task 7 |
+| Task 9 | `context-handoff-protocol.md` | `spawn-handoff-session.sh` | Task 8 |
+| Task 10 | `tests/integration/sdd-e2e-test.sh` | `spawn-handoff-session.sh` | Task 9 |
+| Task 11 | `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | all above | Task 10 |
 
-> **Write-scope note for the Sweep:** `spawn_handoff_helpers.py` was READ-ONLY throughout Module 1,
-> but three of the knob-needing gaps below genuinely require a new harness knob in it. Editing it
-> during the sweep is expected — **log it as a write-scope deviation** rather than rediscovering
-> the conflict cold. There is no concurrency risk: no Module-2 task writes these files.
+> **Write-scope note for the sweep (Tasks 7–8):** `spawn_handoff_helpers.py` was READ-ONLY
+> throughout Module 1, but three of the knob-needing gaps genuinely require a new harness knob in
+> it. Editing it in Task 7 is expected — **it is logged as a write-scope deviation** rather than
+> rediscovered cold. There is no concurrency risk: only Task 7 writes it, and Task 8 reads it.
+>
+> **Task 7 does NOT write `spawn-handoff-session.sh`** — sweep A is coverage-only, so its new tests
+> pin today's behavior. All script changes are Task 8's, and they must not invalidate Task 7's
+> assertions.
 
-## Module-1 test-debt sweep (run as a bounded round BEFORE Task 7)
+## Module-1 test-debt sweep — now Tasks 7 and 8
 
 Module 1 closed with every debt item formally *dispositioned* but the sweep itself **not done**.
-Disposition removes an item from every enforcement gate, so these checkboxes are its only home —
+Disposition removes an item from every enforcement gate, so plan checkboxes are its only home —
 the pre-completion all-checkboxes gate is what makes this survive. Full context and rationale per
 item live in `deviations.md` → "Deferred Work" → "Task 6 test-debt sweep".
 
-**These are spec-behavior regressions with ZERO test protection.** Each behavior was verified
-working by execution during review, but deleting it today is undetected, so a future edit breaks it
-silently. Mutation-prove each new test (break the behavior, watch it go RED):
+The sweep was carried here as an unnumbered "bounded round". That framing could not be dispatched:
+the pre-dispatch hook rejects any task number outside the manifest `task_range`, and a *numberless*
+dispatch falls through to passthrough with **no** checkpoint, partner review, or provenance — the
+exact evaporation risk the checkboxes exist to prevent. It is therefore promoted to two real,
+gated tasks (**7** = coverage-only, **8** = script hardening + residual + doc corrections), and the
+original module tasks are renumbered 7→9, 8→10, 9→11. Item checkboxes moved into those tasks
+verbatim; none were dropped.
 
-- [ ] `command -v claude-picker` preflight guard (`:293`) — spec.md:196 pins "picker missing → picker-manual"; deleting the check is currently undetected. Needs a picker-absent harness knob.
-- [ ] `-x` half of the version predicate (`:292`) — reducing it to a bare `[ -f … ]` is undetected. Needs an `install_version()` chmod knob (it always `chmod 0o755`, so the non-executable case is inexpressible today).
-- [ ] `--telemetry off` value on the composed line — the flag *pair's* presence is pinned; only the `off` value is unasserted (all auto-path tests use `telem="1"`).
-- [ ] Two env-validation regression tests owed since the Task-3 fix round — invalid `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` → stderr WARNING + default-15 behavior; invalid `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` → stderr WARNING + gate stays live. Deleting either regex block currently leaves the suite green.
+**Most of these are spec-behavior regressions with ZERO test protection.** Each behavior was
+verified working by execution during review, but deleting it today is undetected, so a future edit
+breaks it silently. Mutation-prove each new test (break the behavior, watch it go RED).
 
-Lower priority, same round:
-
-- [ ] Unchecked reservation writes (`:422-423`) — a failed `.handoff-hops`/`intent` write still proceeds to spawn, weakening Decision 21's durability guarantee. Needs its own test (unwritable reports dir) and adds an exit path.
-- [ ] NM4 — failure-branch `cmux notify` unasserted (`:445`); deleting it leaves 58/58 green. One-line fix.
-- [ ] mktemp-failure branch untested (`:393-397`) — safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH.
-- [ ] Task-4 cleanup trio: `max(0, …)` label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further.
-- [ ] Owed plan-doc corrections: `module-1-spawn-script.md` Task 3 Step 2 (both snippet defects), Task 4's wrong bash caveat (≥4.x → ≥3.2), and Task 6 Step 2's spawn-id ordering defect.
-
-Explicitly **accepted, no action**: NM5 (`rm -f "$out_f"` unasserted), `shq` rc-propagation (no
-reachable trigger), contract-probe timeout, `_successor_cmd` newline truncation (test-helper only).
+Explicitly **accepted, no action** (do not re-open as findings): NM5 (`rm -f "$out_f"` unasserted),
+`shq` rc-propagation (no reachable trigger), contract-probe timeout, `_successor_cmd` newline
+truncation (test-helper only), and the hardcoded notify `--title` (relevant only to the eventual
+Decision-15 extraction).
 
 ## Acceptance Criteria
 
-- [ ] The Module-1 test-debt sweep above is complete, with each new test mutation-proven.
+- [ ] The Module-1 test-debt sweep (Tasks 7–8) is complete, with each new test mutation-proven — the implementer showing the assertion RED when its behavior is broken, not merely green when it is not.
+- [ ] The exit-code ladder is still exactly **0 spawned / 3 manual fallback / 1 refused** — Task 8 added no new exit code.
 - [ ] `context-handoff-protocol.md` steps 1–2 are byte-identical to the original; steps 3–5 drive the script per the exit-code ladder; a closing note documents the soft-nudge use.
 - [ ] `sdd-e2e-test.sh` reaches Step 14, asserts composed spawn command + notify + reservation-then-outcome log records, and passes; the final banner reads `15 steps`.
 - [ ] `git diff` shows `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` unchanged.
@@ -77,7 +84,116 @@ reachable trigger), contract-probe timeout, `_successor_cmd` newline truncation 
 
 ## Tasks
 
-### Task 7: Rewrite context-handoff-protocol.md steps 3–5
+### Task 7: Sweep A — zero-protection regression coverage + harness knobs
+
+**Files:**
+- Modify: `tests/unit/spawn_handoff_helpers.py` (new knobs — see write-scope note above)
+- Modify: `tests/unit/test_spawn_handoff.py`
+
+**Coverage-only. Do NOT modify `spawn-handoff-session.sh` in this task** — it is read-only here.
+Every test below must pin *today's* behavior. If a test cannot be made to pass without changing the
+script, report **BLOCKED** rather than editing the script; that change belongs to Task 8.
+
+**Pattern References:**
+- `tests/unit/test_spawn_handoff.py` (existing 58 tests) — harness idiom, `run_spawn` usage, `_notify_line`/`_successor_cmd` extractors.
+
+**Mutation proof is required, not optional.** For each new test, break the behavior it claims to
+cover, run the test, and record the observed RED (test name + how it was broken + the failure) in
+your report. Task 6 shipped seven assertions that looked like coverage and caught nothing.
+
+**The test-echo collision is a recurring class in this script.** `spawn-handoff-session.sh` is
+chatty on stderr, so an assertion against combined `stdout + stderr` can be satisfied by an
+unrelated diagnostic echo. Treat any such assertion as contaminated until the mutation proof shows
+it discriminates. Anchor on a distinctive line.
+
+- [ ] **Step 1: Add the two harness knobs to `spawn_handoff_helpers.py`.**
+
+Both are needed because the current helper makes the failing case inexpressible. Keep the existing
+call signatures working (default the new parameters to today's behavior) so no existing test changes.
+
+  - `install_version(...)` always `chmod 0o755`. Add a knob (e.g. `executable=True`) so a
+    **non-executable** version file can be installed.
+  - `run_spawn(...)` always installs a `claude-picker` stub with no removal knob. Add a knob
+    (e.g. `picker_stub=True`) so the **picker-absent** case can be exercised.
+
+Do NOT remove or narrow the autouse `_hermetic_picker_env` fixture — this machine's session is
+picker-launched and `run_spawn` copies `os.environ`, so that fixture is what makes "metadata absent"
+cases actually mean absent.
+
+- [ ] **Step 2: `command -v claude-picker` preflight guard (`:293`).** spec.md:196 pins "picker missing → picker-manual"; deleting the check is currently undetected. Uses the picker-absent knob.
+
+- [ ] **Step 3: `-x` half of the version predicate (`:292`).** Reducing it to a bare `[ -f … ]` is undetected. Uses the non-executable-version knob.
+
+- [ ] **Step 4: `--telemetry off` value on the composed line.** The flag *pair's* presence is already pinned; only the `off` value is unasserted (all auto-path tests use `telem="1"`). Assert the value on the composed successor command line.
+
+- [ ] **Step 5: Two env-validation regression tests owed since the Task-3 fix round.** Invalid `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` → stderr WARNING + default-15 behavior; invalid `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` → stderr WARNING + gate stays live. Deleting either regex block currently leaves the suite green.
+
+- [ ] **Step 6: Run the suites and confirm no regression.**
+
+```bash
+.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -q
+.venv/bin/python3 -m pytest tests/unit/ -q
+```
+Expected: all green; the `test_spawn_handoff.py` count rises from 58 by the number of tests you added.
+Verify any `-k` filter with `--collect-only -q` before deriving counts from it.
+
+- [ ] **Step 7: Confirm the script is untouched, then commit.**
+
+```bash
+git diff --name-only skills/subagent-driven-development/scripts/spawn-handoff-session.sh   # must be EMPTY
+git add tests/unit/test_spawn_handoff.py tests/unit/spawn_handoff_helpers.py
+git commit -m "test(cmux-int): sweep A — picker-absent, -x predicate, telemetry off, env validation (Task 7)"
+```
+
+---
+
+### Task 8: Sweep B — reservation-write hardening, residual coverage, plan-doc corrections
+
+**Files:**
+- Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
+- Modify: `tests/unit/test_spawn_handoff.py`
+- Modify: `docs/imp-plans/2026-07-22-cmux-integration/module-1-spawn-script.md`
+
+**Contract constraint — the exit-code ladder is frozen at 0 / 3 / 1.** A failed reservation write
+routes to the **existing exit 3** (manual fallback: no spawn happened, the hop is consumed, manual
+recovery is correct) — print the manual instructions first. **Do not mint a new exit code.** Task 10
+asserts this ladder in e2e and Task 11 documents it; a fourth code silently invalidates both. If you
+believe exit 3 is wrong here, report **BLOCKED** with your reasoning rather than deciding unilaterally.
+
+Same mutation-proof and test-echo-collision requirements as Task 7 — see that task's preamble.
+
+Do **NOT** add `set -u` to the script: `${FORWARDED[*]}` on an empty array raises `unbound variable`
+on bash 3.2 (the verified floor, 3.2.57) while passing on 4.4+.
+
+- [ ] **Step 1: Unchecked reservation writes (`:422-423`).** A failed `.handoff-hops` / `intent` write still proceeds to spawn, weakening Decision 21's durability guarantee. Check both writes; on failure warn, print manual instructions, exit 3. Add a test driving it (unwritable reports dir).
+
+- [ ] **Step 2: NM4 — failure-branch `cmux notify` unasserted (`:445`).** Deleting it leaves 58/58 green. One-line fix: assert the notify body inside `test_spawn_failure_keeps_hop_exits_3`.
+
+- [ ] **Step 3: mktemp-failure branch untested (`:393-397`).** Safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH to force the failure.
+
+- [ ] **Step 4: Task-4 cleanup trio.** `max(0, …)` on the label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further. If a cleanup has no observable behavior change, say so explicitly rather than inventing a test.
+
+- [ ] **Step 5: Owed plan-doc corrections in `module-1-spawn-script.md`.** Task 3 Step 2 (both snippet defects — the command-substitution + background-watcher timeout that stalls the full timeout on the success path, and the fallback-less `QUOTA_TOOL=` line whose own Step 1 tests cannot pass; replace with the shipped implementation from commit `7131698`); Task 4's wrong bash caveat (≥4.x → **≥3.2**); and Task 6 Step 2's spawn-id ordering defect (the id must be generated *before* the compose block so the composed fallback tail carries the uuid, per spec §5.4d). Scope is this file only — `plan.md` and `spec.md` do not mirror the snippet.
+
+- [ ] **Step 6: Run the suites.**
+
+```bash
+.venv/bin/python3 -m pytest tests/unit/ -q
+bash scripts/lint-shell.sh
+```
+Expected: all green; lint-shell clean for this script.
+
+- [ ] **Step 7: Confirm no hook/baseline drift, then commit.**
+
+```bash
+git diff --name-only skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/ARaymond-hook-baseline/baseline.txt   # must be EMPTY
+git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py docs/imp-plans/2026-07-22-cmux-integration/module-1-spawn-script.md
+git commit -m "fix(cmux-int): sweep B — reservation-write durability, residual coverage, plan-doc corrections (Task 8)"
+```
+
+---
+
+### Task 9: Rewrite context-handoff-protocol.md steps 3–5
 
 **Files:**
 - Modify: `skills/subagent-driven-development/references/context-handoff-protocol.md`
@@ -163,12 +279,12 @@ Expected: PASS (with the known advisory WARNINGs; no new FAIL).
 
 ```bash
 git add skills/subagent-driven-development/references/context-handoff-protocol.md
-git commit -m "docs(cmux-int): protocol steps 3-5 drive spawn-handoff-session.sh (Task 7)"
+git commit -m "docs(cmux-int): protocol steps 3-5 drive spawn-handoff-session.sh (Task 9)"
 ```
 
 ---
 
-### Task 8: e2e Step 14 (spawn end-to-end) + banner 14→15
+### Task 10: e2e Step 14 (spawn end-to-end) + banner 14→15
 
 **Files:**
 - Modify: `tests/integration/sdd-e2e-test.sh`
@@ -284,12 +400,12 @@ Expected: **empty** (neither file changed). If either appears, revert it — thi
 
 ```bash
 git add tests/integration/sdd-e2e-test.sh
-git commit -m "test(cmux-int): e2e Step 14 spawn end-to-end + banner 15 (Task 8)"
+git commit -m "test(cmux-int): e2e Step 14 spawn end-to-end + banner 15 (Task 10)"
 ```
 
 ---
 
-### Task 9: Docs — CLAUDE.md section, manifest, BACKLOG N43(D)
+### Task 11: Docs — CLAUDE.md section, manifest, BACKLOG N43(D)
 
 **review_tier: minimum** (pure documentation — no logic).
 
@@ -336,5 +452,5 @@ Expected: all green (regression with known advisory WARNINGs only). Confirm the 
 
 ```bash
 git add CLAUDE.md docs/ARaymond-customization-manifest.md docs/process-improvement-findings/BACKLOG.md
-git commit -m "docs(cmux-int): CLAUDE.md cmux section, manifest, close N43(D) (Task 9)"
+git commit -m "docs(cmux-int): CLAUDE.md cmux section, manifest, close N43(D) (Task 11)"
 ```

@@ -7,10 +7,10 @@ source_contracts: "docs/imp-plans/2026-07-22-cmux-integration/spec-distilled.md"
 shared_constants:
   - path: "env SUPERPOWERS_CMUX_MAX_HOPS"
     value: "3"
-    reason: "Hop-limit default; Task 1 precondition + docs (Task 7)"
+    reason: "Hop-limit default; Task 1 precondition + docs (Task 11)"
   - path: "env SUPERPOWERS_CMUX_QUOTA_MIN_PCT"
     value: "15"
-    reason: "Quota-refusal threshold default; Task 2 + docs (Task 7)"
+    reason: "Quota-refusal threshold default; Task 2 + docs (Task 11)"
 pattern_references:
   - name: "sdd-bash-hook-style"
     source_files: ["skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh"]
@@ -30,7 +30,7 @@ modules:
     file: module-1-spawn-script.md
   - id: 2
     title: "protocol rewrite + e2e Step 14 + docs"
-    task_ids: [7, 8, 9]
+    task_ids: [7, 8, 9, 10, 11]
     file: module-2-protocol-e2e-docs.md
 tasks:
   - id: 0
@@ -69,17 +69,27 @@ tasks:
     module_id: 1
     pattern_references: ["pytest-bash-stub-harness"]
   - id: 7
-    title: "Rewrite context-handoff-protocol.md steps 3-5"
+    title: "Sweep A: zero-protection regression coverage + harness knobs"
     depends_on: [6]
     module_id: 2
+    pattern_references: ["pytest-bash-stub-harness"]
   - id: 8
-    title: "e2e Step 14 (spawn end-to-end) + banner 14->15"
+    title: "Sweep B: reservation-write hardening, residual coverage, plan-doc corrections"
     depends_on: [7]
     module_id: 2
-    pattern_references: ["e2e-step-structure"]
+    pattern_references: ["sdd-bash-hook-style", "pytest-bash-stub-harness"]
   - id: 9
-    title: "Docs: CLAUDE.md section, manifest, BACKLOG N43(D)"
+    title: "Rewrite context-handoff-protocol.md steps 3-5"
     depends_on: [8]
+    module_id: 2
+  - id: 10
+    title: "e2e Step 14 (spawn end-to-end) + banner 14->15"
+    depends_on: [9]
+    module_id: 2
+    pattern_references: ["e2e-step-structure"]
+  - id: 11
+    title: "Docs: CLAUDE.md section, manifest, BACKLOG N43(D)"
+    depends_on: [10]
     module_id: 2
     review_tier: minimum
 ---
@@ -114,8 +124,8 @@ _Coordination document — Source Contracts is "None" at the parent level so the
 - Compose-side quoting: every interpolated element (each decoded arg, version, label) is shlex-style re-quoted when building the `--command` string (a shell re-parses it inside the workspace).
 
 **Shared Constants:**
-- `SUPERPOWERS_CMUX_MAX_HOPS` (default `3`) — env; hop-limit precondition (Task 1) and docs (Task 7). Do not hardcode `3` elsewhere.
-- `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default `15`) — env; quota refusal threshold (Task 2) and docs (Task 7).
+- `SUPERPOWERS_CMUX_MAX_HOPS` (default `3`) — env; hop-limit precondition (Task 1) and docs (Task 11). Do not hardcode `3` elsewhere.
+- `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default `15`) — env; quota refusal threshold (Task 2) and docs (Task 11).
 
 **Pattern References:**
 - `skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh` — house SDD-script bash style: `SUPERPOWERS_ROOT` self-resolution from `BASH_SOURCE`, `$PYTHON` for python calls, avoid `set -u`, never pipe a producer into `grep -q` under pipefail (use here-strings).
@@ -194,9 +204,11 @@ All three modules share the same external contracts, verified once in **Task 0**
 | Task 4 | `spawn-handoff-session.sh`, `tests/unit/test_spawn_handoff.py` | fixtures | Task 3 |
 | Task 5 | `spawn-handoff-session.sh`, `tests/unit/test_spawn_handoff.py` | fixtures | Task 4 |
 | Task 6 | `spawn-handoff-session.sh`, `tests/unit/test_spawn_handoff.py` | fixtures | Task 5 |
-| Task 7 | `skills/subagent-driven-development/references/context-handoff-protocol.md` | `spawn-handoff-session.sh` | Task 6 |
-| Task 8 | `tests/integration/sdd-e2e-test.sh` | `spawn-handoff-session.sh` | Task 7 |
-| Task 9 | `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | all of the above | Task 8 |
+| Task 7 | `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py` | `spawn-handoff-session.sh` | Task 6 |
+| Task 8 | `spawn-handoff-session.sh`, `tests/unit/test_spawn_handoff.py`, `module-1-spawn-script.md` | `tests/unit/spawn_handoff_helpers.py` | Task 7 |
+| Task 9 | `skills/subagent-driven-development/references/context-handoff-protocol.md` | `spawn-handoff-session.sh` | Task 8 |
+| Task 10 | `tests/integration/sdd-e2e-test.sh` | `spawn-handoff-session.sh` | Task 9 |
+| Task 11 | `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | all of the above | Task 10 |
 
 **Serialization note:** Tasks 1–6 all write the single file `spawn-handoff-session.sh` and the single file `test_spawn_handoff.py`. They are strictly serialized by `depends_on` — never dispatched in parallel. This is intentional: one script, built up concern-by-concern via TDD.
 
