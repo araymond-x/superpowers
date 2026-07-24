@@ -544,7 +544,7 @@ git commit -m "feat(cmux-int): bundle validation + cmux/hop preconditions (Task 
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
 - Modify: `tests/unit/test_spawn_handoff.py`
 
-- [ ] **Step 1: Write the failing quota tests.**
+- [x] **Step 1: Write the failing quota tests.**
 
 Append to `test_spawn_handoff.py`:
 
@@ -589,7 +589,7 @@ def test_quota_ok_proceeds(tmp_path):
 
 Run → quota tests FAIL (skeleton exits 0 with no `quota=` string).
 
-- [ ] **Step 2: Insert the quota check.**
+- [x] **Step 2: Insert the quota check.** _(shipped implementation diverges from the snippet below — see deviations.md; snippet correction owed)_
 
 Replace the `# (Task 3 inserts the quota check here.)` marker with:
 
@@ -635,7 +635,7 @@ esac
 
 > **Note:** `$out` is passed to python as `sys.argv[1]` (not heredoc-interpolated) — no injection surface; any parse fault → `unchecked` (fail-open).
 
-- [ ] **Step 3: Run tests → pass.**
+- [x] **Step 3: Run tests → pass.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -k quota -v` → all quota cases PASS.
 
@@ -645,6 +645,8 @@ Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -k quota -v` 
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
 git commit -m "feat(cmux-int): fail-open session-quota check (Task 3)"
 ```
+
+_Completed: `7131698` (implementation) + `926ab60` (quality-review fix round)._
 
 ---
 
