@@ -218,7 +218,6 @@ FORWARDED=()
 APPEND_TARGET_DIR="$HOME/.claude-codex-handoff/append-prompts"
 APPEND_TARGET="$APPEND_TARGET_DIR/${BUNDLE_ID}-hop${SP_HOP}.md"
 if [ "$ARGS_OK" = "1" ] && [ -n "${CLAUDE_CODE_PICKER_ARGS:-}" ]; then
-  [ "$DRY_RUN" = "1" ] || mkdir -p "$APPEND_TARGET_DIR"
   DECODE_TMP="$(mktemp)"
   APPEND_TARGET="$APPEND_TARGET" SPAWN_DRY_RUN="$DRY_RUN" "$PYTHON" - "$DECODE_TMP" <<'PY'
 import base64, json, os, sys
@@ -236,6 +235,13 @@ if ap_b64:                            # prefer content: rematerialize + substitu
     target = os.environ["APPEND_TARGET"]
     if os.environ.get("SPAWN_DRY_RUN") != "1":
         try:
+            # Create the dir HERE, beside the write it exists for — not in the
+            # shell gated on ARGS-being-present. That gating made an empty
+            # append-prompts/ on every non-dry-run auto spawn, and when the path
+            # already existed as a FILE it leaked a raw `mkdir: … File exists`
+            # to stderr and carried on. Failure now routes to the same exit 4
+            # (=> ARGS_OK=0 => degrade to picker-manual) as a failed write.
+            os.makedirs(os.path.dirname(target), exist_ok=True)
             with open(target, "wb") as f:
                 f.write(base64.b64decode(ap_b64))
         except Exception:
@@ -318,22 +324,87 @@ build_successor_cmd() {
 # Quoted once, used on both branches and in the fallback tail (SSOT + 2 fewer
 # Python spawns).
 PICKUP_ARG="$(shq "/pickup $BUNDLE_ID")"
-# $SP_HOP expands at compose time so the workspace's runtime fallback logs the
-# concrete hop number; the date/printf defer to runtime inside the workspace.
+# One spawn id per invocation, generated HERE — before composition — because the
+# composed fallback tail is the FOURTH record carrying it (intent, success
+# outcome, spawn-failed outcome, and the child's runtime-picker-failure line).
+# Generating it later, in the spawn sequence, would leave the composed tail with
+# no id to interpolate; generating a second one there would break the very
+# correlation §5.4d's id exists for. Cheap and side-effect-free, so --dry-run
+# computes one too and still writes nothing.
+SPAWN_ID="$("$PYTHON" -c 'import uuid;print(uuid.uuid4())')"
+# $SP_HOP and $SPAWN_ID expand at compose time so the workspace's runtime
+# fallback logs the concrete hop number and the parent's spawn id; the
+# date/printf defer to runtime inside the workspace. Both are interpolated
+# double-quoted (not via shq) to match: uuid4 and an integer are both within the
+# shell-safe charset by construction, and the literal quotes keep the record's
+# field structure obvious in the composed string.
 # Worked example — verbatim output of a real run (LABEL=Proj-Session-2, args
 # ["--append-system-prompt-file","/tmp/a b.md"]), line-wrapped here, with only the
-# absolute log path replaced by <log>:
+# absolute log path replaced by <log>. The uuid differs per invocation; every
+# other character is as emitted:
 #   claude-picker --non-interactive --pick-version 2.1.218 --telemetry on \
 #     --session-label Proj-Session-3 --append-system-prompt-file '/tmp/a b.md' '/pickup b1' \
-#     || { printf '%s %s runtime-picker-failure hop=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" spawn "1" >> <log>; claude-picker '/pickup b1'; }
+#     || { printf '%s %s runtime-picker-failure hop=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "7b3933fe-0f5d-42f5-8495-9729b0ccff00" "1" >> <log>; claude-picker '/pickup b1'; }
 if [ "$LAUNCH_MODE" = "auto" ]; then
   PICKER_CMD="$(build_successor_cmd)"
-  SUCCESSOR_CMD="$PICKER_CMD || { printf '%s %s runtime-picker-failure hop=%s\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" spawn \"$SP_HOP\" >> $(shq "$SPAWN_LOG"); claude-picker $PICKUP_ARG; }"
+  SUCCESSOR_CMD="$PICKER_CMD || { printf '%s %s runtime-picker-failure hop=%s\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \"$SPAWN_ID\" \"$SP_HOP\" >> $(shq "$SPAWN_LOG"); claude-picker $PICKUP_ARG; }"
 else
   SUCCESSOR_CMD="claude-picker $PICKUP_ARG"
 fi
 echo "[spawn-handoff] launch=$LAUNCH_MODE" >&2
 echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
-# (Task 6 inserts the spawn sequence + exit here.)
-echo "[spawn-handoff] basic preconditions passed (skeleton — later tasks complete the flow)" >&2
-exit 0
+
+# --- Generic, extraction-ready workspace-spawn core (Decision 15) ----------
+# spawn_claude_workspace CWD LAUNCH_COMMAND WORKSPACE_NAME NOTIFY_TEXT
+# Pure mechanics (no SDD policy). Returns cmux new-workspace's exit code.
+# cmux's own stdout/stderr is deliberately NOT captured: `cmux new-workspace`
+# has no --json and documents no return value, so there is nothing to parse and
+# a command substitution would only swallow its diagnostics.
+spawn_claude_workspace() {
+  local cwd="$1" launch_cmd="$2" ws_name="$3" notify_text="$4"
+  cmux new-workspace --name "$ws_name" --cwd "$cwd" --command "$launch_cmd" --focus false
+  local rc=$?
+  if [ $rc -eq 0 ]; then
+    cmux notify --title "SDD handoff" --body "$notify_text" 2>/dev/null || \
+      echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+  fi
+  return $rc
+}
+
+# --- Dry-run short-circuit: preconditions + preflight done, spawn nothing ---
+if [ "$DRY_RUN" = "1" ]; then
+  echo "[spawn-handoff] --dry-run: would spawn workspace 'SDD resume: $FEATURE_NAME'" >&2
+  echo "[spawn-handoff] --dry-run: quota=$QUOTA_STATUS launch=$LAUNCH_MODE (no hop increment, no spawn)" >&2
+  exit 0
+fi
+
+# --- Spawn sequence (Decision 21 — reserve BEFORE spawn) -------------------
+# Ordering is the whole point: a spawn that succeeds but whose bookkeeping fails
+# must never look retryable, so the hop is consumed and the intent recorded
+# BEFORE the workspace exists. Over-counting a hop is cheap; a double-spawn is
+# a runaway chain. $SPAWN_ID is the id composed into the successor command above
+# — do NOT regenerate it here, or the child's runtime-failure record stops
+# correlating with this hop's intent record.
+mkdir -p "$REPORTS_DIR"
+# 1. Reserve (SP_HOP computed in Task 2 after the hop-limit check).
+printf '%s\n' "$SP_HOP" > "$HOPS_FILE"
+printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"
+# 2. Spawn.
+if spawn_claude_workspace "$WORKTREE_ROOT" "$SUCCESSOR_CMD" "SDD resume: $FEATURE_NAME" \
+     "Hop $SP_HOP/$MAX_HOPS — successor spawned"; then
+  # 3. Outcome. §5.4d names a "workspace ref" here; cmux does not return one
+  # (no --json on new-workspace, no documented output), so the field degrades to
+  # the constant `(spawned)`. Post-spawn failures are non-retryable by contract —
+  # notify already warns rather than failing, and this exits 0 regardless.
+  printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "(spawned)" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
+  echo "[spawn-handoff] spawned successor (launch=$LAUNCH_MODE). STOP this session."
+  exit 0
+else
+  printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
+  cmux notify --title "SDD handoff" --body "Spawn failed after reservation — manual resume" 2>/dev/null || true
+  echo "[spawn-handoff] cmux new-workspace failed AFTER reservation (hop $SP_HOP consumed) — manual fallback." >&2
+  print_manual_instructions
+  exit 3
+fi

@@ -531,3 +531,204 @@ def test_corrupt_v1_body_degrades_to_picker_manual(tmp_path):
         ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64="v1:!!!not-base64!!!")
     )
     assert "launch=picker-manual" in (r.stdout + r.stderr)
+
+
+# --- Task 6: spawn sequence, reservation ordering, exit codes, --dry-run -------
+
+import re
+
+UUID_RE = re.compile(
+    r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+)
+
+
+def _reach_spawn(tmp_path, ctx):
+    """Env that reaches the spawn sequence in launch=auto mode."""
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    return _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+
+
+def _fallback_spawn_id(cmd):
+    """Spawn-id field of the composed runtime-picker-failure tail (spec §5.4d).
+
+    Anchored on the runtime-deferred `$(date …)` substitution so it reads the
+    ACTUAL positional field rather than "some uuid somewhere in the string" —
+    the composed command also carries a `/pickup` id and a log path, and a loose
+    search would keep passing with the field itself still wrong.
+    """
+    tail = cmd.split(" || ", 1)[1] if " || " in cmd else ""
+    m = re.search(r'"\$\(date[^)]*\)"\s+(\S+)', tail)
+    assert m, f"no spawn-id field in composed fallback tail: {tail!r}"
+    return m.group(1).strip('"')
+
+
+def _spawn_log_records(ctx):
+    """[(record_type, spawn_id)] from handoff-spawn.log, in file order."""
+    lines = (ctx["reports"] / "handoff-spawn.log").read_text().splitlines()
+    return [(f[2], f[1]) for f in (ln.split() for ln in lines) if len(f) > 2]
+
+
+def test_dry_run_spawns_nothing(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_reach_spawn(tmp_path, ctx)
+    )
+    assert r.returncode == 0
+    logged = (
+        (tmp_path / "cmux.log").read_text() if (tmp_path / "cmux.log").exists() else ""
+    )
+    assert "new-workspace" not in logged
+    assert not (ctx["reports"] / ".handoff-hops").exists()
+    assert not (ctx["reports"] / "handoff-spawn.log").exists()
+
+
+def test_auto_spawn_success_exit_0(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    assert r.returncode == 0
+    logged = (tmp_path / "cmux.log").read_text()
+    assert "new-workspace" in logged
+    for tok in ["--name", "--cwd", "--command", "--focus false"]:
+        assert tok in logged
+    assert "notify" in logged and "--title" in logged
+    records = _spawn_log_records(ctx)
+    kinds = [k for k, _ in records]
+    assert kinds.index("intent") < kinds.index("outcome")
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+    # §5.4d: ONE spawn id ties the whole hop together — the intent record, the
+    # success outcome, and the runtime-failure record the CHILD may append from
+    # the composed fallback tail. Assert identity across all three, not shape:
+    # two independently generated uuids satisfy every "is a uuid" check while
+    # destroying the correlation the id exists for.
+    ids = {i for _, i in records}
+    assert len(ids) == 1, f"spawn ids diverge across records: {records}"
+    spawn_id = ids.pop()
+    assert UUID_RE.fullmatch(spawn_id)
+    assert _fallback_spawn_id(_successor_cmd(r)) == spawn_id
+
+
+def test_spawn_failure_keeps_hop_exits_3(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    body = (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; exit 5; fi\n'
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+    r = run_spawn(
+        ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
+    )
+    assert r.returncode == 3
+    # The hop stays consumed even though the spawn FAILED — only possible if the
+    # reservation ran first. This, not log ordering, is Decision 21's real guard.
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+    assert "spawn-failed" in (ctx["reports"] / "handoff-spawn.log").read_text()
+    assert "/pickup b1" in (r.stdout + r.stderr)
+    records = _spawn_log_records(ctx)
+    ids = {i for _, i in records}
+    assert len(ids) == 1, f"spawn ids diverge across records: {records}"
+    assert UUID_RE.fullmatch(ids.pop())
+
+
+def test_notify_failure_still_exit_0(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    body = (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "notify" ]; then exit 9; fi\n'
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+    r = run_spawn(
+        ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
+    )
+    assert r.returncode == 0
+
+
+def test_picker_manual_spawn_uses_interactive_command(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)  # no metadata => picker-manual
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 0
+    logged = (tmp_path / "cmux.log").read_text()
+    assert "new-workspace" in logged
+    assert "--non-interactive" not in logged
+    assert "/pickup b1" in logged
+
+
+def test_append_prompt_file_written_on_real_spawn(tmp_path):
+    # On a real (non-dry-run) spawn, the append-prompt CONTENT is rematerialized
+    # to the stable path and the forwarded --append-system-prompt-file points at
+    # it. This is the FIRST test to drive that write path (every Task-4 case was
+    # --dry-run), so it is also what covers the makedirs-with-the-write fix.
+    import base64
+
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    content = b"# forwarded system prompt\nBe concise.\n"
+    env = _meta(
+        args_b64=encode_args(["--append-system-prompt-file", "/tmp/gone.md"]),
+        append_b64=base64.b64encode(content).decode(),
+    )
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 0
+    target = (
+        tmp_path / "home" / ".claude-codex-handoff" / "append-prompts" / "b1-hop1.md"
+    )
+    assert target.read_bytes() == content
+    assert "append-prompts/b1-hop1.md" in (tmp_path / "cmux.log").read_text()
+
+
+def test_fallback_tail_spawn_id_is_a_uuid(tmp_path):
+    # spec §5.4d names the spawn id as the second field of EVERY record type,
+    # including `runtime-picker-failure`. The composed tail shipped a literal
+    # `spawn` there; the pre-existing `runtime-picker-failure` token assertion
+    # passes with that bug fully present, so this is the discriminating check.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_reach_spawn(tmp_path, ctx)
+    )
+    assert r.returncode == 0
+    assert UUID_RE.fullmatch(_fallback_spawn_id(_successor_cmd(r)))
+
+
+def test_fallback_tail_spawn_id_correlates_with_intent_record(tmp_path):
+    # Identity, not shape: generating a second uuid inside the spawn sequence
+    # leaves every "is a uuid" assertion green while the child's runtime-failure
+    # record no longer correlates to the parent's intent record.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    assert r.returncode == 0
+    intent = [i for k, i in _spawn_log_records(ctx) if k == "intent"]
+    assert len(intent) == 1
+    assert _fallback_spawn_id(_successor_cmd(r)) == intent[0]
+
+
+def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
+    # Decision 21 is about WHEN the reservation happens, not the order the lines
+    # end up in the file. Writing `intent` AFTER the spawn but before the outcome
+    # leaves the file order intact and every ordering assertion green — verified
+    # by mutation. So ask the spawn itself: the stub snapshots both reservation
+    # artifacts at `new-workspace` time, which is the only moment that proves the
+    # hop was already consumed when the workspace was created.
+    ctx = setup_worktree(tmp_path)
+    body = (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "new-workspace" ]; then\n'
+        '  cp "$SPAWN_LOG_PROBE" "$CMUX_LOG.log-at-spawn" 2>/dev/null\n'
+        '  cp "$HOPS_PROBE" "$CMUX_LOG.hops-at-spawn" 2>/dev/null\n'
+        "fi\n"
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+    env = _reach_spawn(tmp_path, ctx)
+    env["SPAWN_LOG_PROBE"] = str(ctx["reports"] / "handoff-spawn.log")
+    env["HOPS_PROBE"] = str(ctx["reports"] / ".handoff-hops")
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=body)
+    assert r.returncode == 0
+    at_spawn = tmp_path / "cmux.log.log-at-spawn"
+    assert at_spawn.exists(), "cmux stub never reached new-workspace"
+    kinds = [
+        f[2] for f in (ln.split() for ln in at_spawn.read_text().splitlines())
+        if len(f) > 2
+    ]
+    assert kinds == ["intent"]  # reserved, and not yet resolved
+    assert (tmp_path / "cmux.log.hops-at-spawn").read_text().strip() == "1"
