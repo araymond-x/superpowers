@@ -106,7 +106,7 @@ chatty on stderr, so an assertion against combined `stdout + stderr` can be sati
 unrelated diagnostic echo. Treat any such assertion as contaminated until the mutation proof shows
 it discriminates. Anchor on a distinctive line.
 
-- [ ] **Step 1: Add the two harness knobs to `spawn_handoff_helpers.py`.**
+- [x] **Step 1: Add the two harness knobs to `spawn_handoff_helpers.py`.**
 
 Both are needed because the current helper makes the failing case inexpressible. Keep the existing
 call signatures working (default the new parameters to today's behavior) so no existing test changes.
@@ -120,15 +120,15 @@ Do NOT remove or narrow the autouse `_hermetic_picker_env` fixture — this mach
 picker-launched and `run_spawn` copies `os.environ`, so that fixture is what makes "metadata absent"
 cases actually mean absent.
 
-- [ ] **Step 2: `command -v claude-picker` preflight guard (`:293`).** spec.md:196 pins "picker missing → picker-manual"; deleting the check is currently undetected. Uses the picker-absent knob.
+- [x] **Step 2: `command -v claude-picker` preflight guard (`:293`).** spec.md:196 pins "picker missing → picker-manual"; deleting the check is currently undetected. Uses the picker-absent knob.
 
-- [ ] **Step 3: `-x` half of the version predicate (`:292`).** Reducing it to a bare `[ -f … ]` is undetected. Uses the non-executable-version knob.
+- [x] **Step 3: `-x` half of the version predicate (`:292`).** Reducing it to a bare `[ -f … ]` is undetected. Uses the non-executable-version knob.
 
-- [ ] **Step 4: `--telemetry off` value on the composed line.** The flag *pair's* presence is already pinned; only the `off` value is unasserted (all auto-path tests use `telem="1"`). Assert the value on the composed successor command line.
+- [x] **Step 4: `--telemetry off` value on the composed line.** The flag *pair's* presence is already pinned; only the `off` value is unasserted (all auto-path tests use `telem="1"`). Assert the value on the composed successor command line.
 
-- [ ] **Step 5: Two env-validation regression tests owed since the Task-3 fix round.** Invalid `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` → stderr WARNING + default-15 behavior; invalid `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` → stderr WARNING + gate stays live. Deleting either regex block currently leaves the suite green.
+- [x] **Step 5: Two env-validation regression tests owed since the Task-3 fix round.** Invalid `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` → stderr WARNING + default-15 behavior; invalid `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` → stderr WARNING + gate stays live. Deleting either regex block currently leaves the suite green.
 
-- [ ] **Step 6: Run the suites and confirm no regression.**
+- [x] **Step 6: Run the suites and confirm no regression.**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -q
@@ -137,7 +137,7 @@ cases actually mean absent.
 Expected: all green; the `test_spawn_handoff.py` count rises from 58 by the number of tests you added.
 Verify any `-k` filter with `--collect-only -q` before deriving counts from it.
 
-- [ ] **Step 7: Confirm the script is untouched, then commit.**
+- [x] **Step 7: Confirm the script is untouched, then commit.**
 
 ```bash
 git diff --name-only skills/subagent-driven-development/scripts/spawn-handoff-session.sh   # must be EMPTY
@@ -172,6 +172,15 @@ on bash 3.2 (the verified floor, 3.2.57) while passing on 4.4+.
 - [ ] **Step 3: mktemp-failure branch untested (`:393-397`).** Safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH to force the failure.
 
 - [ ] **Step 4: Task-4 cleanup trio.** `max(0, …)` on the label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further. If a cleanup has no observable behavior change, say so explicitly rather than inventing a test.
+
+- [ ] **Step 4b: Two coverage residuals found by the Task-7 quality review (both mutation-proven to survive a green 63-test suite).** These are the `-f`/regex halves that Task 7's Step 3/Step 5 wording under-specified. The script is correct as written — these pin behavior that is currently undetectable.
+
+  - **The `-f` half of the version predicate (`:298`).** Reducing the conjunction to a bare `[ -x … ]` leaves 63/63 green (verified independently by the controller). The pre-existing degraded-metadata param fails BOTH halves, so it pins only the conjunction; Task 7 pinned `-x`; `-f` remains unpinned. Test it by installing a **directory** named `2.1.218` under `versions/` — dirs are 0755 so `-x` passes and `-f` fails, and the picker's own `find -type f -perm -u+x` would never discover it. Expect `launch=picker-manual`.
+  - **The fractional half of the `QUOTA_MIN_PCT` regex (`:27`).** `^[0-9]+(\.[0-9]+)?$` blesses `12.5`, but every MIN_PCT value in the suite is an integer, so tightening it to `^[0-9]+$` — silently reverting a legitimate fractional threshold to the default — leaves 63/63 green. Test with `SUPERPOWERS_CMUX_QUOTA_MIN_PCT="12.5"` asserting **no** WARNING and `quota=ok` at a 63.0% reading.
+
+- [ ] **Step 4c: Decide the `:299` redundancy explicitly (do not default).** Task 7 proved `command -v claude-picker` at `:299` is redundant with the contract probe at `:301` and unobservable by any black-box test: with the picker absent, `$(claude-picker --handoff-contract 2>/dev/null)` swallows "command not found", the substitution is empty, `"" != "1"`, and `:301` returns 1 anyway. Either keep it (defensible — it documents intent and stays robust if `:301` ever changes) or remove it, but **state the decision and the reason**. Do not leave it decided-by-default.
+
+- [ ] **Step 4d: Move `_hermetic_picker_env` from `test_spawn_handoff.py` to `tests/unit/conftest.py`.** The fixture is currently **module-scoped**, so any future spawn-handoff test placed in a *different* file silently inherits the developer's ambient picker env and "metadata absent" stops meaning absent. This is not hypothetical — the Task-7 quality re-reviewer wrote a throwaway probe in a scratchpad file, did not get the fixture, observed an ambient leak, and filed a finding that was wrong *because of it*. Moving it to `conftest.py` closes the class. **Keep `PICKER_ENV_VARS` as the single source of the list** (import it, do not restate it), and re-run the full file afterward — all existing tests must stay green.
 
 - [ ] **Step 5: Owed plan-doc corrections in `module-1-spawn-script.md`.** Task 3 Step 2 (both snippet defects — the command-substitution + background-watcher timeout that stalls the full timeout on the success path, and the fallback-less `QUOTA_TOOL=` line whose own Step 1 tests cannot pass; replace with the shipped implementation from commit `7131698`); Task 4's wrong bash caveat (≥4.x → **≥3.2**); and Task 6 Step 2's spawn-id ordering defect (the id must be generated *before* the compose block so the composed fallback tail carries the uuid, per spec §5.4d). Scope is this file only — `plan.md` and `spec.md` do not mirror the snippet.
 
