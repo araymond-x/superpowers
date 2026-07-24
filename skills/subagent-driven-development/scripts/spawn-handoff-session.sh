@@ -279,6 +279,46 @@ PY
 if [ "${CLAUDE_CODE_ENABLE_TELEMETRY:-}" = "1" ]; then TELEMETRY="on"; else TELEMETRY="off"; fi
 
 echo "[spawn-handoff] forwarded=${FORWARDED[*]} label=[$LABEL] telemetry=$TELEMETRY" >&2
+
+# --- Launch composition B: auto preflight + successor command ---------------
+# Auto-mode preflight (spec §5.4c). launch=auto only when ALL hold; any failure
+# degrades to the attended interactive picker rather than a mismatched session.
+LAUNCH_MODE="picker-manual"
+preflight_ok() {
+  [ -n "${CLAUDE_CODE_PICKER_VERSION:-}" ] || return 1
+  [ "$ARGS_OK" = "1" ] || return 1
+  # Match the picker's own version discovery predicate (`find -type f -perm -u+x`),
+  # not a lenient `-e` — otherwise preflight can pass a version the picker rejects.
+  { [ -f "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ] && [ -x "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ]; } || return 1
+  command -v claude-picker >/dev/null 2>&1 || return 1
+  # String equality, not >=: a future v2 picker must degrade, never pass.
+  [ "$(claude-picker --handoff-contract 2>/dev/null)" = "$PICKER_CONTRACT" ] || return 1
+  return 0
+}
+if preflight_ok; then LAUNCH_MODE="auto"; fi
+
+# Compose the successor --command with shlex-style re-quoting of EVERY element
+# (a shell re-parses this string inside the spawned workspace).
+shq() { "$PYTHON" -c 'import shlex,sys;print(shlex.quote(sys.argv[1]))' "$1"; }
+build_successor_cmd() {
+  local parts=("claude-picker" "--non-interactive"
+               "--pick-version" "$(shq "${CLAUDE_CODE_PICKER_VERSION:-}")"
+               "--telemetry" "$TELEMETRY")
+  [ -n "$LABEL" ] && parts+=("--session-label" "$(shq "$LABEL")")
+  local a; for a in "${FORWARDED[@]}"; do parts+=("$(shq "$a")"); done
+  parts+=("$(shq "/pickup $BUNDLE_ID")")
+  echo "${parts[*]}"
+}
+# $SP_HOP expands at compose time so the workspace's runtime fallback logs the
+# concrete hop number; the date/printf defer to runtime inside the workspace.
+if [ "$LAUNCH_MODE" = "auto" ]; then
+  PICKER_CMD="$(build_successor_cmd)"
+  SUCCESSOR_CMD="$PICKER_CMD || { printf '%s %s runtime-picker-failure hop=%s\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" spawn \"$SP_HOP\" >> $(shq "$SPAWN_LOG"); claude-picker $(shq "/pickup $BUNDLE_ID"); }"
+else
+  SUCCESSOR_CMD="claude-picker $(shq "/pickup $BUNDLE_ID")"
+fi
+echo "[spawn-handoff] launch=$LAUNCH_MODE" >&2
+echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 # (Task 6 inserts the spawn sequence + exit here.)
 echo "[spawn-handoff] basic preconditions passed (skeleton — later tasks complete the flow)" >&2
 exit 0

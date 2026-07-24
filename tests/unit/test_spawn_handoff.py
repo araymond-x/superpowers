@@ -399,3 +399,111 @@ def test_append_prompt_empty_keeps_original_path(tmp_path):
     )  # no APPEND_PROMPT
     r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
     assert "/tmp/orig.md" in (r.stdout + r.stderr)
+
+
+# --- Task 5: launch composition B (auto preflight + compose-side quoting) ------
+
+MARKER = "[spawn-handoff] successor command: "
+
+
+def _successor_cmd(r):
+    """Isolate the composed `--command` string from every other diagnostic line.
+
+    Task 4's `forwarded=` line ALREADY echoes `--append-system-prompt-file` and
+    `a b.md` to stderr, so asserting those tokens against raw stdout+stderr would
+    pass even if this task's compose block never ran. Every compose assertion
+    anchors on this line so it can only be satisfied by the composed command.
+    """
+    lines = [
+        ln for ln in (r.stdout + r.stderr).splitlines() if ln.startswith(MARKER)
+    ]
+    assert lines, "no `successor command:` line emitted"
+    return lines[0][len(MARKER) :]
+
+
+def test_auto_mode_composes_exact_command(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    args = ["--append-system-prompt-file", "/tmp/a b.md"]
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64=encode_args(args))
+    )
+    assert "launch=auto" in (r.stdout + r.stderr)
+    cmd = _successor_cmd(r)
+    for tok in [
+        "claude-picker",
+        "--non-interactive",
+        "--pick-version 2.1.218",
+        "--telemetry on",
+        "--session-label",
+        "/pickup b1",
+    ]:
+        assert tok in cmd
+    assert "a b.md" in cmd  # compose-side quoting preserved the space
+    assert "runtime-picker-failure" in cmd  # embedded residual fallback chain
+
+
+def test_composed_command_reparses_with_correct_arity(tmp_path):
+    # The composed string is re-parsed by a shell INSIDE the spawned workspace, so
+    # substring presence is not enough: each space-bearing element must arrive as
+    # ONE argv element. A naive space-join would split `/tmp/a b.md` in two and
+    # send the picker a bare `/pickup` plus a stray `b1`.
+    import shlex
+
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    args = ["--append-system-prompt-file", "/tmp/a b.md"]
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64=encode_args(args))
+    )
+    argv = shlex.split(_successor_cmd(r).split(" || ", 1)[0])
+    assert argv[0] == "claude-picker"
+    assert "/tmp/a b.md" in argv
+    assert argv[-1] == "/pickup b1"
+
+
+@pytest.mark.parametrize("env_extra", [{}, {"CLAUDE_CODE_PICKER_VERSION": "9.9.9"}])
+def test_picker_manual_when_metadata_degraded(tmp_path, env_extra):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env_extra)
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+
+
+def test_picker_manual_when_contract_wrong(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([])),
+        picker_body='if [ "$1" = "--handoff-contract" ]; then echo 2; exit 0; fi\nexit 0',
+    )
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+
+
+def test_bad_codec_degrades_to_picker_manual(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64="not-a-v1-codec")
+    )
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+
+
+def test_corrupt_v1_body_degrades_to_picker_manual(tmp_path):
+    # A valid `v1:` prefix but a garbage base64/JSON body must set ARGS_OK=0 and
+    # degrade to picker-manual — never launch=auto with the forwarded args dropped.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64="v1:!!!not-base64!!!")
+    )
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
