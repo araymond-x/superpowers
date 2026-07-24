@@ -31,9 +31,43 @@ _This module consumes Module 1's internal output (the completed `spawn-handoff-s
 | Task 7 | `context-handoff-protocol.md` | `spawn-handoff-session.sh` | Task 6 |
 | Task 8 | `tests/integration/sdd-e2e-test.sh` | `spawn-handoff-session.sh` | Task 7 |
 | Task 9 | `CLAUDE.md`, `docs/ARaymond-customization-manifest.md`, `docs/process-improvement-findings/BACKLOG.md` | all above | Task 8 |
+| **Sweep** (pre-Task-7) | `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `spawn-handoff-session.sh` | — | Task 6 |
+
+> **Write-scope note for the Sweep:** `spawn_handoff_helpers.py` was READ-ONLY throughout Module 1,
+> but three of the knob-needing gaps below genuinely require a new harness knob in it. Editing it
+> during the sweep is expected — **log it as a write-scope deviation** rather than rediscovering
+> the conflict cold. There is no concurrency risk: no Module-2 task writes these files.
+
+## Module-1 test-debt sweep (run as a bounded round BEFORE Task 7)
+
+Module 1 closed with every debt item formally *dispositioned* but the sweep itself **not done**.
+Disposition removes an item from every enforcement gate, so these checkboxes are its only home —
+the pre-completion all-checkboxes gate is what makes this survive. Full context and rationale per
+item live in `deviations.md` → "Deferred Work" → "Task 6 test-debt sweep".
+
+**These are spec-behavior regressions with ZERO test protection.** Each behavior was verified
+working by execution during review, but deleting it today is undetected, so a future edit breaks it
+silently. Mutation-prove each new test (break the behavior, watch it go RED):
+
+- [ ] `command -v claude-picker` preflight guard (`:293`) — spec.md:196 pins "picker missing → picker-manual"; deleting the check is currently undetected. Needs a picker-absent harness knob.
+- [ ] `-x` half of the version predicate (`:292`) — reducing it to a bare `[ -f … ]` is undetected. Needs an `install_version()` chmod knob (it always `chmod 0o755`, so the non-executable case is inexpressible today).
+- [ ] `--telemetry off` value on the composed line — the flag *pair's* presence is pinned; only the `off` value is unasserted (all auto-path tests use `telem="1"`).
+- [ ] Two env-validation regression tests owed since the Task-3 fix round — invalid `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` → stderr WARNING + default-15 behavior; invalid `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` → stderr WARNING + gate stays live. Deleting either regex block currently leaves the suite green.
+
+Lower priority, same round:
+
+- [ ] Unchecked reservation writes (`:422-423`) — a failed `.handoff-hops`/`intent` write still proceeds to spawn, weakening Decision 21's durability guarantee. Needs its own test (unwritable reports dir) and adds an exit path.
+- [ ] NM4 — failure-branch `cmux notify` unasserted (`:445`); deleting it leaves 58/58 green. One-line fix.
+- [ ] mktemp-failure branch untested (`:393-397`) — safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH.
+- [ ] Task-4 cleanup trio: `max(0, …)` label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further.
+- [ ] Owed plan-doc corrections: `module-1-spawn-script.md` Task 3 Step 2 (both snippet defects), Task 4's wrong bash caveat (≥4.x → ≥3.2), and Task 6 Step 2's spawn-id ordering defect.
+
+Explicitly **accepted, no action**: NM5 (`rm -f "$out_f"` unasserted), `shq` rc-propagation (no
+reachable trigger), contract-probe timeout, `_successor_cmd` newline truncation (test-helper only).
 
 ## Acceptance Criteria
 
+- [ ] The Module-1 test-debt sweep above is complete, with each new test mutation-proven.
 - [ ] `context-handoff-protocol.md` steps 1–2 are byte-identical to the original; steps 3–5 drive the script per the exit-code ladder; a closing note documents the soft-nudge use.
 - [ ] `sdd-e2e-test.sh` reaches Step 14, asserts composed spawn command + notify + reservation-then-outcome log records, and passes; the final banner reads `15 steps`.
 - [ ] `git diff` shows `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` unchanged.
