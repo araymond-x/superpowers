@@ -470,6 +470,30 @@ def test_picker_manual_when_metadata_degraded(tmp_path, env_extra):
     _spawnable(tmp_path, ctx)
     r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env_extra)
     assert "launch=picker-manual" in (r.stdout + r.stderr)
+    # The picker-manual branch is the user-facing safety net — assert what it
+    # actually composes, not just the mode. Without this the branch could emit
+    # anything at all and the suite would stay green.
+    assert _successor_cmd(r) == "claude-picker '/pickup b1'"
+
+
+def test_empty_label_omits_session_label(tmp_path):
+    # spec §5.4b: an empty label result omits --session-label entirely. Every other
+    # auto-path case passes a non-empty label, so without this the omission guard
+    # can be deleted with the suite still green.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), label=""),
+    )
+    assert "launch=auto" in (r.stdout + r.stderr)  # an empty label never blocks auto
+    cmd = _successor_cmd(r)
+    assert "--session-label" not in cmd
+    assert "--telemetry on" in cmd  # the flags around the omitted pair still compose
 
 
 def test_picker_manual_when_contract_wrong(tmp_path):

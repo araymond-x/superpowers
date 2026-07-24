@@ -304,18 +304,33 @@ build_successor_cmd() {
   local parts=("claude-picker" "--non-interactive"
                "--pick-version" "$(shq "${CLAUDE_CODE_PICKER_VERSION:-}")"
                "--telemetry" "$TELEMETRY")
-  [ -n "$LABEL" ] && parts+=("--session-label" "$(shq "$LABEL")")
+  # Empty label => omit --session-label entirely (spec §5.4b). Spelled `if/fi`
+  # rather than `[ -n … ] && …`: as the function's last statement the `&&` form
+  # would make an empty label look like a compose FAILURE (return 1).
+  if [ -n "$LABEL" ]; then parts+=("--session-label" "$(shq "$LABEL")"); fi
   local a; for a in "${FORWARDED[@]}"; do parts+=("$(shq "$a")"); done
-  parts+=("$(shq "/pickup $BUNDLE_ID")")
-  echo "${parts[*]}"
+  parts+=("$PICKUP_ARG")
+  # `printf`, not `echo`: with BASHOPTS=xpg_echo set in the environment, bash 5's
+  # `echo` interprets backslash escapes — a forwarded arg containing \t/\n/\\ would
+  # be mangled and a \c would truncate the command mid-string.
+  printf '%s\n' "${parts[*]}"
 }
+# Quoted once, used on both branches and in the fallback tail (SSOT + 2 fewer
+# Python spawns).
+PICKUP_ARG="$(shq "/pickup $BUNDLE_ID")"
 # $SP_HOP expands at compose time so the workspace's runtime fallback logs the
 # concrete hop number; the date/printf defer to runtime inside the workspace.
+# Worked example — verbatim output of a real run (LABEL=Proj-Session-2, args
+# ["--append-system-prompt-file","/tmp/a b.md"]), line-wrapped here, with only the
+# absolute log path replaced by <log>:
+#   claude-picker --non-interactive --pick-version 2.1.218 --telemetry on \
+#     --session-label Proj-Session-3 --append-system-prompt-file '/tmp/a b.md' '/pickup b1' \
+#     || { printf '%s %s runtime-picker-failure hop=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" spawn "1" >> <log>; claude-picker '/pickup b1'; }
 if [ "$LAUNCH_MODE" = "auto" ]; then
   PICKER_CMD="$(build_successor_cmd)"
-  SUCCESSOR_CMD="$PICKER_CMD || { printf '%s %s runtime-picker-failure hop=%s\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" spawn \"$SP_HOP\" >> $(shq "$SPAWN_LOG"); claude-picker $(shq "/pickup $BUNDLE_ID"); }"
+  SUCCESSOR_CMD="$PICKER_CMD || { printf '%s %s runtime-picker-failure hop=%s\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" spawn \"$SP_HOP\" >> $(shq "$SPAWN_LOG"); claude-picker $PICKUP_ARG; }"
 else
-  SUCCESSOR_CMD="claude-picker $(shq "/pickup $BUNDLE_ID")"
+  SUCCESSOR_CMD="claude-picker $PICKUP_ARG"
 fi
 echo "[spawn-handoff] launch=$LAUNCH_MODE" >&2
 echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
