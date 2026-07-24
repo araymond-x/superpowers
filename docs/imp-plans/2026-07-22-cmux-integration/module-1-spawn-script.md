@@ -858,7 +858,7 @@ _Completed: `77537bc`. Bash floor determined **≥ 3.2** (plan's "≥ 4.x" cavea
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
 - Modify: `tests/unit/test_spawn_handoff.py`
 
-- [ ] **Step 1: Write the failing preflight/compose tests.**
+- [x] **Step 1: Write the failing preflight/compose tests.** (anchored on the extracted `successor command:` line — see deviations; plus a 6th arity test per spec §7)
 
 Append to `test_spawn_handoff.py`:
 
@@ -910,7 +910,7 @@ def test_corrupt_v1_body_degrades_to_picker_manual(tmp_path):
 
 Run → FAIL (no preflight/compose yet).
 
-- [ ] **Step 2: Insert composition part B (append after the Task-4 block).**
+- [x] **Step 2: Insert composition part B (append after the Task-4 block).** (fence adopted verbatim — first task with no plan-fence defect; `printf`/`PICKUP_ARG`/`if-fi` cleanups added in the [task 5 fix] round)
 
 Append directly after the `echo "[spawn-handoff] forwarded=..."` line:
 
@@ -955,11 +955,11 @@ echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 >
 > **Precision (append-file exit-3 is non-interactive-only):** the picker validates `--append-system-prompt-file` readability and exits 3 **only under `--non-interactive`**. So the auto command's residual `|| { … }` reliably catches a still-dead append path — but *only because the auto path launches non-interactively*. The `picker-manual` branch launches the picker **interactively**, where a dead passthrough path is NOT validated (it flows straight to `claude`). Acceptable: Task 4's substitution already rematerialized the file for the auto path, and the interactive branch is an attended fallback the user completes.
 
-- [ ] **Step 3: Run tests → pass.**
+- [x] **Step 3: Run tests → pass.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -k "auto or picker_manual or contract or codec" -v` → PASS.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.** (`e7d5fe1` + fix round `eae39dc`)
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
