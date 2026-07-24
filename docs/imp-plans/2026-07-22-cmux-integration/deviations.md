@@ -79,3 +79,5 @@
 
 ## Scope Changes
 [Requirements that changed during execution]
+
+| 2026-07-24T18:46:38Z | Module transition: spawn-handoff-session.sh + unit suite → protocol rewrite + e2e Step 14 + docs | FYI | Accepted |

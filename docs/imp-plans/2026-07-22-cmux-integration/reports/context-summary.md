@@ -1,54 +1,121 @@
-# Context Summary — cmux-integration repo-3 SDD (through Task 5)
+# Context Summary — cmux-integration repo-3 SDD (Module 1 COMPLETE, Module 2 active)
 
-> Midpoint context summary (manifest `context_summary_at: 3`). Regenerated at the Task-5-complete handoff boundary. Rich resume guidance is in the handoff bundle's CONTINUE.md; this file is the flight-recorder digest.
+> Regenerated at the Module 1→2 transition boundary. Rich resume guidance is in the handoff
+> bundle's CONTINUE.md; this file is the flight-recorder digest.
 
-## Status: Module 1 active (tasks 0–6). Tasks 0–5 COMPLETE. Resume at **Task 6** (last task of Module 1).
+## Status: **Module 1 COMPLETE and transitioned.** Module 2 active (tasks 7–9). Resume at **Task 7**.
 
 | Task | State | Commit | Notes |
 |------|-------|--------|-------|
-| 0 | ✅ done (reviewed) | `56210f1` | Contract fixtures + harness + prereq assertions. All prereqs live-green. |
-| 1 | ✅ done (reviewed) | `2557250` | Script foundation + 5 basic-refusal tests. |
-| 2 | ✅ done (reviewed) | `c176b4e` | `validate_bundle()` (git-common-dir identity) + cmux/hop preconditions. |
-| 3 | ✅ done (reviewed) | `7131698` + fix `926ab60` | Fail-open quota. **Both plan-snippet defects confirmed empirically.** Fix round added numeric env validation + 3 tests. |
-| 4 | ✅ done (reviewed) | `77537bc` | Decode/strip-guard/label/telemetry. **Bash floor ≥ 3.2** (plan's "≥4.x" is wrong). Autouse hermetic-env fixture added. |
-| 5 | ✅ done (reviewed) | `e7d5fe1` + fix `eae39dc` | Auto preflight + compose-side quoting. **First task with NO plan-fence defect.** Quality review "with fixes" → 5 fixes → **re-review PASS**. |
-| 6 | ⬜ **NEXT** | — | Spawn sequence, reservation ordering, exit codes, `--dry-run`. **Carries a required plan deviation — see ⚠ below.** |
-| 7–9 | ⬜ pending | — | Module 2: protocol rewrite, e2e Step 14, docs. Run `transition-module.py` after Task 6. |
+| 0–5 | ✅ done (reviewed) | thru `eae39dc` | Contract fixtures, script foundation, bundle validation, quota, decode/label/telemetry, launch composition. |
+| 6 | ✅ **done (reviewed, 3 commits)** | `5c6e4d9` + `3491171` + `ec0df92` | Spawn sequence, reservation ordering, exit codes, `--dry-run`. Spec review FAIL→fix→**re-review PASS**; quality review PASS-with-fixes→fix→**re-review PASS**. |
+| 7–9 | ⬜ **NEXT** | — | Module 2: protocol rewrite, e2e Step 14, docs. See `module-2-protocol-e2e-docs.md`. |
 
-Full unit suite: **42/42** on `test_spawn_handoff.py`; **595 passed** across `tests/unit/`. Checkpoint 006 PASS, 0 pending deviations, working tree clean at `db25500`. Module 1 at **71%** of checkboxes (27/38).
+Suites at the boundary: `test_spawn_handoff.py` **58 passed**; `tests/unit/` **611 passed**;
+regression **PASS 159 / FAIL 0 / WARNING 2**; lint-shell clean for this script.
+Module 1 checkboxes **38/38**. **0 pending deviations.** Working tree clean.
+Manifest: `active_module_id: 2`, `active_module_file: module-2-protocol-e2e-docs.md`,
+`context_summary_at` recomputed to **8**. 25 Module-1 reports archived to
+`reports/archive-spawn-handoff-session.sh + unit suite/`.
 
-## ⚠ READ FIRST — the two things that will bite you at Task 6
+## ⚠ READ FIRST — what Task 6 proved, and what it costs you if you forget
 
-1. **THE SPAWN-ID PLACEHOLDER — Task 6's plan text WILL NOT FIX IT.** Both the spec reviewer and the quality re-reviewer independently confirmed this. The auto-mode `SUCCESSOR_CMD` composed in Task 5 embeds `printf '%s %s runtime-picker-failure hop=%s\n' "$(date …)" spawn "$SP_HOP"` — the second field is the **literal word `spawn`**, not the spawn uuid that spec §5.4d's log format requires. The string is baked at compose time; `module-1-spawn-script.md` Task 6 Step 2 generates `SPAWN_ID` *after* the dry-run short-circuit, i.e. **after** the compose block. **Task 6 must deviate from its own plan text**: either generate `SPAWN_ID` before the compose block, or re-compose the fallback tail once the id exists. Shipping the plan verbatim ships a §5.4d contract violation.
-2. **Task 6 is the test-debt sweep point.** A substantial list has accumulated in `deviations.md` → "Deferred Work" → "Task 6 test-debt sweep". Read that section in full before writing the Task-6 dispatch. Highlights: the two env-validation regression tests (from the Task-3 fix round), the Task-4 cleanup trio (`max(0,…)` label slice, surrogate `try`-wrap, `mkdir` gating), and **six mutation-proven gaps** from the Task-5 reviews — the `-x` half of the version predicate, `command -v claude-picker`, `--telemetry off` on the composed line (these three need a new knob in `spawn_handoff_helpers.py`, which Task 6 MAY modify), `shq` rc-propagation, `_successor_cmd`'s `lines[0]` newline truncation, and the contract probe's missing timeout.
+1. **MUTATION-TEST EVERY ASSERTION. This is the run's single highest-value practice.**
+   Task 6 shipped **seven** assertions across three rounds that looked like coverage and caught
+   nothing. Reviews found them only by *breaking the behavior and watching the suite stay green*:
+   - the quality review found **5 surviving mutations on a fully green 56-test suite** (MX1–MX5);
+   - the re-review found **2 more** (NM4, NM5) after those were closed.
+   Require every implementer to prove each new test goes RED when its behavior is broken, and
+   verify at least one mutation yourself.
 
-## Contract facts frozen (Task 0, verified live)
-- `--command <text>` = cmux "send text+Enter after creation" → shell-typed (zsh); composed successor cmd must be POSIX/zsh-safe.
-- Picker exports 4 vars every launch path: VERSION/LABEL/ARGS/APPEND_PROMPT. append-file exit-3 is `--non-interactive`-only. `versions/<v>` = executable regular file.
+2. **The test-echo collision is a RECURRING class in this script, not a one-off.**
+   `spawn-handoff-session.sh` is chatty on stderr. MX2 showed
+   `assert "/pickup b1" in (r.stdout + r.stderr)` is already satisfied by the Task-5
+   `successor command:` echo at `:355`, so it never observed `print_manual_instructions` — on the
+   one path where a hop is already consumed and manual recovery is mandatory. It was flagged as a
+   CRITICAL carry-forward for Task 5 and **recurred anyway in Task 6.**
+   ➡ **Treat ANY assertion against combined `stdout+stderr` as contaminated until proven
+   otherwise.** Anchor on a distinctive line, then mutate to prove it discriminates.
+
+3. **A declined cheap experiment is not evidence.** Task 6's implementer decided
+   `cmux new-workspace` returns no workspace ref, reasoning from the absence of a `--json` flag,
+   and explicitly declined to create-and-close a throwaway workspace because "it would not change
+   the outcome." The spec reviewer ran exactly that probe: `OK workspace:6` on stdout. The
+   supporting claim was also false in both directions (none of the three subcommands has `--json`).
+   That was the round's one BLOCKING finding. ➡ When a one-command experiment would settle a
+   factual premise, require it.
+
+4. **`cmux new-workspace` / `close-workspace` are deprecated aliases** for
+   `cmux workspace create` / `close` (legacy form supported indefinitely; `CMUX_QUIET=1` silences
+   the notice). The script uses the legacy spelling, matching spec and plan text. BACKLOG candidate.
+
+## Contract facts frozen (Task 0 + verified live through Task 6)
+- `--command <text>` = cmux "send text+Enter after creation" → shell-typed (zsh); composed
+  successor cmd must be POSIX/zsh-safe.
+- Picker exports 4 vars every launch path: VERSION/LABEL/ARGS/APPEND_PROMPT. append-file exit-3 is
+  `--non-interactive`-only. `versions/<v>` = executable regular file.
 - Repo identity = `realpath(git rev-parse --git-common-dir)`, NOT `--show-toplevel`.
 - **Bash floor: construct floor 3.1 (`FORWARDED+=`), verified floor 3.2.57.** Task 9 documents ≥ 3.2.
-- Composed flag order (spec.md:157, verified exact): `claude-picker --non-interactive --pick-version <v> --telemetry <on|off> [--session-label <l>] <forwarded args> "/pickup <id>"`.
+- Composed flag order (spec.md:157, verified exact):
+  `claude-picker --non-interactive --pick-version <v> --telemetry <on|off> [--session-label <l>] <forwarded args> "/pickup <id>"`.
+- **`cmux new-workspace` prints `OK <ref>` on stdout** (e.g. `OK workspace:6`), LF-terminated,
+  rc 0 — verified live three times. Parsed with `awk '/^OK[ \t]/{print $2; exit}'`.
+  Do NOT parse with `while read`: it drops a final line lacking a trailing newline, which would
+  silently degrade every real spawn to `(spawned)` while echo-based test stubs stayed green.
 
 ## Plan-defect ledger (the plan is NOT fully trustworthy as written)
-Three confirmed defects, all empirically proven by reviewers, all still present in `module-1-spawn-script.md`:
-- **Task 3 Step 2 timeout snippet** — command-substitution + background watcher stalls the FULL timeout on the SUCCESS path. Shipped code uses `mktemp` + `wait`.
-- **Task 3 Step 2 tool resolution** — the plan's line makes its own Step 1 tests impossible to pass. Shipped code adds a default-only `command -v` fallback.
+Four confirmed defects, all empirically proven, all still present in `module-1-spawn-script.md`:
+- **Task 3 Step 2 timeout snippet** — command-substitution + background watcher stalls the FULL
+  timeout on the SUCCESS path. Shipped code uses `mktemp` + `wait`.
+- **Task 3 Step 2 tool resolution** — the plan's line makes its own Step 1 tests impossible to pass.
 - **Task 4 "Bash version caveat"** — says ≥ 4.x; actual floor is 3.2.
+- **Task 6 Step 2 ordering defect (NEW)** — generated `SPAWN_ID` *after* the compose block, so the
+  composed fallback tail baked in the literal word `spawn` where §5.4d requires the uuid. Shipped
+  code generates it once *before* composition and threads it through all four records.
+  (Task 5's fence was correct as written — the ledger is defects, not a per-task tally.)
 
-**Task 5 broke the streak** — its Step-2 fence was correct as written and adopted verbatim (spec reviewer re-derived and executed it). So the ledger stays at 3, not 4. **But see ⚠ #1: Task 6's plan text has a fourth, different kind of defect — an ordering defect, not a syntax one.**
-
-➡ **Treat plan code fences as drafts to verify, not gospel.** Have implementers prove the fence works before adopting it.
+➡ **Treat plan code fences as drafts to verify, not gospel.** Have implementers prove the fence
+works by EXECUTING it before adopting it.
 
 ## Process gotchas for the resuming controller (NOT re-derivable from deviations.md)
-1. **Report field rule**: `tests.passing` ≤ `tests.written`, **per-task** counts, not the cumulative file total. Bake into every implementer prompt.
-2. **The plan's Step-3 `-k` filters are contaminated.** Task 5's `-k "auto or picker_manual or contract or codec"` also selects the pre-existing `test_fixtures_shape_matches_contract` (substring `contract`). Check any `-k` the plan gives you with `--collect-only -q` before letting an implementer derive counts from it.
-3. **Mutation-test the assertions, don't just read them.** This is what caught the two real gaps in Task 5: the plan's own compose assertion passes with `shq()` replaced by an identity function, and the entire picker-manual composed command could be replaced with `"TOTALLY-BROKEN"` with 41/41 still green. Ask implementers to prove a new test FAILS when the behavior is broken.
-4. **Environment .py file-watcher** cosmetically line-wraps test files post-write — benign; verify tests pass + committed content faithful.
-5. **The ambient env is picker-populated.** The autouse `_hermetic_picker_env` fixture (Task 4) is **load-bearing** — do not remove or narrow it.
-6. **Tick the plan checkboxes before running the next checkpoint.** A missed tick FAILed the Task-4 checkpoint.
-7. **Advisor tool ↔ background subagents:** an earlier session died to an unrecoverable API 400 (orphaned `advisor_tool_result`) when an advisor call was in flight as a background agent completed. **Never call advisor while any subagent is live** — only in the quiet gap between a completed review and the next dispatch.
-8. **Do NOT add `set -u`** to `spawn-handoff-session.sh`. `${FORWARDED[*]}` on an empty array raises `unbound variable` under `set -u` on bash 3.2 while passing on 4.4+. Silent breakage on the supported floor.
-9. **Disposition deviations before dispatching.** The pre-dispatch hook hard-blocks on any `| Pending |` row. Log concerns after a task, then disposition them once its reviews land — otherwise the next dispatch is blocked.
+1. **Report field rule**: `tests.written`/`tests.passing` are **per-task/per-round** counts, and
+   `passing` ≤ `written`. Bake into every implementer prompt. Also: one subagent returned
+   `tests.written` as a **list of test names** — the strict Pydantic model requires an **int**, so
+   normalize before saving or `validate-report.py` fails and blocks the next dispatch.
+2. **Check any `-k` filter with `--collect-only -q`** before letting an implementer derive counts —
+   the plan's filters have been substring-contaminated before.
+3. **Environment `.py` file-watcher** cosmetically line-wraps test files post-write — benign.
+4. **The ambient env is picker-populated.** The autouse `_hermetic_picker_env` fixture is
+   **load-bearing** — do not remove or narrow it.
+5. **Tick plan checkboxes before running the next checkpoint.** A missed tick FAILed Task 4's.
+6. **Advisor tool ↔ background subagents:** never call advisor while any subagent is live — an
+   earlier session died to an unrecoverable API 400 (orphaned `advisor_tool_result`).
+7. **Do NOT add `set -u`** to `spawn-handoff-session.sh` (`${FORWARDED[*]}` on an empty array
+   raises `unbound variable` on bash 3.2 while passing on 4.4+).
+8. **Disposition deviations before dispatching.** The pre-dispatch hook hard-blocks on any
+   `| Pending |` row.
+9. **Reviewer dispatches died twice to transient API server errors** mid-response (~110–130k
+   subagent tokens each, no usable output). Recovery that worked: `SendMessage` to resume the dead
+   agent from its transcript **with a hard output budget** (~800–1200 words) — a blind retry is
+   likely to fail the same way. Give every reviewer an explicit output budget up front.
+10. **`tests/unit/spawn_handoff_helpers.py` is READ-ONLY for Tasks 1–6** per the Write-Scope table
+    — which CONTRADICTS an older carry-forward note saying Task 6 "MAY modify" it. The plan won.
+    New stub behavior goes through the existing `cmux_body=` / `picker_body=` / `env_extra=` knobs.
 
-## Enforcement scaffolding (all satisfied through Task 5)
-Manifest `.sdd-session.json` (gitignored, on disk): standard tier, active_module_id 1, task_range [0,6], midpoint 3. Per-task: `checkpoint-pre-dispatch-NNN.json` + `partner-review-NNN.md` (Task 0 exempt) + spec + quality reviews, all dispatched (provenance in `reports/.dispatch-log`). Tasks 3 and 5 also have `task-00N-quality-review-fix.md` (fix rounds); Task 5's quality-review file carries the **re-review PASS** appended at the bottom. Pre-execution-audit.md present (ORDERS_ISSUED → both RESOLVED). **Checkpoint 006 PASS**, 0 pending deviations.
+## ⚠ OUTSTANDING: the Module-1 test-debt sweep was NOT done
+Module 1 closed with its plan tasks complete and every debt item **formally dispositioned**, but
+the sweep itself is still owed. It lives in `deviations.md` → "Deferred Work" → "Task 6 test-debt
+sweep". Highlights: two env-validation regression tests; the Task-4 cleanup trio (`max(0,…)` label
+slice, surrogate `try`-wrap); six Task-5 mutation-proven gaps (three of which need a new harness
+knob in the read-only helper); the unchecked reservation writes (`:422-423`); the untested
+mktemp-failure branch; NM4 (failure-branch notify unasserted); NM5 (accepted, no test).
+**Decide deliberately** whether to run it as a bounded round before Task 7 or fold it into Module 2
+— do not let it evaporate.
+
+## Enforcement scaffolding (all satisfied through Task 6)
+Manifest `.sdd-session.json`: standard tier, **active_module_id 2**, `context_summary_at` **8**.
+Per-task: `checkpoint-pre-dispatch-NNN.json` + `partner-review-NNN.md` (Task 0 exempt) + spec +
+quality reviews, all dispatched (provenance in `reports/.dispatch-log`, archived at transition).
+Task 6 additionally has `task-006-implementer-report-fix.md`, `-fix2.md`, and both re-reviews
+appended to the bottom of its spec and quality review files. Pre-execution-audit present.
+**0 pending deviations.**
