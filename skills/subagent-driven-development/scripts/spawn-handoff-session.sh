@@ -18,7 +18,16 @@ PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
 [ -x "$PYTHON" ] || PYTHON="python3"   # this script needs only json/base64 stdlib
 
 MAX_HOPS="${SUPERPOWERS_CMUX_MAX_HOPS:-3}"
-QUOTA_MIN_PCT="${SUPERPOWERS_CMUX_QUOTA_MIN_PCT:-15}"
+# Percent threshold; may legitimately be fractional (e.g. 12.5). Validated because
+# it is interpolated into an awk program below — an unvalidated value is code
+# injection. Invalid input warns and reverts to the default (never exits: the
+# quota check's contract is fail-open).
+QUOTA_MIN_PCT_DEFAULT=15
+QUOTA_MIN_PCT="${SUPERPOWERS_CMUX_QUOTA_MIN_PCT:-$QUOTA_MIN_PCT_DEFAULT}"
+if ! [[ "$QUOTA_MIN_PCT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_QUOTA_MIN_PCT ($QUOTA_MIN_PCT) — reverting to default $QUOTA_MIN_PCT_DEFAULT." >&2
+  QUOTA_MIN_PCT="$QUOTA_MIN_PCT_DEFAULT"
+fi
 BUNDLES_DIR="$HOME/.claude-codex-handoff/bundles"
 QUOTA_TOOL_DEFAULT="$HOME/.claude/bin/claude-usage-pace"
 EXPECTED_BUNDLE_TYPE="work"
@@ -136,7 +145,16 @@ QUOTA_TOOL="${SUPERPOWERS_CMUX_QUOTA_TOOL:-$QUOTA_TOOL_DEFAULT}"
 if [ -z "$SUPERPOWERS_CMUX_QUOTA_TOOL" ] && [ ! -x "$QUOTA_TOOL" ]; then
   QUOTA_TOOL="$(command -v claude-usage-pace 2>/dev/null)"
 fi
-QUOTA_TIMEOUT="${SUPERPOWERS_CMUX_QUOTA_TIMEOUT:-60}"
+# Watchdog bound passed to `sleep`. Integer-only: POSIX `sleep` guarantees only
+# an integer operand, and a coarse watchdog has no use for sub-second precision.
+# Unvalidated, a typo made `sleep` fail instantly — the watcher killed the tool
+# immediately and the quota gate went permanently inert with no diagnostic.
+QUOTA_TIMEOUT_DEFAULT=60
+QUOTA_TIMEOUT="${SUPERPOWERS_CMUX_QUOTA_TIMEOUT:-$QUOTA_TIMEOUT_DEFAULT}"
+if ! [[ "$QUOTA_TIMEOUT" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_QUOTA_TIMEOUT ($QUOTA_TIMEOUT) — reverting to default $QUOTA_TIMEOUT_DEFAULT." >&2
+  QUOTA_TIMEOUT="$QUOTA_TIMEOUT_DEFAULT"
+fi
 QUOTA_STATUS="unchecked"
 check_quota() {
   # Emits ok:<pct> | low:<pct> | unchecked  (never fails the caller).

@@ -200,3 +200,50 @@ def test_quota_ok_proceeds(tmp_path):
     _spawnable(tmp_path, ctx)
     r = run_spawn(ctx, tmp_path, "b1", "--dry-run", pace_body=PACE_OK)
     assert r.returncode == 0 and "quota=ok" in (r.stdout + r.stderr)
+
+
+def test_quota_threshold_reads_env_not_hardcoded_default(tmp_path):
+    # Shared-constant guard: the healthy PACE_OK reading (63.0%) may only classify
+    # `low` if $QUOTA_MIN_PCT is genuinely consulted. A hardcoded 15 passes every
+    # other quota test in this file but fails this one.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        pace_body=PACE_OK,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_MIN_PCT": "70"},
+    )
+    assert r.returncode == 3 and "quota=low" in (r.stdout + r.stderr).lower()
+
+
+def test_quota_threshold_boundary_is_strict_less_than(tmp_path):
+    # pct == threshold is NOT low (the comparison is strict `<`).
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        pace_body=PACE_OK,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_MIN_PCT": "63"},
+    )
+    assert r.returncode == 0 and "quota=ok" in (r.stdout + r.stderr)
+
+
+def test_quota_tool_timeout_proceeds(tmp_path):
+    # Timeout class: the watchdog kills a hung tool, rc != 0 => fail-open.
+    # Bounded at 1s deliberately — this must never approach a CI stall.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        pace_body="exec sleep 20",
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_TIMEOUT": "1"},
+    )
+    assert r.returncode == 0 and "quota=unchecked" in (r.stdout + r.stderr)
