@@ -44,6 +44,22 @@ Cross-repo scope discipline (Decision 19 — no repo-1/repo-2 file writes; repo-
 - Module 1 Task 1's precondition order runs the `.active-feature`-missing check before clean-tree, while the terse Contract Facts bullet lists clean-tree first — internally consistent with Module 1's Acceptance Criteria; a one-line note would clarify.
 - The "picker-sanitizer-stable" label round-trip can't be verified until repo-1 lands; already gated by Task 0's cross-repo dependency check. Double-check repo-1's actual sanitizer regex matches `[^A-Za-z0-9_.-]` once it lands.
 
+## Post-approval reconciliation — claude-picker as-built deviations (2026-07-23)
+
+After initial approval, the claude-picker implementer reported (and I verified against `telemetry-exp/launchers/claude-picker` v1, commits `f0ccba9`/`03795e3`/`dfca453`) two real deviations between the plan's picker assumptions and the as-built contract:
+
+**Deviation 1 (material) — 4th export must be consumed.** The picker exports `CLAUDE_CODE_PICKER_APPEND_PROMPT` (base64 of the `--append-system-prompt-file` *contents*) — the designed remedy for a dead/temp append path. The plan forwarded only the *path* (via `ARGS`), so a spawned successor could fail-loud (`exit 3`, non-interactive-only) or lose the append-prompt.
+- **Fix:** Task 4's decode now reads the export from env and, when present, base64-decodes the content to a stable absolute file outside any repo (`~/.claude-codex-handoff/append-prompts/<bundle>-hop<N>.md`) and **substitutes** that path into the forwarded `--append-system-prompt-file` (both `--flag value` and `--flag=value` forms; prefer-content; empty-but-flag-present keeps the path; decode/rematerialize failure → `picker-manual`). Guarded so `--dry-run` substitutes-but-doesn't-write. Tests: parametrized substitution (both flag forms), empty-keeps-path (Task 4), real-spawn file-write byte-exact (Task 6).
+- Three precisions encoded: exit-3 is `--non-interactive`-only (Task 5 note); the two failure modes (temp-gone absolute vs CWD-relative); content-over-path.
+
+**Deviation 2 (trivial).** `versions/<v>` are executable files (`find -type f -perm -u+x`). Fixed: `install_version` fixture creates an executable file; preflight tightened `-e` → `-f && -x`.
+
+Also confirmed **not** a deviation: telemetry detection — `telemetry-vars.sh` exports `CLAUDE_CODE_ENABLE_TELEMETRY=1` on the ON path (a `CLAUDE_CODE_*` var, inherited), so the plan's `==1 ⇒ on / absent ⇒ off` holds.
+
+**Reviewer re-verdict on the delta: APPROVED.** Verified every changed block against source; confirmed Decision 12 ("successor runs the same `--append-system-prompt-file`") is satisfied across BOTH failure modes; no eval/injection (target path = charset-validated `BUNDLE_ID` + integer hop, shlex-quoted; content decoded to a data file, never executed); correct degradation on all failure paths. One non-blocking advisory (test the `=`-joined form) — **applied** (the substitution test is now parametrized over both forms).
+
+Parent plan Contract Constraints + Shared Contract Section updated to the 4-export contract. Codex-picker parity → codex-side auto-spawn recorded as **BACKLOG N51** (separate future feature; explicitly out of this plan per Decision 19).
+
 ## Automated validation
 
-`validate-plan.py`: all three files PASS (WARNING-only; zero FAIL/blockers). All tasks ≤200 lines. `validators.py plan` (Pydantic): parent frontmatter valid (exit 0).
+`validate-plan.py`: all three files WARNING-only (zero FAIL/blockers). All tasks ≤200 lines. `validators.py plan` (Pydantic): parent frontmatter valid (exit 0).

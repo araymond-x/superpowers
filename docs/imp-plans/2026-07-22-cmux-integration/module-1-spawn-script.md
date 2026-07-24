@@ -156,9 +156,12 @@ def install_bundle(tmp_path, bundle_id, manifest_src, repo_id):
 
 
 def install_version(tmp_path, version):
-    v = tmp_path / "home" / ".local" / "share" / "claude" / "versions" / version
-    v.mkdir(parents=True, exist_ok=True)
-    (v / "bin").write_text("")
+    # Version MUST be an executable regular file (picker: `find -type f -perm -u+x`).
+    vdir = tmp_path / "home" / ".local" / "share" / "claude" / "versions"
+    vdir.mkdir(parents=True, exist_ok=True)
+    binf = vdir / version
+    binf.write_text("#!/bin/sh\n")
+    os.chmod(binf, 0o755)
 
 
 def run_spawn(ctx, tmp_path, *args, env_extra=None, in_cmux=True,
@@ -207,6 +210,14 @@ CMUX_NEW_WORKSPACE_FLAGS = ["--name", "--cwd", "--command", "--focus"]
 CMUX_NOTIFY_FLAGS = ["--title", "--body"]
 PICKER_CONTRACT_VERSION = "1"
 
+# claude-picker exports FOUR forwarding vars on EVERY launch path (verified vs
+# telemetry-exp launchers/claude-picker v1). The 4th (APPEND_PROMPT = base64 of
+# the --append-system-prompt-file CONTENTS) is the designed remedy for a dead/temp
+# append path and MUST be consumed (decode->rematerialize->substitute; Task 4).
+# Telemetry-on = inherited CLAUDE_CODE_ENABLE_TELEMETRY=1 (via telemetry-vars.sh).
+PICKER_EXPORTS = ["CLAUDE_CODE_PICKER_VERSION", "CLAUDE_CODE_PICKER_LABEL",
+                  "CLAUDE_CODE_PICKER_ARGS", "CLAUDE_CODE_PICKER_APPEND_PROMPT"]
+
 
 def test_fixtures_shape_matches_contract():
     valid = json.loads((FIX / "valid-manifest.json").read_text())
@@ -217,11 +228,12 @@ def test_fixtures_shape_matches_contract():
     assert json.loads((FIX / "wrong-skill-manifest.json").read_text())["session"]["entry_skill"] != \
         "superpowers:subagent-driven-development"
     assert json.loads((FIX / "foreign-repo-manifest.json").read_text())["project"]["repo_id"] == "/some/other/repo/.git"
+    assert "CLAUDE_CODE_PICKER_APPEND_PROMPT" in PICKER_EXPORTS  # 4th export is consumed (Task 4)
 ```
 
 - [ ] **Step 5: Verify plan snippets against source.**
 
-Confirm the parent plan's cmux argv surface (`new-workspace --name/--cwd/--command/--focus`, `notify --title/--body`) and picker contract (`--handoff-contract`→`1`) against the live `--help` captured in Step 1. Any flag-name difference → report `DONE_WITH_CONCERNS` (later exact-argv assertions depend on these).
+Confirm the parent plan's cmux argv surface (`new-workspace --name/--cwd/--command/--focus`, `notify --title/--body`) and picker contract against the live sources: `claude-picker --handoff-contract`→`1`; the **four** exports in `_set_picker_env` (read `telemetry-exp/launchers/claude-picker` — `VERSION`, `LABEL`, `ARGS`, `APPEND_PROMPT`); the append-file exit-3 is `--non-interactive`-only; and `versions/<v>` is an executable file (`find -type f -perm -u+x`). Any difference → report `DONE_WITH_CONCERNS` (the launch-composition tasks depend on these).
 
 - [ ] **Step 6: Run and verify.**
 
@@ -650,11 +662,12 @@ Append to `test_spawn_handoff.py`:
 from spawn_handoff_helpers import encode_args, install_version
 
 
-def _meta(version="2.1.218", args_b64=None, label="Proj-Session-2", telem="1"):
+def _meta(version="2.1.218", args_b64=None, label="Proj-Session-2", telem="1", append_b64=None):
     e = {"CLAUDE_CODE_PICKER_VERSION": version}
     if args_b64 is not None: e["CLAUDE_CODE_PICKER_ARGS"] = args_b64
     if label is not None: e["CLAUDE_CODE_PICKER_LABEL"] = label
     if telem is not None: e["CLAUDE_CODE_ENABLE_TELEMETRY"] = telem
+    if append_b64 is not None: e["CLAUDE_CODE_PICKER_APPEND_PROMPT"] = append_b64
     return e
 
 
@@ -701,6 +714,29 @@ def test_label_255_boundary(tmp_path):
     import re
     m = re.search(r"label=\[([^\]]*)\]", r.stdout + r.stderr)
     assert m and len(m.group(1)) <= 255 and m.group(1).endswith("-Session-2")
+
+
+@pytest.mark.parametrize("argv", [
+    ["--append-system-prompt-file", "/tmp/gone-temp.md"],   # space form
+    ["--append-system-prompt-file=/tmp/gone-temp.md"],      # =-joined form
+])
+def test_append_prompt_substituted_in_forwarded(tmp_path, argv):
+    # APPEND_PROMPT content present -> dead path substituted with rematerialized path.
+    import base64
+    ctx = setup_worktree(tmp_path); _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    env = _meta(args_b64=encode_args(argv), append_b64=base64.b64encode(b"prompt body").decode())
+    out = (lambda r: r.stdout + r.stderr)(run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env))
+    assert "/tmp/gone-temp.md" not in out and "append-prompts/b1-hop1.md" in out
+
+
+def test_append_prompt_empty_keeps_original_path(tmp_path):
+    # Empty-but-flag-present (APPEND_PROMPT absent): cannot rematerialize -> keep path.
+    ctx = setup_worktree(tmp_path); _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    env = _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/orig.md"]))  # no APPEND_PROMPT
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    assert "/tmp/orig.md" in (r.stdout + r.stderr)
 ```
 
 Run → FAIL (no composition block yet).
@@ -719,17 +755,25 @@ if [ -n "${CLAUDE_CODE_PICKER_ARGS:-}" ]; then
   case "${CLAUDE_CODE_PICKER_ARGS}" in v1:*) : ;; *) ARGS_OK=0 ;; esac
 fi
 
-# Decode forwarded argv (v1 codec, NO eval). Absent => empty argv (ARGS_OK stays 1).
-# A v1:-prefixed but CORRUPT body => decode FAILS => ARGS_OK=0 (degrades to
-# picker-manual). It must NEVER silently drop the forwarded args on the auto path
-# (spec auto-preflight: "ARGS v1-decodes OR absent" — "decodes" means succeeds).
-# Each element is NUL-*terminated* (not NUL-joined) so `read -d ''` keeps the last one.
+# Decode forwarded argv (v1 codec, NO eval) + rematerialize the append-prompt.
+# Absent ARGS => empty argv (ARGS_OK stays 1). Corrupt v1 body OR failed
+# rematerialization => ARGS_OK=0 (degrade to picker-manual); never a silent
+# arg-drop on auto. CLAUDE_CODE_PICKER_APPEND_PROMPT (base64 of the append-prompt
+# CONTENTS) is the designed remedy for a dead append path (temp gone for an
+# ABSOLUTE menu path, or a CWD-relative passthrough path). Prefer content: decode
+# to a stable absolute file OUTSIDE any repo and SUBSTITUTE it into the forwarded
+# --append-system-prompt-file value. Empty-but-flag-present => keep the path.
+# Each element is NUL-*terminated* so `read -d ''` keeps the last.
 FORWARDED=()
+APPEND_TARGET_DIR="$HOME/.claude-codex-handoff/append-prompts"
+APPEND_TARGET="$APPEND_TARGET_DIR/${BUNDLE_ID}-hop${SP_HOP}.md"
 if [ "$ARGS_OK" = "1" ] && [ -n "${CLAUDE_CODE_PICKER_ARGS:-}" ]; then
+  [ "$DRY_RUN" = "1" ] || mkdir -p "$APPEND_TARGET_DIR"
   DECODE_TMP="$(mktemp)"
-  "$PYTHON" - "${CLAUDE_CODE_PICKER_ARGS}" "$DECODE_TMP" <<'PY'
-import base64, json, sys
-raw, out = sys.argv[1], sys.argv[2]
+  APPEND_TARGET="$APPEND_TARGET" SPAWN_DRY_RUN="$DRY_RUN" "$PYTHON" - "$DECODE_TMP" <<'PY'
+import base64, json, os, sys
+out = sys.argv[1]
+raw = os.environ.get("CLAUDE_CODE_PICKER_ARGS", "")   # read from env (no ARG_MAX limit)
 try:
     argv = json.loads(base64.b64decode(raw[3:]).decode())
     assert isinstance(argv, list) and all(isinstance(x, str) for x in argv)
@@ -737,11 +781,27 @@ except Exception:
     sys.exit(3)                       # decode failure -> caller sets ARGS_OK=0
 if argv and argv[-1].startswith("/pickup"):
     argv = argv[:-1]                  # hop-recursion strip guard
+ap_b64 = os.environ.get("CLAUDE_CODE_PICKER_APPEND_PROMPT", "")
+if ap_b64:                            # prefer content: rematerialize + substitute
+    target = os.environ["APPEND_TARGET"]
+    if os.environ.get("SPAWN_DRY_RUN") != "1":
+        try:
+            with open(target, "wb") as f:
+                f.write(base64.b64decode(ap_b64))
+        except Exception:
+            sys.exit(4)               # rematerialization failed -> ARGS_OK=0
+    i = 0                             # substitute both `--flag value` and `--flag=value`
+    while i < len(argv):
+        if argv[i] == "--append-system-prompt-file" and i + 1 < len(argv):
+            argv[i+1] = target; i += 2; continue
+        if argv[i].startswith("--append-system-prompt-file="):
+            argv[i] = "--append-system-prompt-file=" + target
+        i += 1
 with open(out, "wb") as f:
     f.write(b"".join(x.encode() + b"\0" for x in argv))   # each element NUL-terminated
 PY
   if [ $? -ne 0 ]; then
-    ARGS_OK=0                         # corrupt v1 body: metadata unusable
+    ARGS_OK=0                         # corrupt body or rematerialization failure
   else
     while IFS= read -r -d '' tok; do FORWARDED+=("$tok"); done < "$DECODE_TMP"
   fi
@@ -854,7 +914,9 @@ LAUNCH_MODE="picker-manual"
 preflight_ok() {
   [ -n "${CLAUDE_CODE_PICKER_VERSION:-}" ] || return 1
   [ "$ARGS_OK" = "1" ] || return 1
-  [ -e "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ] || return 1
+  # Match the picker's own version discovery predicate (`find -type f -perm -u+x`),
+  # not a lenient `-e` — otherwise preflight can pass a version the picker rejects.
+  { [ -f "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ] && [ -x "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ]; } || return 1
   command -v claude-picker >/dev/null 2>&1 || return 1
   [ "$(claude-picker --handoff-contract 2>/dev/null)" = "$PICKER_CONTRACT" ] || return 1
   return 0
@@ -884,6 +946,8 @@ echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 ```
 
 > **Note:** `$SP_HOP` is expanded at compose time (defined in Task 2 after the hop-limit check), so the workspace's runtime fallback logs the concrete hop number. Only the literal `runtime-picker-failure` token is asserted by tests.
+>
+> **Precision (append-file exit-3 is non-interactive-only):** the picker validates `--append-system-prompt-file` readability and exits 3 **only under `--non-interactive`**. So the auto command's residual `|| { … }` reliably catches a still-dead append path — but *only because the auto path launches non-interactively*. The `picker-manual` branch launches the picker **interactively**, where a dead passthrough path is NOT validated (it flows straight to `claude`). Acceptable: Task 4's substitution already rematerialized the file for the auto path, and the interactive branch is an attended fallback the user completes.
 
 - [ ] **Step 3: Run tests → pass.**
 
@@ -966,6 +1030,22 @@ def test_picker_manual_spawn_uses_interactive_command(tmp_path):
     assert r.returncode == 0
     logged = (tmp_path / "cmux.log").read_text()
     assert "new-workspace" in logged and "--non-interactive" not in logged and "/pickup b1" in logged
+
+
+def test_append_prompt_file_written_on_real_spawn(tmp_path):
+    # On a real (non-dry-run) spawn, the append-prompt CONTENT is rematerialized
+    # to the stable path and the forwarded --append-system-prompt-file points at it.
+    import base64
+    ctx = setup_worktree(tmp_path); _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    content = b"# forwarded system prompt\nBe concise.\n"
+    env = _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/gone.md"]),
+                append_b64=base64.b64encode(content).decode())
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 0
+    target = tmp_path / "home" / ".claude-codex-handoff" / "append-prompts" / "b1-hop1.md"
+    assert target.read_bytes() == content
+    assert "append-prompts/b1-hop1.md" in (tmp_path / "cmux.log").read_text()
 ```
 
 Run → FAIL (skeleton still exits before the spawn sequence).

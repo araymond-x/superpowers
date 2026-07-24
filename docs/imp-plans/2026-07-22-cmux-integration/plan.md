@@ -103,8 +103,11 @@ _Coordination document — Source Contracts is "None" at the parent level so the
 **Contract Constraints (non-negotiable):**
 - `--handoff-contract` must print the string `1` **exactly** — auto preflight fails on any other value (a future v2 must degrade to picker-manual, not pass). Compare with string equality after trimming, not `-ge`.
 - Repo identity match is **worktree-invariant**: `active_id = realpath(git rev-parse --git-common-dir)` at the worktree root must equal the bundle manifest's `project.repo_id`. (This mirrors the pickup guard's `repo_identity()` exactly — do not reinvent with `--show-toplevel`, whose basename differs per worktree.)
-- `CLAUDE_CODE_PICKER_ARGS` is decoded **without eval**: strip the `v1:` prefix, base64-decode, `json.loads` into a list of strings via python3 stdlib. Absent ⇒ empty argv.
-- `CLAUDE_CODE_ENABLE_TELEMETRY==1` ⇒ `--telemetry on`; **absent** ⇒ `--telemetry off` (never blocks auto).
+- `CLAUDE_CODE_PICKER_ARGS` is decoded **without eval**: strip the `v1:` prefix, base64-decode, `json.loads` into a list of strings via python3 stdlib. Absent ⇒ empty argv. A `v1:`-prefixed-but-corrupt body ⇒ decode failure ⇒ metadata unusable (degrade to picker-manual), never a silent arg-drop.
+- **`CLAUDE_CODE_PICKER_APPEND_PROMPT`** (4th export; base64 of the `--append-system-prompt-file` **contents**) is the picker's designed remedy for a dead/temp append path and **must be consumed**: when non-empty, decode it to a stable absolute file outside any repo and **substitute** that path into the forwarded `--append-system-prompt-file` value (prefer content over path). Empty-but-flag-present ⇒ keep the original path (best effort). The picker keeps passthrough verbatim; rewriting the arg is the consumer's job by design.
+- The picker's `--append-system-prompt-file` readability check **exits 3 only under `--non-interactive`** — so the auto command's residual fallback catches a dead path, but the interactive `picker-manual` branch does not validate it (attended fallback).
+- `CLAUDE_CODE_ENABLE_TELEMETRY==1` ⇒ `--telemetry on`; **absent** ⇒ `--telemetry off` (never blocks auto). It is set indirectly via `telemetry-vars.sh` on the picker's telemetry-ON path and inherited into the session env (a `CLAUDE_CODE_*` var, so it survives Claude Code's subprocess env filter).
+- Picker version discovery uses `find -type f -perm -u+x`, so `versions/<v>` is an **executable regular file** — the auto preflight asserts `-f` AND `-x` (not a lenient `-e`).
 - Quota is **fail-open**: tool absent / non-zero / 60s timeout / unparseable / window-or-field missing / non-numeric ⇒ proceed with `quota=unchecked`. Only a parsed numeric `< SUPERPOWERS_CMUX_QUOTA_MIN_PCT` refuses (exit 3).
 - Reservation (hop increment + `intent` log line) happens **before** `cmux new-workspace`. Post-spawn failures are non-retryable (warn, still exit 0). A spawn failure after reservation keeps the hop consumed and exits 3.
 - Label ceiling is 255: reserve `len(suffix)` before truncating the base, then concatenate (round-trip must be picker-sanitizer-stable).
@@ -175,6 +178,7 @@ This plan is the **last** of three ordered repo-local deliverables. Execution of
 All three modules share the same external contracts, verified once in **Task 0** and consumed thereafter:
 
 - **Picker contract probe:** `claude-picker --handoff-contract` → stdout `1`, exit 0.
+- **Picker exports (4, every launch path)** — verified against `telemetry-exp launchers/claude-picker` contract v1 (commits `f0ccba9`/`03795e3`/`dfca453`): `CLAUDE_CODE_PICKER_VERSION`, `CLAUDE_CODE_PICKER_LABEL`, `CLAUDE_CODE_PICKER_ARGS` (v1 codec), `CLAUDE_CODE_PICKER_APPEND_PROMPT` (base64 of the append-prompt file contents — **consumed** per Contract Constraints). Telemetry-on inferred from inherited `CLAUDE_CODE_ENABLE_TELEMETRY=1`.
 - **cmux CLI argv** (frozen from live `cmux --help` in Task 0): `new-workspace --name/--cwd/--command/--focus`, `notify --title/--body`, `ping`.
 - **Bundle manifest fields:** `session.bundle_type`, `session.entry_skill`, `project.repo_id`.
 - **Quota field:** `windows[key=="session"].remaining_pct`.
