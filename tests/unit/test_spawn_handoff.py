@@ -1005,10 +1005,14 @@ def test_picker_absent_degrades_to_picker_manual(tmp_path):
 
 def test_non_executable_version_degrades_to_picker_manual(tmp_path):
     # The preflight deliberately matches the picker's own discovery predicate
-    # (`find -type f -perm -u+x`) rather than a lenient `-e`/`-f`. Only the `-f`
-    # half was covered (via a version name with no file at all), so weakening the
-    # predicate to a bare `[ -f … ]` would let preflight pass a version the picker
-    # will refuse to launch — a mismatched successor session.
+    # (`find -type f -perm -u+x`) rather than a lenient `-e`. Neither half of that
+    # `-f && -x` conjunction was individually covered: the one pre-existing param
+    # that reaches it (test_picker_manual_when_metadata_degraded's "9.9.9", a
+    # version name with no file at all) fails BOTH halves, so it pins the
+    # conjunction rather than either operand. This test isolates the `-x` half.
+    # The `-f` half stays unpinned — drop it and a version stored as a DIRECTORY
+    # (mode 0755, so `-x` passes) reports launch=auto for a path the picker's
+    # `-type f` scan will never find. Tracked as Task 8 Step 4b in module-2-protocol-e2e-docs.md.
     ctx = setup_worktree(tmp_path)
     env = _only_failing_predicate_is(tmp_path, ctx, executable=False)
     r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
