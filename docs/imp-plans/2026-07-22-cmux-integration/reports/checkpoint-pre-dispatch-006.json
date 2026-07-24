@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "phase": "pre-dispatch",
+  "status": "PASS",
+  "task_number": 6,
+  "checks": {
+    "previous_task_checkboxes": {
+      "status": "PASS",
+      "detail": "Task 5: 4/4 checked"
+    },
+    "previous_task_report": {
+      "status": "PASS",
+      "detail": "docs/imp-plans/2026-07-22-cmux-integration/reports/task-005-implementer-report.md exists"
+    },
+    "previous_report_complete": {
+      "status": "PASS",
+      "detail": "5/5 sections present"
+    },
+    "previous_spec_review": {
+      "status": "PASS",
+      "detail": "reports/task-005-spec-review exists"
+    },
+    "previous_quality_review": {
+      "status": "PASS",
+      "detail": "reports/task-005-quality-review exists"
+    },
+    "pending_deviations": {
+      "status": "PASS",
+      "detail": "0 pending"
+    },
+    "context_load_estimate": {
+      "status": "OK",
+      "detail": "Accumulated files: ~125.1KB (~32,013 tokens, 8 file(s))"
+    }
+  },
+  "warnings": [],
+  "blockers": [],
+  "progress": {
+    "tasks_total": 7,
+    "tasks_completed": 5,
+    "checkboxes_total": 38,
+    "checkboxes_checked": 27,
+    "percentage": 71
+  }
+}
