@@ -127,7 +127,57 @@ if [ "$HOPS" -ge "$MAX_HOPS" ]; then
   print_manual_instructions
   exit 3
 fi
-# (Task 3 inserts the quota check here.)
+# --- Precondition 5: quota (fail-open; parameters pinned in spec §5.3) ------
+# Tool resolution: an explicit SUPERPOWERS_CMUX_QUOTA_TOOL override is
+# authoritative — a bad override classifies `unchecked`, it never silently falls
+# back. Only the pinned default is allowed a PATH lookup, for installs where
+# ~/.claude/bin is absent (it is not on PATH by default).
+QUOTA_TOOL="${SUPERPOWERS_CMUX_QUOTA_TOOL:-$QUOTA_TOOL_DEFAULT}"
+if [ -z "$SUPERPOWERS_CMUX_QUOTA_TOOL" ] && [ ! -x "$QUOTA_TOOL" ]; then
+  QUOTA_TOOL="$(command -v claude-usage-pace 2>/dev/null)"
+fi
+QUOTA_TIMEOUT="${SUPERPOWERS_CMUX_QUOTA_TIMEOUT:-60}"
+QUOTA_STATUS="unchecked"
+check_quota() {
+  # Emits ok:<pct> | low:<pct> | unchecked  (never fails the caller).
+  if [ ! -x "$QUOTA_TOOL" ]; then echo "unchecked"; return 0; fi
+  local out rc pct tmpf pid watcher
+  # macOS has no `timeout`, so bound the tool with a background watcher. Capture
+  # through a temp FILE, not a pipe: the watcher's `sleep` (and any child the
+  # tool forks) inherits a command-substitution pipe and holds it open, stalling
+  # the read for the full timeout even on the success path.
+  tmpf="$(mktemp)" || { echo "unchecked"; return 0; }
+  "$QUOTA_TOOL" --json --no-log >"$tmpf" 2>/dev/null & pid=$!
+  ( sleep "$QUOTA_TIMEOUT"; kill -9 $pid 2>/dev/null ) >/dev/null 2>&1 & watcher=$!
+  wait $pid; rc=$?
+  kill $watcher 2>/dev/null
+  out="$(cat "$tmpf" 2>/dev/null)"; rm -f "$tmpf"
+  if [ $rc -ne 0 ]; then echo "unchecked"; return 0; fi
+  # $out is passed as sys.argv[1], never interpolated into the program text.
+  pct="$("$PYTHON" - "$out" <<'PY' 2>/dev/null
+import json,sys
+try:
+    d=json.loads(sys.argv[1])
+    w=[x for x in d.get("windows",[]) if x.get("key")=="session"]
+    print(float(w[0]["remaining_pct"]))
+except Exception:
+    sys.exit(1)
+PY
+)"
+  if [ -z "$pct" ]; then echo "unchecked"; return 0; fi
+  if awk "BEGIN{exit !($pct < $QUOTA_MIN_PCT)}"; then echo "low:$pct"; else echo "ok:$pct"; fi
+}
+QCLASS="$(check_quota)"
+case "$QCLASS" in
+  low:*)
+    QUOTA_STATUS="$QCLASS"
+    cmux notify --title "SDD handoff" --body "Session quota ${QCLASS#low:}% < ${QUOTA_MIN_PCT}% — manual resume" 2>/dev/null || true
+    echo "[spawn-handoff] quota=$QCLASS below threshold — manual fallback." >&2
+    print_manual_instructions
+    exit 3 ;;
+  ok:*) QUOTA_STATUS="$QCLASS"; echo "[spawn-handoff] quota=$QCLASS" >&2 ;;
+  *)    QUOTA_STATUS="unchecked"; echo "[spawn-handoff] quota=unchecked (fail-open)" >&2 ;;
+esac
 # (Tasks 4-5 insert launch composition here.)
 # (Task 6 inserts the spawn sequence + exit here.)
 echo "[spawn-handoff] basic preconditions passed (skeleton — later tasks complete the flow)" >&2

@@ -148,3 +148,55 @@ def test_hop_limit_exits_3(tmp_path):
     subprocess.run(["git", "commit", "-qm", "seed hops"], cwd=ctx["wt"], check=True)
     r = run_spawn(ctx, tmp_path, "b1")
     assert r.returncode == 3 and "hop" in (r.stdout + r.stderr).lower()
+
+
+from spawn_handoff_helpers import (
+    PACE_OK,
+    PACE_LOW,
+    PACE_MALFORMED,
+    PACE_MISSING_FIELD,
+    PACE_MISSING_WINDOW,
+    PACE_NONZERO,
+)
+
+
+def _spawnable(tmp_path, ctx):
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+
+
+def test_quota_low_exits_3(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", pace_body=PACE_LOW)
+    assert r.returncode == 3 and "quota" in (r.stdout + r.stderr).lower()
+
+
+@pytest.mark.parametrize(
+    "pace_body",
+    [PACE_MALFORMED, PACE_MISSING_FIELD, PACE_MISSING_WINDOW, PACE_NONZERO],
+)
+def test_quota_unchecked_classes_proceed(tmp_path, pace_body):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", pace_body=pace_body)
+    assert r.returncode == 0 and "quota=unchecked" in (r.stdout + r.stderr)
+
+
+def test_quota_tool_absent_proceeds(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_TOOL": str(tmp_path / "nope")},
+    )
+    assert r.returncode == 0 and "quota=unchecked" in (r.stdout + r.stderr)
+
+
+def test_quota_ok_proceeds(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", pace_body=PACE_OK)
+    assert r.returncode == 0 and "quota=ok" in (r.stdout + r.stderr)
