@@ -970,3 +970,130 @@ def test_spawn_failure_rc_survives_stdout_capture(tmp_path):
     assert r.returncode == 3
     assert _outcome_workspace(ctx) == "spawn-failed"
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+
+# --- Task 7 (Sweep A): zero-protection regression coverage --------------------
+# Four behaviors below were verified by executing them during Module 1 review but
+# had NO test: deleting the code left the 58-test suite green. Each test here is
+# mutation-proven (report records the mutation + observed RED).
+
+
+def _only_failing_predicate_is(tmp_path, ctx, **install_kwargs):
+    """Env where EVERY auto-preflight predicate holds except the one under test.
+
+    picker-manual is easy to reach by accident (any one missing predicate does it),
+    so an under-specified fixture makes these tests pass for the wrong reason.
+    """
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218", **install_kwargs)
+    return _meta(args_b64=encode_args([]))
+
+
+def test_picker_absent_degrades_to_picker_manual(tmp_path):
+    # spec §7 pins "picker missing -> launch=picker-manual". No test had ever run
+    # the script with claude-picker unresolvable, so the preflight's picker
+    # requirement could be dropped entirely with the suite green.
+    ctx = setup_worktree(tmp_path)
+    env = _only_failing_predicate_is(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env, picker_stub=False)
+    assert r.returncode == 0
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+    # Assert what the degraded branch COMPOSES, not just the mode label: the
+    # attended-picker command is the user-facing safety net.
+    assert _successor_cmd(r) == "claude-picker '/pickup b1'"
+
+
+def test_non_executable_version_degrades_to_picker_manual(tmp_path):
+    # The preflight deliberately matches the picker's own discovery predicate
+    # (`find -type f -perm -u+x`) rather than a lenient `-e`/`-f`. Only the `-f`
+    # half was covered (via a version name with no file at all), so weakening the
+    # predicate to a bare `[ -f … ]` would let preflight pass a version the picker
+    # will refuse to launch — a mismatched successor session.
+    ctx = setup_worktree(tmp_path)
+    env = _only_failing_predicate_is(tmp_path, ctx, executable=False)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    assert r.returncode == 0
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+    assert _successor_cmd(r) == "claude-picker '/pickup b1'"
+
+
+def test_telemetry_off_value_on_composed_command(tmp_path):
+    # The --telemetry flag PAIR is pinned by test_auto_mode_composes_exact_command,
+    # but every auto-path test inherits telem="1", so the `off` value was never
+    # asserted: hardcoding "on" in the composition passed the whole suite.
+    # Anchored on the composed command line — the Task-4 `telemetry=off` diagnostic
+    # echo would satisfy a stdout+stderr assertion without the composition running.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), telem=None),
+    )
+    assert "launch=auto" in (r.stdout + r.stderr)  # telemetry-off never blocks auto
+    cmd = _successor_cmd(r)
+    assert "--telemetry off" in cmd
+    assert "--telemetry on" not in cmd
+
+
+# --- Task 7: env-validation regressions (owed since the Task-3 fix round) -----
+# Both values are interpolated into other programs ($QUOTA_MIN_PCT into an awk
+# program, $QUOTA_TIMEOUT into `sleep`), and both guards revert to a default rather
+# than exiting — the quota gate's contract is fail-open. Deleting either regex
+# block left the suite green.
+
+QUOTA_WARN_PREFIX = "WARNING: invalid SUPERPOWERS_CMUX_QUOTA_"
+
+
+def _warning_lines(r, var):
+    """stderr lines that are the script's own invalid-env WARNING for `var`.
+
+    stderr only, and prefix-anchored: this script is chatty on stderr and a
+    substring search over stdout+stderr is satisfiable by unrelated diagnostics.
+    """
+    return [
+        ln
+        for ln in r.stderr.splitlines()
+        if ln.startswith(QUOTA_WARN_PREFIX + var)
+    ]
+
+
+def test_invalid_quota_min_pct_warns_and_reverts_to_default(tmp_path):
+    # Unvalidated, a non-numeric threshold reaches awk as an uninitialized
+    # variable (== 0), so NOTHING is ever below it and the refusal gate goes
+    # permanently inert. PACE_LOW (8.0%) is below the script's default, so `low`
+    # can only be reached if the revert actually happened.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        pace_body=PACE_LOW,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_MIN_PCT": "abc"},
+    )
+    assert _warning_lines(r, "MIN_PCT"), f"no MIN_PCT warning on stderr: {r.stderr!r}"
+    assert r.returncode == 3
+    assert "quota=low" in r.stderr
+
+
+def test_invalid_quota_timeout_warns_and_quota_gate_stays_live(tmp_path):
+    # Unvalidated, `sleep abc` fails instantly, the watchdog kills the tool at
+    # once, and every reading classifies `unchecked` — the gate is inert with no
+    # diagnostic. The 1s tool outlives that instant kill but finishes well inside
+    # the reverted default, so a live gate still reads the `low` value and refuses.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        pace_body="sleep 1; " + PACE_LOW,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_TIMEOUT": "abc"},
+    )
+    assert _warning_lines(r, "TIMEOUT"), f"no TIMEOUT warning on stderr: {r.stderr!r}"
+    assert r.returncode == 3
+    assert "quota=low" in r.stderr

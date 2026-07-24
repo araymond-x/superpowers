@@ -73,13 +73,36 @@ def install_bundle(tmp_path, bundle_id, manifest_src, repo_id):
     return bdir
 
 
-def install_version(tmp_path, version):
-    # Version MUST be an executable regular file (picker: `find -type f -perm -u+x`).
+def install_version(tmp_path, version, executable=True):
+    """Install a version binary the picker's discovery predicate would accept.
+
+    The picker finds versions with `find -type f -perm -u+x`, so a REAL version is
+    an executable regular file — hence the default. `executable=False` installs the
+    file without the u+x bit, which is the only way to exercise the `-x` half of the
+    script's preflight predicate independently of the `-f` half.
+    """
     vdir = tmp_path / "home" / ".local" / "share" / "claude" / "versions"
     vdir.mkdir(parents=True, exist_ok=True)
     binf = vdir / version
     binf.write_text("#!/bin/sh\n")
-    os.chmod(binf, 0o755)
+    os.chmod(binf, 0o755 if executable else 0o644)
+
+
+def _path_without(path, name):
+    """`path` with every entry that provides `name` removed.
+
+    Dropping the stub is not enough to make a tool absent: this developer's own
+    machine has a real `claude-picker` on PATH (~/.local/bin), and run_spawn copies
+    os.environ. Filtering by entry keeps git/awk/mktemp reachable while guaranteeing
+    the tool genuinely cannot be resolved. Self-validating in both directions: if
+    the filter missed a copy, the real picker answers the contract probe with `1`,
+    preflight passes, and the picker-absent test fails loudly on launch=auto.
+    """
+    return os.pathsep.join(
+        d
+        for d in path.split(os.pathsep)
+        if d and not os.path.exists(os.path.join(d, name))
+    )
 
 
 def run_spawn(
@@ -91,6 +114,7 @@ def run_spawn(
     pace_body=PACE_OK,
     picker_body=None,
     cmux_body=None,
+    picker_stub=True,
 ):
     stubs = tmp_path / "stubs"
     stubs.mkdir(exist_ok=True)
@@ -103,15 +127,21 @@ def run_spawn(
             'echo "$@" >> "$CMUX_LOG"; exit 0'
         ),
     )
-    make_stub(
-        stubs,
-        "claude-picker",
-        picker_body
-        or ('if [ "$1" = "--handoff-contract" ]; then echo 1; exit 0; fi\nexit 0'),
-    )
+    if picker_stub:
+        make_stub(
+            stubs,
+            "claude-picker",
+            picker_body
+            or ('if [ "$1" = "--handoff-contract" ]; then echo 1; exit 0; fi\nexit 0'),
+        )
+    else:
+        assert picker_body is None, "picker_body is meaningless with picker_stub=False"
     make_stub(stubs, "claude-usage-pace", pace_body)
     env = dict(os.environ)
-    env["PATH"] = f"{stubs}:{env['PATH']}"
+    base_path = env["PATH"]
+    if not picker_stub:
+        base_path = _path_without(base_path, "claude-picker")
+    env["PATH"] = f"{stubs}:{base_path}"
     env["HOME"] = str(tmp_path / "home")
     env["CMUX_LOG"] = str(tmp_path / "cmux.log")
     env["SUPERPOWERS_ROOT"] = str(ROOT)
