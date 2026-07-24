@@ -196,7 +196,89 @@ case "$QCLASS" in
   ok:*) QUOTA_STATUS="$QCLASS"; echo "[spawn-handoff] quota=$QCLASS" >&2 ;;
   *)    QUOTA_STATUS="unchecked"; echo "[spawn-handoff] quota=unchecked (fail-open)" >&2 ;;
 esac
-# (Tasks 4-5 insert launch composition here.)
+# --- Launch composition A: decode metadata, label, telemetry ---------------
+VERSIONS_DIR="$HOME/.local/share/claude/versions"
+
+# ARGS decodability flag (a non-v1 / corrupt value => metadata unusable).
+ARGS_OK=1
+if [ -n "${CLAUDE_CODE_PICKER_ARGS:-}" ]; then
+  case "${CLAUDE_CODE_PICKER_ARGS}" in v1:*) : ;; *) ARGS_OK=0 ;; esac
+fi
+
+# Decode forwarded argv (v1 codec, NO eval) + rematerialize the append-prompt.
+# Absent ARGS => empty argv (ARGS_OK stays 1). Corrupt v1 body OR failed
+# rematerialization => ARGS_OK=0 (degrade to picker-manual); never a silent
+# arg-drop on auto. CLAUDE_CODE_PICKER_APPEND_PROMPT (base64 of the append-prompt
+# CONTENTS) is the designed remedy for a dead append path (temp gone for an
+# ABSOLUTE menu path, or a CWD-relative passthrough path). Prefer content: decode
+# to a stable absolute file OUTSIDE any repo and SUBSTITUTE it into the forwarded
+# --append-system-prompt-file value. Empty-but-flag-present => keep the path.
+# Each element is NUL-*terminated* so `read -d ''` keeps the last.
+FORWARDED=()
+APPEND_TARGET_DIR="$HOME/.claude-codex-handoff/append-prompts"
+APPEND_TARGET="$APPEND_TARGET_DIR/${BUNDLE_ID}-hop${SP_HOP}.md"
+if [ "$ARGS_OK" = "1" ] && [ -n "${CLAUDE_CODE_PICKER_ARGS:-}" ]; then
+  [ "$DRY_RUN" = "1" ] || mkdir -p "$APPEND_TARGET_DIR"
+  DECODE_TMP="$(mktemp)"
+  APPEND_TARGET="$APPEND_TARGET" SPAWN_DRY_RUN="$DRY_RUN" "$PYTHON" - "$DECODE_TMP" <<'PY'
+import base64, json, os, sys
+out = sys.argv[1]
+raw = os.environ.get("CLAUDE_CODE_PICKER_ARGS", "")   # read from env (no ARG_MAX limit)
+try:
+    argv = json.loads(base64.b64decode(raw[3:]).decode())
+    assert isinstance(argv, list) and all(isinstance(x, str) for x in argv)
+except Exception:
+    sys.exit(3)                       # decode failure -> caller sets ARGS_OK=0
+if argv and argv[-1].startswith("/pickup"):
+    argv = argv[:-1]                  # hop-recursion strip guard
+ap_b64 = os.environ.get("CLAUDE_CODE_PICKER_APPEND_PROMPT", "")
+if ap_b64:                            # prefer content: rematerialize + substitute
+    target = os.environ["APPEND_TARGET"]
+    if os.environ.get("SPAWN_DRY_RUN") != "1":
+        try:
+            with open(target, "wb") as f:
+                f.write(base64.b64decode(ap_b64))
+        except Exception:
+            sys.exit(4)               # rematerialization failed -> ARGS_OK=0
+    i = 0                             # substitute both `--flag value` and `--flag=value`
+    while i < len(argv):
+        if argv[i] == "--append-system-prompt-file" and i + 1 < len(argv):
+            argv[i+1] = target; i += 2; continue
+        if argv[i].startswith("--append-system-prompt-file="):
+            argv[i] = "--append-system-prompt-file=" + target
+        i += 1
+with open(out, "wb") as f:
+    f.write(b"".join(x.encode() + b"\0" for x in argv))   # each element NUL-terminated
+PY
+  if [ $? -ne 0 ]; then
+    ARGS_OK=0                         # corrupt body or rematerialization failure
+  else
+    while IFS= read -r -d '' tok; do FORWARDED+=("$tok"); done < "$DECODE_TMP"
+  fi
+  rm -f "$DECODE_TMP"
+fi
+
+# Label rule (spec §5.4b). Empty result => omit --session-label.
+LABEL="$("$PYTHON" - "${CLAUDE_CODE_PICKER_LABEL:-}" <<'PY'
+import re, sys
+raw = sys.argv[1]
+m = re.search(r"-Session-(\d+)$", raw)
+if m:
+    n = int(m.group(1)) + 1; base = raw[:m.start()]
+else:
+    n = 2; base = raw
+base = re.sub(r"[^A-Za-z0-9_.-]", "", base)
+if not base:
+    print(""); sys.exit(0)
+suffix = "-Session-%d" % n
+print(base[:255 - len(suffix)] + suffix)
+PY
+)"
+
+# Telemetry resolution.
+if [ "${CLAUDE_CODE_ENABLE_TELEMETRY:-}" = "1" ]; then TELEMETRY="on"; else TELEMETRY="off"; fi
+
+echo "[spawn-handoff] forwarded=${FORWARDED[*]} label=[$LABEL] telemetry=$TELEMETRY" >&2
 # (Task 6 inserts the spawn sequence + exit here.)
 echo "[spawn-handoff] basic preconditions passed (skeleton — later tasks complete the flow)" >&2
 exit 0

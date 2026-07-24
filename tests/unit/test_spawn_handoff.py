@@ -247,3 +247,155 @@ def test_quota_tool_timeout_proceeds(tmp_path):
         env_extra={"SUPERPOWERS_CMUX_QUOTA_TIMEOUT": "1"},
     )
     assert r.returncode == 0 and "quota=unchecked" in (r.stdout + r.stderr)
+
+
+# --- Task 4: launch composition A (decode / strip guard / label / telemetry) ---
+
+from spawn_handoff_helpers import encode_args, install_version
+
+# The forwarding metadata this file exercises is REAL ambient env on any machine
+# whose own session was launched through claude-picker (the developer's is). Since
+# run_spawn snapshots os.environ, an "absent var" case would silently inherit that
+# live value — telemetry-off and append-prompt-empty would both test the opposite
+# of what they claim. Scrub the five vars for every test in this module so absent
+# means absent (and so the pre-Task-4 tests never decode a real payload either).
+PICKER_ENV_VARS = [
+    "CLAUDE_CODE_PICKER_VERSION",
+    "CLAUDE_CODE_PICKER_LABEL",
+    "CLAUDE_CODE_PICKER_ARGS",
+    "CLAUDE_CODE_PICKER_APPEND_PROMPT",
+    "CLAUDE_CODE_ENABLE_TELEMETRY",
+]
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_picker_env(monkeypatch):
+    for var in PICKER_ENV_VARS:
+        monkeypatch.delenv(var, raising=False)
+
+
+def _meta(
+    version="2.1.218",
+    args_b64=None,
+    label="Proj-Session-2",
+    telem="1",
+    append_b64=None,
+):
+    e = {"CLAUDE_CODE_PICKER_VERSION": version}
+    if args_b64 is not None:
+        e["CLAUDE_CODE_PICKER_ARGS"] = args_b64
+    if label is not None:
+        e["CLAUDE_CODE_PICKER_LABEL"] = label
+    if telem is not None:
+        e["CLAUDE_CODE_ENABLE_TELEMETRY"] = telem
+    if append_b64 is not None:
+        e["CLAUDE_CODE_PICKER_APPEND_PROMPT"] = append_b64
+    return e
+
+
+def test_decoded_args_and_strip_guard(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    args = ["--append-system-prompt-file", "/tmp/a b.md", "/pickup old-bundle"]
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64=encode_args(args))
+    )
+    out = r.stdout + r.stderr
+    assert "forwarded=" in out
+    assert "--append-system-prompt-file" in out and "a b.md" in out
+    assert "/pickup old-bundle" not in out  # stale /pickup stripped
+
+
+def test_telemetry_on_and_off(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r_on = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64=encode_args([]))
+    )
+    assert "telemetry=on" in (r_on.stdout + r_on.stderr)
+    r_off = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), telem=None),
+    )
+    assert "telemetry=off" in (r_off.stdout + r_off.stderr)
+
+
+@pytest.mark.parametrize(
+    "in_label,expect",
+    [
+        ("", ""),  # empty stays empty
+        ("Proj", "Proj-Session-2"),  # unsuffixed gains -Session-2
+        ("Proj-Session-4", "Proj-Session-5"),
+        ("!!!", ""),  # empty-after-sanitize
+    ],
+)
+def test_label_rule(tmp_path, in_label, expect):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), label=in_label),
+    )
+    assert f"label=[{expect}]" in (r.stdout + r.stderr)
+
+
+def test_label_255_boundary(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), label="A" * 300),
+    )
+    import re
+
+    m = re.search(r"label=\[([^\]]*)\]", r.stdout + r.stderr)
+    assert m and len(m.group(1)) <= 255 and m.group(1).endswith("-Session-2")
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["--append-system-prompt-file", "/tmp/gone-temp.md"],  # space form
+        ["--append-system-prompt-file=/tmp/gone-temp.md"],  # =-joined form
+    ],
+)
+def test_append_prompt_substituted_in_forwarded(tmp_path, argv):
+    # APPEND_PROMPT content present -> dead path substituted with rematerialized path.
+    import base64
+
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    env = _meta(
+        args_b64=encode_args(argv),
+        append_b64=base64.b64encode(b"prompt body").decode(),
+    )
+    out = (lambda r: r.stdout + r.stderr)(
+        run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    )
+    assert "/tmp/gone-temp.md" not in out and "append-prompts/b1-hop1.md" in out
+
+
+def test_append_prompt_empty_keeps_original_path(tmp_path):
+    # Empty-but-flag-present (APPEND_PROMPT absent): cannot rematerialize -> keep path.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    env = _meta(
+        args_b64=encode_args(["--append-system-prompt-file", "/tmp/orig.md"])
+    )  # no APPEND_PROMPT
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    assert "/tmp/orig.md" in (r.stdout + r.stderr)
