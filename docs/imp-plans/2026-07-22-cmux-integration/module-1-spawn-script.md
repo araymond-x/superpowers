@@ -37,13 +37,13 @@ Tasks 1–6 write the same script and are strictly serialized (never parallel).
 
 ## Acceptance Criteria
 
-- [ ] `bash spawn-handoff-session.sh` with no bundle id exits 1 with a usage message.
-- [ ] Preconditions fail-closed in order: missing `.active-feature`→1, dirty tree→1, bundle-validation failures→1, not-in-cmux/ping-fail→3, hop-limit→3.
-- [ ] Quota: `low`→exit 3; all `unchecked` classes (absent/timeout/malformed/missing-field)→proceed; `ok`→proceed.
-- [ ] `launch=auto` composes exact picker flags + decoded, re-quoted forwarded args + incremented label + embedded runtime-failure fallback chain; degraded metadata → `launch=picker-manual`.
-- [ ] Reservation (`intent` line + hop increment) precedes `cmux new-workspace`; spawn failure leaves hop consumed + `outcome=spawn-failed` + exit 3.
-- [ ] `--dry-run` evaluates preconditions + preflight, prints composed commands, spawns nothing, increments nothing.
-- [ ] `pytest tests/unit/test_spawn_handoff.py -v` all green.
+- [x] `bash spawn-handoff-session.sh` with no bundle id exits 1 with a usage message.
+- [x] Preconditions fail-closed in order: missing `.active-feature`→1, dirty tree→1, bundle-validation failures→1, not-in-cmux/ping-fail→3, hop-limit→3.
+- [x] Quota: `low`→exit 3; all `unchecked` classes (absent/timeout/malformed/missing-field)→proceed; `ok`→proceed.
+- [x] `launch=auto` composes exact picker flags + decoded, re-quoted forwarded args + incremented label + embedded runtime-failure fallback chain; degraded metadata → `launch=picker-manual`.
+- [x] Reservation (`intent` line + hop increment) precedes `cmux new-workspace`; spawn failure leaves hop consumed + `outcome=spawn-failed` + exit 3.
+- [x] `--dry-run` evaluates preconditions + preflight, prints composed commands, spawns nothing, increments nothing.
+- [x] `pytest tests/unit/test_spawn_handoff.py -v` all green.
 
 ---
 
@@ -974,7 +974,7 @@ git commit -m "feat(cmux-int): auto preflight + compose-side quoting (Task 5)"
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
 - Modify: `tests/unit/test_spawn_handoff.py`
 
-- [ ] **Step 1: Write the failing spawn/reservation/dry-run tests.**
+- [x] **Step 1: Write the failing spawn/reservation/dry-run tests.**
 
 Append to `test_spawn_handoff.py`:
 
@@ -1056,7 +1056,7 @@ def test_append_prompt_file_written_on_real_spawn(tmp_path):
 
 Run → FAIL (skeleton still exits before the spawn sequence).
 
-- [ ] **Step 2: Insert the spawn sequence + generic core + dry-run short-circuit.**
+- [x] **Step 2: Insert the spawn sequence + generic core + dry-run short-circuit.**
 
 Replace the `# (Task 6 inserts the spawn sequence + exit here.)` marker AND the skeleton's trailing `echo ... ; exit 0` with:
 
@@ -1105,7 +1105,7 @@ else
 fi
 ```
 
-- [ ] **Step 3: Run the full unit suite + regression.**
+- [x] **Step 3: Run the full unit suite + regression.**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -v
@@ -1114,7 +1114,7 @@ python3 tests/ARaymond-skill-regression/validate-all-skills.py
 ```
 Expected: all green (regression with known advisory WARNINGs only).
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
