@@ -356,16 +356,48 @@ echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 
 # --- Generic, extraction-ready workspace-spawn core (Decision 15) ----------
 # spawn_claude_workspace CWD LAUNCH_COMMAND WORKSPACE_NAME NOTIFY_TEXT
-# Pure mechanics (no SDD policy). Returns cmux new-workspace's exit code.
-# cmux's own stdout/stderr is deliberately NOT captured: `cmux new-workspace`
-# has no --json and documents no return value, so there is nothing to parse and
-# a command substitution would only swallow its diagnostics.
+# Pure mechanics (no SDD policy). Returns cmux new-workspace's exit code and
+# publishes the created workspace's ref in the global SPAWN_WORKSPACE_REF.
+#
+# `cmux new-workspace` DOES report the workspace it created: it prints
+# `OK <ref>` on stdout (verified live 2026-07-24 against cmux from
+# /Applications/cmux.app — `OK workspace:8`, rc 0, LF-terminated). Its own
+# diagnostics — including the `new-workspace` -> `workspace create` alias
+# deprecation notice — go to STDERR, so redirecting stdout swallows nothing;
+# the captured bytes are additionally relayed verbatim to stderr, where the
+# rest of this script's diagnostics live. CMUX_QUIET=1 (the env var that notice
+# names) silences it so a chain of automated spawns does not repeat it.
+# Captured to a temp FILE rather than via `$(…)` so `$?` stays cmux's own exit
+# code — the whole exit ladder (0 spawned / non-zero -> exit 3 after the
+# reservation) depends on that.
+# The ref is parsed with awk, not a `read` loop: `read` drops a final line that
+# carries no trailing newline, which would degrade every real spawn to the
+# fallback while an `echo`-based test stub stayed green.
+# NOTIFY_TEXT may carry the literal token {workspace}; it is substituted with
+# the ref. An empty capture on success degrades the ref to `(spawned)`, so no
+# consumer ever sees an empty field.
+SPAWN_WORKSPACE_REF=""
 spawn_claude_workspace() {
   local cwd="$1" launch_cmd="$2" ws_name="$3" notify_text="$4"
-  cmux new-workspace --name "$ws_name" --cwd "$cwd" --command "$launch_cmd" --focus false
-  local rc=$?
+  local rc out_f
+  local -a nw
+  SPAWN_WORKSPACE_REF=""
+  nw=(cmux new-workspace --name "$ws_name" --cwd "$cwd" --command "$launch_cmd" --focus false)
+  out_f="$(mktemp 2>/dev/null)"
+  if [ -n "$out_f" ]; then
+    CMUX_QUIET=1 "${nw[@]}" >"$out_f"
+    rc=$?
+    SPAWN_WORKSPACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
+    cat "$out_f" >&2
+    rm -f "$out_f"
+  else
+    # mktemp unavailable: spawn uncaptured rather than discarding cmux's output.
+    CMUX_QUIET=1 "${nw[@]}"
+    rc=$?
+  fi
   if [ $rc -eq 0 ]; then
-    cmux notify --title "SDD handoff" --body "$notify_text" 2>/dev/null || \
+    [ -n "$SPAWN_WORKSPACE_REF" ] || SPAWN_WORKSPACE_REF="(spawned)"
+    cmux notify --title "SDD handoff" --body "${notify_text//\{workspace\}/$SPAWN_WORKSPACE_REF}" 2>/dev/null || \
       echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
   fi
   return $rc
@@ -391,14 +423,17 @@ printf '%s\n' "$SP_HOP" > "$HOPS_FILE"
 printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"
 # 2. Spawn.
 if spawn_claude_workspace "$WORKTREE_ROOT" "$SUCCESSOR_CMD" "SDD resume: $FEATURE_NAME" \
-     "Hop $SP_HOP/$MAX_HOPS — successor spawned"; then
-  # 3. Outcome. §5.4d names a "workspace ref" here; cmux does not return one
-  # (no --json on new-workspace, no documented output), so the field degrades to
-  # the constant `(spawned)`. Post-spawn failures are non-retryable by contract —
-  # notify already warns rather than failing, and this exits 0 regardless.
+     "Hop $SP_HOP/$MAX_HOPS — successor spawned in {workspace}"; then
+  # 3. Outcome (§5.4d step 3). The workspace ref is cmux's own `OK <ref>` stdout
+  # token, captured by the spawn core above and shared by all three consumers the
+  # spec names: this record, the notify body, and the stdout line below.
+  # `(spawned)` survives ONLY as the empty-capture fallback. Post-spawn failures
+  # are non-retryable by contract — notify already warns rather than failing, and
+  # this exits 0 regardless.
   printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \
-    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "(spawned)" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
-  echo "[spawn-handoff] spawned successor (launch=$LAUNCH_MODE). STOP this session."
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
+  # 4. Print the workspace ref (spec §5.4d step 4) and exit 0.
+  echo "[spawn-handoff] spawned successor in $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE). STOP this session."
   exit 0
 else
   printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \

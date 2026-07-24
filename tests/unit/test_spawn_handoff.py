@@ -732,3 +732,127 @@ def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
     ]
     assert kinds == ["intent"]  # reserved, and not yet resolved
     assert (tmp_path / "cmux.log.hops-at-spawn").read_text().strip() == "1"
+
+
+# --- Task 6 fix: workspace ref capture (spec §5.4d steps 3-4) -----------------
+# `cmux new-workspace` prints `OK <ref>` on stdout (verified live: `OK workspace:8`).
+# The ref must reach all THREE consumers the spec names — the outcome record's
+# `workspace=` field, the notify body, and the script's stdout — with `(spawned)`
+# surviving only as the empty-capture fallback.
+
+
+def _outcome_workspace(ctx):
+    """`workspace=` value of the outcome record (spec §5.4d Log format)."""
+    for ln in (ctx["reports"] / "handoff-spawn.log").read_text().splitlines():
+        f = ln.split()
+        if len(f) > 2 and f[2] == "outcome":
+            kv = dict(p.split("=", 1) for p in f[3:] if "=" in p)
+            return kv.get("workspace")
+    return None
+
+
+def _notify_line(tmp_path):
+    """The stub-recorded `cmux notify …` argv line."""
+    lines = [
+        ln
+        for ln in (tmp_path / "cmux.log").read_text().splitlines()
+        if ln.startswith("notify ")
+    ]
+    assert lines, "cmux stub recorded no notify call"
+    return lines[-1]
+
+
+def _stdout_result_line(r):
+    """The final stdout line (step 4). NOT stdout+stderr: the captured cmux bytes
+    are relayed to stderr, so a combined assertion would pass with the ref
+    missing from the printed result."""
+    lines = [ln for ln in r.stdout.splitlines() if "spawned successor" in ln]
+    assert lines, f"no success line on stdout: {r.stdout!r}"
+    return lines[0]
+
+
+def _cmux_stub_emitting(ref_emit):
+    return (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; '
+        + ref_emit
+        + "; exit 0; fi\n"
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+
+
+def test_workspace_ref_reaches_outcome_notify_and_stdout(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=_cmux_stub_emitting('echo "OK workspace:42"'),
+    )
+    assert r.returncode == 0
+    assert _outcome_workspace(ctx) == "workspace:42"
+    assert "successor spawned in workspace:42" in _notify_line(tmp_path)
+    assert "workspace:42" in _stdout_result_line(r)
+    # The placeholder is an implementation token, never user-visible output.
+    assert "{workspace}" not in (tmp_path / "cmux.log").read_text()
+
+
+def test_workspace_ref_capture_survives_missing_trailing_newline(tmp_path):
+    # A `while read` parse silently drops a final unterminated line, degrading
+    # every real spawn to `(spawned)` while an echo-based stub stays green.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=_cmux_stub_emitting("printf 'OK workspace:9'"),
+    )
+    assert r.returncode == 0
+    assert _outcome_workspace(ctx) == "workspace:9"
+    assert "successor spawned in workspace:9" in _notify_line(tmp_path)
+    assert "workspace:9" in _stdout_result_line(r)
+
+
+def test_workspace_ref_falls_back_when_cmux_emits_nothing(tmp_path):
+    # Empty capture must degrade to the `(spawned)` constant — never an empty
+    # field in the outcome record or a dangling "spawned in " notify body.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    assert r.returncode == 0
+    assert _outcome_workspace(ctx) == "(spawned)"
+    assert "successor spawned in (spawned)" in _notify_line(tmp_path)
+    assert "(spawned)" in _stdout_result_line(r)
+
+
+def test_cmux_stdout_is_relayed_not_swallowed(tmp_path):
+    # Capturing stdout must not hide what cmux printed.
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=_cmux_stub_emitting('echo "OK workspace:42"; echo "extra cmux note"'),
+    )
+    assert r.returncode == 0
+    assert "extra cmux note" in r.stderr
+
+
+def test_spawn_failure_rc_survives_stdout_capture(tmp_path):
+    # A command substitution or pipe around `cmux new-workspace` would clobber
+    # `$?`; the exit ladder (non-zero -> exit 3, hop consumed) depends on it.
+    ctx = setup_worktree(tmp_path)
+    body = (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; '
+        'echo "OK workspace:42"; exit 5; fi\n'
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+    r = run_spawn(
+        ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
+    )
+    assert r.returncode == 3
+    assert _outcome_workspace(ctx) == "spawn-failed"
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
