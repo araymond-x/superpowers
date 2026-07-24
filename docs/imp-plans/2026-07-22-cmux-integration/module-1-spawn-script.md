@@ -639,7 +639,7 @@ esac
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -k quota -v` → all quota cases PASS.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
@@ -658,7 +658,7 @@ _Completed: `7131698` (implementation) + `926ab60` (quality-review fix round)._
 
 The block echoes intermediate values (`forwarded`, `label`, `telemetry`) to stderr so Task 4 can assert them before Task 5 adds the final command.
 
-- [ ] **Step 1: Write the failing decode/label/telemetry tests.**
+- [x] **Step 1: Write the failing decode/label/telemetry tests.**
 
 Append to `test_spawn_handoff.py`:
 
@@ -745,7 +745,7 @@ def test_append_prompt_empty_keeps_original_path(tmp_path):
 
 Run → FAIL (no composition block yet).
 
-- [ ] **Step 2: Insert composition part A.**
+- [x] **Step 2: Insert composition part A.**
 
 Replace the `# (Tasks 4-5 insert launch composition here.)` marker with the decode/label/telemetry block (Task 5 appends after it):
 
@@ -837,16 +837,18 @@ echo "[spawn-handoff] forwarded=${FORWARDED[*]} label=[$LABEL] telemetry=$TELEME
 
 > **Bash version caveat:** confirm `env bash --version` is ≥ 4.x (Homebrew) on the target and note the requirement in Task 9 docs. The decode does the `/pickup` strip in python (no bash negative indexing), so the array ops here are append + `${FORWARDED[*]}` only — safe on bash 3.2 too.
 
-- [ ] **Step 3: Run tests → pass.**
+- [x] **Step 3: Run tests → pass.**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py -k "decoded or telemetry or label" -v` → PASS.
 
-- [ ] **Step 4: Commit.**
+- [x] **Step 4: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/test_spawn_handoff.py
 git commit -m "feat(cmux-int): metadata decode, strip guard, label rule, telemetry (Task 4)"
 ```
+
+_Completed: `77537bc`. Bash floor determined **≥ 3.2** (plan's "≥ 4.x" caveat above is wrong — see deviations.md)._
 
 ---
 
