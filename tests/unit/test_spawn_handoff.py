@@ -55,3 +55,41 @@ def test_fixtures_shape_matches_contract():
     assert (
         "CLAUDE_CODE_PICKER_APPEND_PROMPT" in PICKER_EXPORTS
     )  # 4th export is consumed (Task 4)
+
+
+import os
+import subprocess
+from spawn_handoff_helpers import setup_worktree, install_bundle, run_spawn, SCRIPT
+
+
+def test_script_exists_and_executable():
+    assert SCRIPT.exists() and os.access(SCRIPT, os.X_OK)
+
+
+def test_no_bundle_id_exits_1(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path)
+    assert r.returncode == 1 and "BUNDLE_ID" in (r.stdout + r.stderr)
+
+
+def test_unknown_flag_exits_1(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "--bogus", "b1")
+    assert r.returncode == 1
+
+
+def test_missing_active_feature_exits_1(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    (ctx["wt"] / ".active-feature").unlink()
+    subprocess.run(["git", "commit", "-aqm", "rm af"], cwd=ctx["wt"], check=True)
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 1 and "active-feature" in (r.stdout + r.stderr)
+
+
+def test_dirty_tree_exits_1(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    (ctx["wt"] / "dirty").write_text("y")  # uncommitted
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 1 and "clean" in (r.stdout + r.stderr).lower()
