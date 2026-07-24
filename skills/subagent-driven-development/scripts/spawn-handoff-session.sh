@@ -68,7 +68,65 @@ EOF
 if [ -n "$(git status --porcelain)" ]; then
   echo "REFUSED: worktree not clean — commit pending state first (protocol step 2)" >&2; exit 1; fi
 
-# (Task 2 inserts bundle validation + cmux + hop preconditions here.)
+# --- Precondition 2: parameterized bundle validation (Decision 22) ----------
+# validate_bundle BUNDLE_ID EXPECTED_TYPE EXPECTED_SKILL WORKTREE_ROOT
+validate_bundle() {
+  local bid="$1" exp_type="$2" exp_skill="$3" wt="$4"
+  if ! [[ "$bid" =~ ^[A-Za-z0-9_.-]+$ ]]; then
+    echo "REFUSED: bundle id fails charset ^[A-Za-z0-9_.-]+$" >&2; return 1; fi
+  local real_bundles real_bdir
+  real_bundles="$(cd "$BUNDLES_DIR" 2>/dev/null && pwd -P)"
+  if [ -z "$real_bundles" ]; then echo "REFUSED: bundles dir not found: $BUNDLES_DIR" >&2; return 1; fi
+  real_bdir="$(cd "$BUNDLES_DIR/$bid" 2>/dev/null && pwd -P)"
+  if [ -z "$real_bdir" ]; then echo "REFUSED: bundle dir not found for id: $bid" >&2; return 1; fi
+  case "$real_bdir" in
+    "$real_bundles"/*) : ;;
+    *) echo "REFUSED: bundle resolves outside bundles dir" >&2; return 1 ;;
+  esac
+  local manifest="$real_bdir/manifest.json"
+  if [ ! -f "$manifest" ]; then echo "REFUSED: bundle has no manifest.json" >&2; return 1; fi
+  local btype bskill brepo active_id
+  btype="$("$PYTHON" -c 'import json,sys;print((json.load(open(sys.argv[1])).get("session") or {}).get("bundle_type",""))' "$manifest")"
+  bskill="$("$PYTHON" -c 'import json,sys;print((json.load(open(sys.argv[1])).get("session") or {}).get("entry_skill",""))' "$manifest")"
+  brepo="$("$PYTHON" -c 'import json,sys;print((json.load(open(sys.argv[1])).get("project") or {}).get("repo_id",""))' "$manifest")"
+  if [ "$btype" != "$exp_type" ]; then echo "REFUSED: bundle_type '$btype' != expected '$exp_type'" >&2; return 1; fi
+  if [ "$bskill" != "$exp_skill" ]; then echo "REFUSED: entry_skill '$bskill' != expected '$exp_skill'" >&2; return 1; fi
+  if [ -z "$brepo" ]; then echo "REFUSED: bundle manifest has no project.repo_id" >&2; return 1; fi
+  # Worktree-invariant identity — mirrors the pickup guard's repo_identity() exactly.
+  active_id="$("$PYTHON" - "$wt" <<'PY'
+import os, subprocess, sys
+wt = sys.argv[1]
+c = subprocess.run(["git","rev-parse","--git-common-dir"], cwd=wt,
+                   capture_output=True, text=True).stdout.strip()
+p = c if os.path.isabs(c) else os.path.join(wt, c)
+print(os.path.realpath(p))
+PY
+)"
+  if [ "$active_id" != "$brepo" ]; then
+    echo "REFUSED: bundle repo mismatch (active '$active_id' != bundle '$brepo')" >&2; return 1; fi
+  return 0
+}
+if ! validate_bundle "$BUNDLE_ID" "$EXPECTED_BUNDLE_TYPE" "$EXPECTED_ENTRY_SKILL" "$WORKTREE_ROOT"; then
+  exit 1; fi
+
+# --- Precondition 3: cmux reachable ----------------------------------------
+if [ -z "$CMUX_WORKSPACE_ID" ] || [ "$(cmux ping 2>/dev/null)" != "PONG" ]; then
+  echo "[spawn-handoff] not in a reachable cmux workspace — manual fallback." >&2
+  print_manual_instructions
+  exit 3
+fi
+
+# --- Precondition 4: hop limit ---------------------------------------------
+HOPS="$(cat "$HOPS_FILE" 2>/dev/null)"; [ -n "$HOPS" ] || HOPS=0
+# SP_HOP is the successor's hop number; defined early because the Task-5 launch
+# composition references it in the runtime fallback chain.
+SP_HOP=$((HOPS + 1))
+if [ "$HOPS" -ge "$MAX_HOPS" ]; then
+  cmux notify --title "SDD handoff" --body "Hop limit $MAX_HOPS reached — manual resume needed" 2>/dev/null || true
+  echo "[spawn-handoff] hop limit reached ($HOPS/$MAX_HOPS) — manual fallback." >&2
+  print_manual_instructions
+  exit 3
+fi
 # (Task 3 inserts the quota check here.)
 # (Tasks 4-5 insert launch composition here.)
 # (Task 6 inserts the spawn sequence + exit here.)

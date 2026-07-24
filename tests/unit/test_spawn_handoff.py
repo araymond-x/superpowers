@@ -93,3 +93,58 @@ def test_dirty_tree_exits_1(tmp_path):
     (ctx["wt"] / "dirty").write_text("y")  # uncommitted
     r = run_spawn(ctx, tmp_path, "b1")
     assert r.returncode == 1 and "clean" in (r.stdout + r.stderr).lower()
+
+
+import pytest
+
+
+@pytest.mark.parametrize(
+    "bundle_id,manifest,needle",
+    [
+        ("bad id!", "valid-manifest.json", "charset"),
+        ("b1", "wrong-type-manifest.json", "bundle_type"),
+        ("b1", "wrong-skill-manifest.json", "entry_skill"),
+        ("b1", "foreign-repo-manifest.json", "repo"),
+    ],
+)
+def test_bundle_validation_failures_exit_1(tmp_path, bundle_id, manifest, needle):
+    ctx = setup_worktree(tmp_path)
+    if bundle_id == "b1":
+        install_bundle(tmp_path, "b1", manifest, ctx["repo_id"])
+    r = run_spawn(ctx, tmp_path, bundle_id)
+    assert r.returncode == 1 and needle in (r.stdout + r.stderr).lower()
+
+
+def test_bundle_dir_missing_exits_1(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    r = run_spawn(ctx, tmp_path, "does-not-exist")
+    assert r.returncode == 1
+
+
+def test_not_in_cmux_exits_3_with_instructions(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    r = run_spawn(ctx, tmp_path, "b1", in_cmux=False)
+    assert r.returncode == 3 and "/pickup b1" in (r.stdout + r.stderr)
+
+
+def test_ping_failure_exits_3(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    r = run_spawn(ctx, tmp_path, "b1", env_extra={"CMUX_PING_FAIL": "1"})
+    assert r.returncode == 3
+
+
+def test_hop_limit_exits_3(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    (ctx["reports"] / ".handoff-hops").write_text("3\n")
+    # .handoff-hops is tracked (spec.md L164); at the moment the hop gate runs in
+    # the real flow it is always committed (the successor's step-2 commit folds it
+    # in before the next spawn invocation). Commit the seed here so the fixture is
+    # faithful to that invariant and doesn't spuriously trip Precondition 1 (clean
+    # tree) — mirrors the commit pattern in test_missing_active_feature_exits_1.
+    subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)
+    subprocess.run(["git", "commit", "-qm", "seed hops"], cwd=ctx["wt"], check=True)
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 3 and "hop" in (r.stdout + r.stderr).lower()
