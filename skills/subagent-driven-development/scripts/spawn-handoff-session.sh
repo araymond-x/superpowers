@@ -263,6 +263,16 @@ except Exception:
     sys.exit(5)
 PY
   if [ $? -ne 0 ]; then
+    # Wrapping the decoder's final write in a `try` (Step 4's lone-surrogate
+    # cleanup) removed the only diagnostic a decode failure ever produced — a raw
+    # traceback that at least named the cause. Without this line ANY failure here
+    # (corrupt body, exit 3/4/5, even an unchecked `mktemp` that never produced
+    # $DECODE_TMP) degrades silently. The echo sits INSIDE the branch on purpose:
+    # `[ $? -ne 0 ]` has already consumed the decoder's status, so nothing here
+    # can clobber it. Deliberately avoids the literal `launch=picker-manual` —
+    # that exact token is what the degrade tests assert on, and duplicating it
+    # would let this diagnostic satisfy them on its own.
+    echo "[spawn-handoff] warn: forwarded-args decode failed — degrading to picker-manual (forwarded args dropped)" >&2
     ARGS_OK=0                         # corrupt body or rematerialization failure
   else
     while IFS= read -r -d '' tok; do FORWARDED+=("$tok"); done < "$DECODE_TMP"
@@ -445,7 +455,11 @@ mkdir -p "$REPORTS_DIR"
 # existing exit 3 (manual fallback): nothing was spawned, so manual resume is the
 # correct recovery and the 0/3/1 ladder is unchanged.
 if ! printf '%s\n' "$SP_HOP" > "$HOPS_FILE"; then
-  echo "[spawn-handoff] reservation write failed: cannot record hop in $HOPS_FILE (no hop consumed, no spawn attempted) — manual fallback." >&2
+  # Deliberately does NOT claim "no hop consumed": `>` truncates at open, so a
+  # PARTIAL failure (ENOSPC, quota) leaves the counter truncated to empty and the
+  # next run reads HOPS=0 — the chain silently resets. Only "not recorded" and
+  # "nothing spawned" are knowable from here.
+  echo "[spawn-handoff] reservation write failed: cannot record hop in $HOPS_FILE (hop not recorded — counter may have been truncated; no spawn attempted) — manual fallback." >&2
   print_manual_instructions
   exit 3
 fi

@@ -399,9 +399,7 @@ def _successor_cmd(r):
     pass even if this task's compose block never ran. Every compose assertion
     anchors on this line so it can only be satisfied by the composed command.
     """
-    lines = [
-        ln for ln in (r.stdout + r.stderr).splitlines() if ln.startswith(MARKER)
-    ]
+    lines = [ln for ln in (r.stdout + r.stderr).splitlines() if ln.startswith(MARKER)]
     assert lines, "no `successor command:` line emitted"
     return lines[0][len(MARKER) :]
 
@@ -513,7 +511,11 @@ def test_corrupt_v1_body_degrades_to_picker_manual(tmp_path):
     _spawnable(tmp_path, ctx)
     install_version(tmp_path, "2.1.218")
     r = run_spawn(
-        ctx, tmp_path, "b1", "--dry-run", env_extra=_meta(args_b64="v1:!!!not-base64!!!")
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64="v1:!!!not-base64!!!"),
     )
     assert "launch=picker-manual" in (r.stdout + r.stderr)
 
@@ -835,7 +837,8 @@ def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
     at_spawn = tmp_path / "cmux.log.log-at-spawn"
     assert at_spawn.exists(), "cmux stub never reached new-workspace"
     kinds = [
-        f[2] for f in (ln.split() for ln in at_spawn.read_text().splitlines())
+        f[2]
+        for f in (ln.split() for ln in at_spawn.read_text().splitlines())
         if len(f) > 2
     ]
     assert kinds == ["intent"]  # reserved, and not yet resolved
@@ -1048,9 +1051,7 @@ def _warning_lines(r, var):
     substring search over stdout+stderr is satisfiable by unrelated diagnostics.
     """
     return [
-        ln
-        for ln in r.stderr.splitlines()
-        if ln.startswith(QUOTA_WARN_PREFIX + var)
+        ln for ln in r.stderr.splitlines() if ln.startswith(QUOTA_WARN_PREFIX + var)
     ]
 
 
@@ -1103,6 +1104,17 @@ def _cmux_log_text(tmp_path):
 
 
 RESERVATION_WARN = "[spawn-handoff] reservation write failed:"
+DECODE_WARN = "[spawn-handoff] warn: forwarded-args decode failed"
+
+
+def _decode_warning_lines(r):
+    """stderr lines that are the decoder's OWN degrade diagnostic.
+
+    Prefix-anchored on stderr for the same reason as the helpers around it: the
+    script is chatty, and the only other signal the surrogate test had
+    (`launch=picker-manual`) is reachable from any of five preflight predicates.
+    """
+    return [ln for ln in r.stderr.splitlines() if ln.startswith(DECODE_WARN)]
 
 
 def _reservation_warning_lines(r, needle):
@@ -1122,24 +1134,40 @@ def _reservation_warning_lines(r, needle):
     ]
 
 
+def _spawn_log_text(ctx):
+    p = ctx["reports"] / "handoff-spawn.log"
+    return p.read_text() if p.exists() else ""
+
+
 def test_hops_write_failure_exits_3_without_spawning(tmp_path):
     # Decision 21 durability: with neither `set -e` nor pipefail, an unchecked
     # failed redirection would spawn anyway — reserving nothing while the
     # reserve-before-spawn ORDERING still looked intact.
+    #
+    # The FIRST write, ISOLATED (mirrors leg B's technique). An unwritable reports
+    # dir — what this test used to do — fails BOTH reservation writes, so the
+    # DOWNSTREAM intent guard supplied the rc 3 and the absent spawn that the
+    # assertions below read: deleting THIS guard's `exit 3` left the suite green.
+    # Occupying only the hops path with a DIRECTORY (`>` onto a dir is EISDIR)
+    # fails this write alone, so the intent write can no longer stand in. An empty
+    # directory is invisible to git, so the clean-tree precondition still holds,
+    # and `cat` of a directory yields nothing => HOPS=0 => the hop-limit gate is
+    # not what stops us.
     ctx = setup_worktree(tmp_path)
     env = _reach_spawn(tmp_path, ctx)
-    os.chmod(ctx["reports"], 0o555)  # existing dir, unwritable => the WRITE fails
-    try:
-        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
-    finally:
-        os.chmod(ctx["reports"], 0o755)
+    (ctx["reports"] / ".handoff-hops").mkdir()
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert _reservation_warning_lines(r, "cannot record hop"), (
+        f"no hops-write warning: {r.stderr!r}"
+    )
+    # The two legs that pin STOPPING rather than merely detecting. Both survive
+    # only if this guard's own `exit 3` runs: with it removed the intent write
+    # succeeds and the spawn proceeds to rc 0.
     assert r.returncode == 3
-    assert _reservation_warning_lines(
-        r, "cannot record hop"
-    ), f"no hops-write warning: {r.stderr!r}"
-    # The leg that actually proves no spawn happened.
     assert "new-workspace" not in _cmux_log_text(tmp_path)
-    assert not (ctx["reports"] / ".handoff-hops").exists()
+    # Leg A's distinguishing signature: NOTHING was reserved. (Leg B's mirror is
+    # `.handoff-hops == "1"` — there the hop IS consumed before its write fails.)
+    assert "intent" not in _spawn_log_text(ctx)
     assert "Manual resume required" in r.stdout
 
 
@@ -1155,9 +1183,9 @@ def test_intent_write_failure_exits_3_without_spawning(tmp_path):
     (ctx["reports"] / "handoff-spawn.log").mkdir()
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
     assert r.returncode == 3
-    assert _reservation_warning_lines(
-        r, "cannot append intent record"
-    ), f"no intent-write warning: {r.stderr!r}"
+    assert _reservation_warning_lines(r, "cannot append intent record"), (
+        f"no intent-write warning: {r.stderr!r}"
+    )
     assert "new-workspace" not in _cmux_log_text(tmp_path)
     # Discriminates this leg from the hops-write leg: the hop IS consumed here.
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
@@ -1283,6 +1311,12 @@ def test_lone_surrogate_arg_degrades_without_traceback(tmp_path):
     assert r.returncode == 0
     assert "launch=picker-manual" in (r.stdout + r.stderr)
     assert "Traceback" not in r.stderr
+    # `launch=picker-manual` above discriminates nothing here: preflight is a
+    # five-way AND and ANY missing predicate reaches the same mode, so before this
+    # line the only real signal was the absence of a traceback — i.e. the test
+    # could not tell "decode failed and was reported" from "decode never ran".
+    # The named diagnostic is what actually pins the degrade to THIS cause.
+    assert _decode_warning_lines(r), f"no decode-failure warning: {r.stderr!r}"
 
 
 def test_label_slice_does_not_leak_base_when_suffix_exceeds_ceiling(tmp_path):
@@ -1298,7 +1332,9 @@ def test_label_slice_does_not_leak_base_when_suffix_exceeds_ceiling(tmp_path):
         tmp_path,
         "b1",
         "--dry-run",
-        env_extra=_meta(args_b64=encode_args([]), label="ProjectXYZ-Session-" + "9" * 250),
+        env_extra=_meta(
+            args_b64=encode_args([]), label="ProjectXYZ-Session-" + "9" * 250
+        ),
     )
     m = re.search(r"label=\[([^\]]*)\]", r.stdout + r.stderr)
     assert m, "no label diagnostic emitted"

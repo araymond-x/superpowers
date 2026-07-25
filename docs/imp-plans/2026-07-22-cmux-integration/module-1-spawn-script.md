@@ -1104,6 +1104,10 @@ fi
 # break the very correlation the id exists for.
 mkdir -p "$REPORTS_DIR"
 # 1. Reserve (SP_HOP computed in Task 2 after the hop-limit check).
+# SUPERSEDED by Task 8 Step 1: both reservation writes below are now rc-checked
+# (`if ! printf ... ; then warn + print_manual_instructions + exit 3; fi`) — with
+# neither `set -e` nor pipefail, these unchecked forms would spawn while reserving
+# nothing. Read the live script for the shipped form.
 printf '%s\n' "$SP_HOP" > "$HOPS_FILE"
 printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"
 # 2. Spawn.
