@@ -73,12 +73,12 @@ Decision-15 extraction).
 
 ## Acceptance Criteria
 
-- [ ] The Module-1 test-debt sweep (Tasks 7–8) is complete, with each new test mutation-proven — the implementer showing the assertion RED when its behavior is broken, not merely green when it is not.
+- [x] The Module-1 test-debt sweep (Tasks 7–8) is complete, with each new test mutation-proven — the implementer showing the assertion RED when its behavior is broken, not merely green when it is not.
 - [x] The exit-code ladder is still exactly **0 spawned / 3 manual fallback / 1 refused** — Task 8 added no new exit code.
 - [x] `context-handoff-protocol.md` steps 1–2 are byte-identical to the original; steps 3–5 drive the script per the exit-code ladder; a closing note documents the soft-nudge use.
 - [x] `sdd-e2e-test.sh` reaches Step 14, asserts composed spawn command + notify + reservation-then-outcome log records, and passes; the final banner reads `15 steps`.
 - [x] `git diff` shows `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` unchanged.
-- [ ] CLAUDE.md has a "cmux Integration" section; the two env vars are in the Hook Development Gotchas env-var list; the customization manifest and BACKLOG are updated; N43(D) is closed.
+- [x] CLAUDE.md has a "cmux Integration" section; the two env vars are in the Hook Development Gotchas env-var list; the customization manifest and BACKLOG are updated; N43(D) is closed.
 
 ---
 
@@ -425,7 +425,7 @@ git commit -m "test(cmux-int): e2e Step 14 spawn end-to-end + banner 15 (Task 10
 - Modify: `docs/ARaymond-customization-manifest.md`
 - Modify: `docs/process-improvement-findings/BACKLOG.md`
 
-- [ ] **Step 1: Add the CLAUDE.md "cmux Integration" section (read-merge).**
+- [x] **Step 1: Add the CLAUDE.md "cmux Integration" section (read-merge).**
 
 Read `CLAUDE.md` first. Add a new top-level section (near the other feature sections). Content:
 - What `spawn-handoff-session.sh` does, its interface (`BUNDLE_ID [--dry-run]`), and the exit-code ladder (0 spawned auto/picker-manual · 3 manual fallback · 1 refused).
@@ -436,11 +436,11 @@ Read `CLAUDE.md` first. Add a new top-level section (near the other feature sect
 
 Add the two env vars to the **Hook Development Gotchas** env-var list (alongside `SUPERPOWERS_CMUX_*`... i.e. next to the context-gate env vars): `SUPERPOWERS_CMUX_MAX_HOPS` (default 3 — hop limit) and `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default 15 — session-quota refusal threshold). Also mention `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (default 60) and `SUPERPOWERS_CMUX_QUOTA_TOOL` if the implementer kept them (test seams).
 
-- [ ] **Step 1b: Document the deliberate `cmux notify` asymmetry across the exit-3 branches.** (Added by the Task-8 quality review, finding 4 — controller ratified the omission rather than adding the notify.) Three exit-3 branches DO notify — hop-limit, quota-low, and spawn-failed-after-reservation — but the two **reservation-write-failure** branches deliberately do **not**: the plan prescribed exactly "warn, print manual instructions, exit 3", and a broken/unwritable reports dir is relayed via exit 3 plus printed instructions, not a push notification. State this as an intentional rule so a future reader does not "fix" the inconsistency by reflex. Without this line the omission is invisible and indistinguishable from an oversight.
+- [x] **Step 1b: Document the deliberate `cmux notify` asymmetry across the exit-3 branches.** (Added by the Task-8 quality review, finding 4 — controller ratified the omission rather than adding the notify.) Three exit-3 branches DO notify — hop-limit, quota-low, and spawn-failed-after-reservation — but the two **reservation-write-failure** branches deliberately do **not**: the plan prescribed exactly "warn, print manual instructions, exit 3", and a broken/unwritable reports dir is relayed via exit 3 plus printed instructions, not a push notification. State this as an intentional rule so a future reader does not "fix" the inconsistency by reflex. Without this line the omission is invisible and indistinguishable from an oversight.
 
-- [ ] **Step 1c: Land the accumulated doc obligations from `deviations.md`.** They are filed under the **Deferred Work** heading literally titled *"Task 9 doc obligations"* — that heading predates the Task 7/8 plan surgery and uses the **OLD** numbering, where old-Task-9 = **this task (11)**. It does NOT mean new-Task-9 (the protocol-doc rewrite). Read that list and land each item in the CLAUDE.md section: (a) the bash floor is **≥ 3.2**, NOT the plan's "≥ 4.x" — construct floor 3.1, verified floor 3.2.57; (b) the `set -u` ↔ `${FORWARDED[*]}`-on-empty-array coupling, documented **at the `FORWARDED` site**, not only generically — a future `set -u` breaks bash 3.2 silently while passing on 4.4+; (c) `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (60) + `SUPERPOWERS_CMUX_QUOTA_TOOL`; (d) rematerialized append-prompt files accumulate at `~/.claude-codex-handoff/append-prompts/<bundle>-hop<N>.md` with **no reaper** (spec §5.4d defines none). These were dispositioned in `deviations.md`, and disposition removes an item from every enforcement gate — this checkbox is their only remaining enforcement, exactly as with the Task 6 test-debt sweep.
+- [x] **Step 1c: Land the accumulated doc obligations from `deviations.md`.** They are filed under the **Deferred Work** heading literally titled *"Task 9 doc obligations"* — that heading predates the Task 7/8 plan surgery and uses the **OLD** numbering, where old-Task-9 = **this task (11)**. It does NOT mean new-Task-9 (the protocol-doc rewrite). Read that list and land each item in the CLAUDE.md section: (a) the bash floor is **≥ 3.2**, NOT the plan's "≥ 4.x" — construct floor 3.1, verified floor 3.2.57; (b) the `set -u` ↔ `${FORWARDED[*]}`-on-empty-array coupling, documented **at the `FORWARDED` site**, not only generically — a future `set -u` breaks bash 3.2 silently while passing on 4.4+; (c) `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (60) + `SUPERPOWERS_CMUX_QUOTA_TOOL`; (d) rematerialized append-prompt files accumulate at `~/.claude-codex-handoff/append-prompts/<bundle>-hop<N>.md` with **no reaper** (spec §5.4d defines none). These were dispositioned in `deviations.md`, and disposition removes an item from every enforcement gate — this checkbox is their only remaining enforcement, exactly as with the Task 6 test-debt sweep.
 
-- [ ] **Step 2: Update the customization manifest (read-merge).**
+- [x] **Step 2: Update the customization manifest (read-merge).**
 
 Read `docs/ARaymond-customization-manifest.md`. Add inventory entries under the relevant sections:
 - New script: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`.
@@ -449,11 +449,11 @@ Read `docs/ARaymond-customization-manifest.md`. Add inventory entries under the 
 - Protocol doc steps 3–5 rewritten.
 - Cross-repo pointer: repo-1 (telemetry-exp), repo-2 (`~/projects/claude-custom/cmux-custom-skills`).
 
-- [ ] **Step 3: Close N43(D) in BACKLOG (read-merge).**
+- [x] **Step 3: Close N43(D) in BACKLOG (read-merge).**
 
 Read `docs/process-improvement-findings/BACKLOG.md`. Add a row/entry closing **N43 component (D)** (cmux auto-spawn of the next session) — reference this feature dir `docs/imp-plans/2026-07-22-cmux-integration/` and note component A (vendored cmux skills) shipped alongside. Preserve every existing row.
 
-- [ ] **Step 4: Run all static + integration suites.**
+- [x] **Step 4: Run all static + integration suites.**
 
 ```bash
 bash tests/ARaymond-installation/verify-symlink-install.sh \
@@ -463,7 +463,7 @@ bash tests/ARaymond-installation/verify-symlink-install.sh \
 ```
 Expected: all green (regression with known advisory WARNINGs only). Confirm the hook baseline check too: `bash tests/ARaymond-hook-baseline/check-hooks.sh` (must PASS with no re-capture — no hook changed).
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add CLAUDE.md docs/ARaymond-customization-manifest.md docs/process-improvement-findings/BACKLOG.md

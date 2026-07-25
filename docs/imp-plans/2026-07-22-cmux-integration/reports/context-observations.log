@@ -56,3 +56,10 @@
 2026-07-25T03:27:45Z task=10 type=implementer tokens=317862 source=probe tier=soft action=nudge
 2026-07-25T03:37:38Z task= type=spec-review tokens=332305 source=probe tier=soft action=allow
 2026-07-25T03:42:24Z task= type=quality-review tokens=341831 source=probe tier=soft action=allow
+2026-07-25T06:07:57Z task= type=partner-review tokens=169093 source=probe tier=below action=allow
+2026-07-25T06:20:37Z task=11 type=implementer tokens=218368 source=probe tier=below action=allow
+2026-07-25T06:42:36Z task= type=spec-review tokens=259049 source=probe tier=below action=allow
+2026-07-25T06:48:20Z task= type=quality-review tokens=262200 source=probe tier=below action=allow
+2026-07-25T06:55:32Z task=11 type=other tokens=287643 source=probe tier=below action=allow
+2026-07-25T07:07:50Z task= type=other tokens=296131 source=probe tier=below action=allow
+2026-07-25T07:14:22Z task=11 type=other tokens=299476 source=probe tier=below action=allow

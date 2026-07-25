@@ -215,12 +215,12 @@ All three modules share the same external contracts, verified once in **Task 0**
 ## Acceptance Criteria (plan-level)
 
 - [ ] `spawn-handoff-session.sh <bundle-id> --dry-run` in a real picker-launched cmux SDD session prints a composed successor command with the same version, decoded+re-quoted forwarded args, and correctly incremented label — and spawns/increments nothing.
-- [ ] The full unit matrix (§7 of the spec) passes: preconditions, all quota classes, all label cases (incl. 255 boundary), strip guard, compose-quoting survival, reservation ordering, both launch modes, `--dry-run`.
-- [ ] e2e `sdd-e2e-test.sh` reaches Step 14 and passes; banner reads `15 steps`.
-- [ ] `context-handoff-protocol.md` steps 3–5 drive the script; steps 1–2 byte-identical.
-- [ ] `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` are unchanged (git diff empty for both).
-- [ ] `CLAUDE.md`, customization manifest, and BACKLOG updated; N43(D) row closed.
-- [ ] All existing suites stay green: `validate-all-skills.py`, `verify-symlink-install.sh`, `pytest tests/unit/`, `sdd-e2e-test.sh`.
+- [x] The full unit matrix (§7 of the spec) passes: preconditions, all quota classes, all label cases (incl. 255 boundary), strip guard, compose-quoting survival, reservation ordering, both launch modes, `--dry-run`.
+- [x] e2e `sdd-e2e-test.sh` reaches Step 14 and passes; banner reads `15 steps`.
+- [x] `context-handoff-protocol.md` steps 3–5 drive the script; steps 1–2 byte-identical.
+- [x] `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` are unchanged (git diff empty for both).
+- [x] `CLAUDE.md`, customization manifest, and BACKLOG updated; N43(D) row closed.
+- [x] All existing suites stay green: `validate-all-skills.py`, `verify-symlink-install.sh`, `pytest tests/unit/`, `sdd-e2e-test.sh`.
 
 ## Post-Merge Live Smoke (mandatory before declaring done — from spec §7)
 
