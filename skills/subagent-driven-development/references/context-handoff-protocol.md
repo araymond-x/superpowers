@@ -48,8 +48,9 @@ through the extended claude-picker. Act on its exit code:
   `.active-feature`). Fix the printed precondition and re-run the script. The
   usual dirty-tree cause is **this** blocked task's own bookkeeping — the
   `reports/checkpoint-pre-dispatch-NNN.json` and `reports/partner-review-NNN.md`
-  written before the dispatch that got blocked. Step 2 covers them; commit all
-  of `reports/`, not just the last completed task's files.
+  written before the dispatch that got blocked. Step 2's "its reports under
+  `reports/`" reads as the *completed* task's; commit **all** of `reports/`,
+  including the blocked task's own files.
 
 **5. STOP.** Do not dispatch the next task in this session.
 
