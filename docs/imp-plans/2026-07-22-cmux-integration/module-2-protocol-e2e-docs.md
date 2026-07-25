@@ -303,7 +303,7 @@ git commit -m "docs(cmux-int): protocol steps 3-5 drive spawn-handoff-session.sh
 **Pattern References:**
 - `tests/integration/sdd-e2e-test.sh` Step 13 (lines ~571–607) — stub-on-PATH, `|| RC=$?` around expected-nonzero calls, PASS echo, temp workspace cleanup.
 
-- [ ] **Step 1: Add Step 14 before the final banner.**
+- [x] **Step 1: Add Step 14 before the final banner.**
 
 Insert this block after the Step 13 `echo "PASS: Step 13 ..."` line and before `echo "E2E PIPELINE PASS ..."`. It builds a fixture worktree + valid bundle, puts stub `cmux`/`claude-picker`/`claude-usage-pace` on PATH, drives `spawn-handoff-session.sh` end-to-end (real spawn path), and asserts the composed command, notify, and reservation-then-outcome ordering.
 
@@ -387,7 +387,7 @@ rm -rf "$SPAWN_WORK"
 echo "PASS: Step 14 — spawn end-to-end: composed command, notify, reservation-then-outcome"
 ```
 
-- [ ] **Step 2: Bump the banner.**
+- [x] **Step 2: Bump the banner.**
 
 Change the final banner line from:
 
@@ -397,17 +397,17 @@ to:
 
     echo "E2E PIPELINE PASS - 15 steps composed correctly"
 
-- [ ] **Step 3: Run the e2e suite.**
+- [x] **Step 3: Run the e2e suite.**
 
 Run: `bash tests/integration/sdd-e2e-test.sh`
 Expected: reaches `PASS: Step 14 ...` then `E2E PIPELINE PASS - 15 steps composed correctly`.
 
-- [ ] **Step 4: Confirm no hook / baseline drift.**
+- [x] **Step 4: Confirm no hook / baseline drift.**
 
 Run: `git diff --name-only skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/ARaymond-hook-baseline/baseline.txt`
 Expected: **empty** (neither file changed). If either appears, revert it — this feature changes no hook.
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add tests/integration/sdd-e2e-test.sh
