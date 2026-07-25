@@ -209,14 +209,14 @@ git commit -m "fix(cmux-int): sweep B — reservation-write durability, residual
 **Files:**
 - Modify: `skills/subagent-driven-development/references/context-handoff-protocol.md`
 
-- [ ] **Step 1: Confirm the anchor (no hook change).**
+- [x] **Step 1: Confirm the anchor (no hook change).**
 
 Verify the HARD-block message already points to this doc — this is why the hook needs no edit:
 
 Run: `grep -n "context-handoff-protocol" skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh`
 Expected: a match (spec cites line 840). If absent, STOP and report — the no-hook-change assumption is void.
 
-- [ ] **Step 2: Rewrite steps 3–5.**
+- [x] **Step 2: Rewrite steps 3–5.**
 
 Steps 1–2 stay byte-identical. Replace the current step 3 (from `**3. Build the fresh-session handoff.**`) through step 5 (`**5. STOP.**`) with the text below. Keep the "Why a block" and "A soft nudge" paragraphs, and append the closing note.
 
@@ -276,17 +276,17 @@ serves it — build the bundle early (step 3) and run the script (step 4) at the
 nudge rather than pushing to the block.
 ```
 
-- [ ] **Step 3: Verify steps 1–2 are untouched.**
+- [x] **Step 3: Verify steps 1–2 are untouched.**
 
 Run: `git diff skills/subagent-driven-development/references/context-handoff-protocol.md`
 Confirm the diff touches only step 3 onward — the step 1 and step 2 paragraphs must be unchanged.
 
-- [ ] **Step 4: Run the regression suite (protocol doc is cross-referenced by validate-all-skills).**
+- [x] **Step 4: Run the regression suite (protocol doc is cross-referenced by validate-all-skills).**
 
 Run: `python3 tests/ARaymond-skill-regression/validate-all-skills.py`
 Expected: PASS (with the known advisory WARNINGs; no new FAIL).
 
-- [ ] **Step 5: Commit.**
+- [x] **Step 5: Commit.**
 
 ```bash
 git add skills/subagent-driven-development/references/context-handoff-protocol.md
@@ -437,6 +437,8 @@ Read `CLAUDE.md` first. Add a new top-level section (near the other feature sect
 Add the two env vars to the **Hook Development Gotchas** env-var list (alongside `SUPERPOWERS_CMUX_*`... i.e. next to the context-gate env vars): `SUPERPOWERS_CMUX_MAX_HOPS` (default 3 — hop limit) and `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default 15 — session-quota refusal threshold). Also mention `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (default 60) and `SUPERPOWERS_CMUX_QUOTA_TOOL` if the implementer kept them (test seams).
 
 - [ ] **Step 1b: Document the deliberate `cmux notify` asymmetry across the exit-3 branches.** (Added by the Task-8 quality review, finding 4 — controller ratified the omission rather than adding the notify.) Three exit-3 branches DO notify — hop-limit, quota-low, and spawn-failed-after-reservation — but the two **reservation-write-failure** branches deliberately do **not**: the plan prescribed exactly "warn, print manual instructions, exit 3", and a broken/unwritable reports dir is relayed via exit 3 plus printed instructions, not a push notification. State this as an intentional rule so a future reader does not "fix" the inconsistency by reflex. Without this line the omission is invisible and indistinguishable from an oversight.
+
+- [ ] **Step 1c: Land the accumulated doc obligations from `deviations.md`.** They are filed under the **Deferred Work** heading literally titled *"Task 9 doc obligations"* — that heading predates the Task 7/8 plan surgery and uses the **OLD** numbering, where old-Task-9 = **this task (11)**. It does NOT mean new-Task-9 (the protocol-doc rewrite). Read that list and land each item in the CLAUDE.md section: (a) the bash floor is **≥ 3.2**, NOT the plan's "≥ 4.x" — construct floor 3.1, verified floor 3.2.57; (b) the `set -u` ↔ `${FORWARDED[*]}`-on-empty-array coupling, documented **at the `FORWARDED` site**, not only generically — a future `set -u` breaks bash 3.2 silently while passing on 4.4+; (c) `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (60) + `SUPERPOWERS_CMUX_QUOTA_TOOL`; (d) rematerialized append-prompt files accumulate at `~/.claude-codex-handoff/append-prompts/<bundle>-hop<N>.md` with **no reaper** (spec §5.4d defines none). These were dispositioned in `deviations.md`, and disposition removes an item from every enforcement gate — this checkbox is their only remaining enforcement, exactly as with the Task 6 test-debt sweep.
 
 - [ ] **Step 2: Update the customization manifest (read-merge).**
 
