@@ -607,5 +607,123 @@ rm -rf "$CTX_WORK" "$CTX_OUT" "$CTX_OUT.err"
 echo "PASS: Step 13 — context gate blocks over-HARD implementer dispatch + logs source=probe"
 
 echo ""
-echo "E2E PIPELINE PASS - 14 steps composed correctly"
+echo "=== Step 14: spawn-handoff-session.sh end-to-end (stubbed cmux + picker) ==="
+# NOTE: exercises THIS checkout's script. The installed live path resolves to the
+# main checkout — a post-merge live smoke is required separately (spec §7).
+SPAWN_WORK=$(mktemp -d -t sdd-spawn-XXXXXX)
+SPAWN_HOME="$SPAWN_WORK/home"
+SPAWN_STUBS="$SPAWN_WORK/stubs"
+mkdir -p "$SPAWN_HOME/.claude-codex-handoff/bundles/b14" \
+         "$SPAWN_HOME/.local/share/claude/versions" "$SPAWN_STUBS"
+# The picker version must be an executable FILE, not a directory: preflight_ok()
+# tests `[ -f … ] && [ -x … ]`, mirroring the picker's own `find -type f -perm -u+x`.
+# A directory PASSES -x (0755) and FAILS -f, silently degrading to
+# launch=picker-manual — where the successor command is a bare `claude-picker
+# '/pickup b14'` and the ARGS/LABEL/TELEMETRY vars below are inert, making every
+# composed-command assertion vacuous. This is the MX-A trap from Task 7.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$SPAWN_HOME/.local/share/claude/versions/2.1.218"
+chmod +x "$SPAWN_HOME/.local/share/claude/versions/2.1.218"
+
+# Fixture worktree with .active-feature + reports
+SPAWN_WT="$SPAWN_WORK/wt"; mkdir -p "$SPAWN_WT/docs/imp-plans/feat/reports"
+( cd "$SPAWN_WT" && git init -q && git config user.email t@t && git config user.name t \
+  && echo docs/imp-plans/feat > .active-feature && echo seed > seed \
+  && git add -A && git commit -qm seed )
+SPAWN_REPO_ID=$(cd "$SPAWN_WT" && $PYTHON - <<'PY'
+import os,subprocess
+c=subprocess.run(["git","rev-parse","--git-common-dir"],capture_output=True,text=True).stdout.strip()
+print(os.path.realpath(c if os.path.isabs(c) else os.path.join(os.getcwd(),c)))
+PY
+)
+
+# Valid work/SDD bundle manifest with the matching repo_id
+cat > "$SPAWN_HOME/.claude-codex-handoff/bundles/b14/manifest.json" <<JSON
+{"session":{"bundle_type":"work","entry_skill":"superpowers:subagent-driven-development"},
+ "project":{"repo_id":"$SPAWN_REPO_ID","repo_name":"feat"}}
+JSON
+
+# Stubs
+cat > "$SPAWN_STUBS/cmux" <<'SH'
+#!/usr/bin/env bash
+if [ "$1" = "ping" ]; then echo PONG; exit 0; fi
+echo "$@" >> "$CMUX_LOG"; exit 0
+SH
+cat > "$SPAWN_STUBS/claude-picker" <<'SH'
+#!/usr/bin/env bash
+if [ "$1" = "--handoff-contract" ]; then echo 1; exit 0; fi
+exit 0
+SH
+cat > "$SPAWN_STUBS/claude-usage-pace" <<'SH'
+#!/usr/bin/env bash
+echo '{"windows":[{"key":"session","remaining_pct":63.0}]}'
+SH
+chmod +x "$SPAWN_STUBS"/*
+
+SPAWN_ARGS=$($PYTHON - <<'PY'
+import base64,json
+print("v1:"+base64.b64encode(json.dumps(["--append-system-prompt-file","/tmp/a b.md"]).encode()).decode())
+PY
+)
+SPAWN_RC=0
+# `cd "$SPAWN_WT"` is REQUIRED inside the subshell: spawn-handoff-session.sh
+# resolves WORKTREE_ROOT via `git rev-parse --show-toplevel` against the
+# CALLER's cwd (it never receives a path argument). Without this cd the script
+# would inherit this harness's own cwd ($WORK, set at line 14) — a different
+# git repo whose .active-feature and cleanliness have nothing to do with this
+# fixture, producing "REFUSED: worktree not clean" instead of exercising the
+# fixture at all. Verified empirically: omitting the cd reproduces that exact
+# REFUSED line against $WORK.
+( cd "$SPAWN_WT" && \
+CMUX_LOG="$SPAWN_WORK/cmux.log" \
+PATH="$SPAWN_STUBS:$PATH" HOME="$SPAWN_HOME" \
+CMUX_WORKSPACE_ID=TEST-WS \
+CLAUDE_CODE_PICKER_VERSION=2.1.218 \
+CLAUDE_CODE_PICKER_ARGS="$SPAWN_ARGS" \
+CLAUDE_CODE_PICKER_LABEL="Proj-Session-2" \
+CLAUDE_CODE_ENABLE_TELEMETRY=1 \
+SUPERPOWERS_ROOT="$PROJECT" \
+bash "$PROJECT/skills/subagent-driven-development/scripts/spawn-handoff-session.sh" b14 \
+  > "$SPAWN_WORK/out" 2>&1 ) || SPAWN_RC=$?
+
+[ "$SPAWN_RC" -eq 0 ] || { echo "FAIL: spawn exit $SPAWN_RC"; cat "$SPAWN_WORK/out"; exit 1; }
+# launch=auto is LOAD-BEARING, not cosmetic: under picker-manual the successor
+# command is a bare `claude-picker '/pickup b14'` and every composed-command
+# assertion below becomes vacuous. Assert it FIRST so a fixture regression fails
+# here with a clear cause rather than silently passing a hollow test.
+grep -q "launch=auto" "$SPAWN_WORK/out" \
+  || { echo "FAIL: expected launch=auto — fixture degraded to picker-manual"; cat "$SPAWN_WORK/out"; exit 1; }
+grep -q "new-workspace" "$SPAWN_WORK/cmux.log" || { echo "FAIL: no new-workspace"; exit 1; }
+grep -q -- "--focus false" "$SPAWN_WORK/cmux.log" || { echo "FAIL: missing --focus false"; exit 1; }
+grep -q "notify" "$SPAWN_WORK/cmux.log" || { echo "FAIL: no notify"; exit 1; }
+# Composed successor command, pinned against the ACTUAL line this fixture emits
+# (`[spawn-handoff] successor command: …`), derived from a real run, not
+# hand-authored (see deviations.md Task 10 IndependentDecision). Anchored on
+# that specific line's text — not bare `$SPAWN_WORK/out` — so the assertion
+# cannot be satisfied by an unrelated earlier diagnostic line (the same
+# self-satisfying-grep trap Task 5's deviations row warned Task 6 about).
+# 1. Flag ORDER + telemetry value + the label transformation: the label is
+#    INCREMENTED, not passed through — the fixture sets Proj-Session-2 and the
+#    composed command carries Proj-Session-3 (spawn-handoff-session.sh:284).
+grep -qF -- "successor command: claude-picker --non-interactive --pick-version 2.1.218 --telemetry on --session-label Proj-Session-3" "$SPAWN_WORK/out" \
+  || { echo "FAIL: composed command missing expected flag order/telemetry/incremented label"; cat "$SPAWN_WORK/out"; exit 1; }
+# 2. Forwarded --append-system-prompt-file argument with its shell re-quoting
+#    intact (its value contains a space, so it must survive as a single quoted
+#    token), immediately followed by '/pickup b14' as the LAST argument before
+#    the runtime-fallback tail.
+grep -qF -- "--append-system-prompt-file '/tmp/a b.md' '/pickup b14' ||" "$SPAWN_WORK/out" \
+  || { echo "FAIL: composed command missing forwarded arg (re-quoted) + trailing /pickup b14"; cat "$SPAWN_WORK/out"; exit 1; }
+# reservation ordering: intent line precedes outcome line
+SPAWN_LOG="$SPAWN_WT/docs/imp-plans/feat/reports/handoff-spawn.log"
+INTENT_LN=$(grep -n " intent " "$SPAWN_LOG" | head -1 | cut -d: -f1)
+OUTCOME_LN=$(grep -n " outcome " "$SPAWN_LOG" | head -1 | cut -d: -f1)
+[ -n "$INTENT_LN" ] && [ -n "$OUTCOME_LN" ] && [ "$INTENT_LN" -lt "$OUTCOME_LN" ] \
+  || { echo "FAIL: reservation ordering (intent before outcome)"; cat "$SPAWN_LOG"; exit 1; }
+# hop incremented
+[ "$(cat "$SPAWN_WT/docs/imp-plans/feat/reports/.handoff-hops")" = "1" ] \
+  || { echo "FAIL: hop not incremented to 1"; exit 1; }
+rm -rf "$SPAWN_WORK"
+echo "PASS: Step 14 — spawn end-to-end: composed command, notify, reservation-then-outcome"
+
+echo ""
+echo "E2E PIPELINE PASS - 15 steps composed correctly"
 rm -rf "$WORK"
