@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "phase": "pre-completion",
+  "status": "FAIL",
+  "checks": {
+    "all_checkboxes_checked": {
+      "status": "FAIL",
+      "detail": "84/85 checked \u2014 1 unchecked checkbox(es) remain"
+    },
+    "no_pending_deviations": {
+      "status": "PASS",
+      "detail": "All deviations.md entries are dispositioned"
+    },
+    "all_tasks_have_reports": {
+      "status": "PASS",
+      "detail": "All 12 task(s) have report files in docs/imp-plans/2026-07-22-cmux-integration/reports"
+    },
+    "all_reports_complete": {
+      "status": "FAIL",
+      "detail": "Incomplete reports: task-007-implementer-report-fix.md (4/5 sections)"
+    },
+    "honesty_check_missing": {
+      "status": "FAIL",
+      "detail": "Missing or empty reports/honesty-check-YYYY-MM-DD.md \u2014 the honesty check must be completed before the Pre-Completion Gate. Present the honesty check prompt to the user, save their response, then re-run this checkpoint."
+    },
+    "trace_audit_missing": {
+      "status": "FAIL",
+      "detail": "Missing or empty reports/execution-trace-audit.md \u2014 run extract-execution-trace.py and dispatch the trace auditor subagent before declaring completion."
+    },
+    "excessive_minimum_tier_quality": {
+      "status": "PASS",
+      "detail": "0/11 non-declared quality reviews are minimum-tier"
+    },
+    "excessive_minimum_tier_partner": {
+      "status": "PASS",
+      "detail": "0/10 non-declared partner reviews are minimum-tier"
+    },
+    "verification_ratio": {
+      "status": "PASS",
+      "detail": "0/12 tasks are verification type"
+    },
+    "verification_git_reality": {
+      "status": "PASS",
+      "detail": "No verification tasks \u2014 git reality check skipped"
+    },
+    "integration_test_present": {
+      "status": "PASS",
+      "detail": "1 declared integration test(s) exist and are in the feature changeset (base: main)"
+    }
+  },
+  "warnings": [],
+  "blockers": [
+    "all_checkboxes_checked",
+    "all_reports_complete",
+    "honesty_check_missing",
+    "trace_audit_missing"
+  ],
+  "progress": {
+    "tasks_total": 12,
+    "tasks_completed": 12,
+    "checkboxes_total": 85,
+    "checkboxes_checked": 84,
+    "percentage": 99
+  }
+}
