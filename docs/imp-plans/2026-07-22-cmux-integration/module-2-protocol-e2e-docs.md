@@ -74,10 +74,10 @@ Decision-15 extraction).
 ## Acceptance Criteria
 
 - [ ] The Module-1 test-debt sweep (Tasks 7–8) is complete, with each new test mutation-proven — the implementer showing the assertion RED when its behavior is broken, not merely green when it is not.
-- [ ] The exit-code ladder is still exactly **0 spawned / 3 manual fallback / 1 refused** — Task 8 added no new exit code.
-- [ ] `context-handoff-protocol.md` steps 1–2 are byte-identical to the original; steps 3–5 drive the script per the exit-code ladder; a closing note documents the soft-nudge use.
-- [ ] `sdd-e2e-test.sh` reaches Step 14, asserts composed spawn command + notify + reservation-then-outcome log records, and passes; the final banner reads `15 steps`.
-- [ ] `git diff` shows `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` unchanged.
+- [x] The exit-code ladder is still exactly **0 spawned / 3 manual fallback / 1 refused** — Task 8 added no new exit code.
+- [x] `context-handoff-protocol.md` steps 1–2 are byte-identical to the original; steps 3–5 drive the script per the exit-code ladder; a closing note documents the soft-nudge use.
+- [x] `sdd-e2e-test.sh` reaches Step 14, asserts composed spawn command + notify + reservation-then-outcome log records, and passes; the final banner reads `15 steps`.
+- [x] `git diff` shows `sdd-pre-dispatch-hook.sh` and `tests/ARaymond-hook-baseline/baseline.txt` unchanged.
 - [ ] CLAUDE.md has a "cmux Integration" section; the two env vars are in the Hook Development Gotchas env-var list; the customization manifest and BACKLOG are updated; N43(D) is closed.
 
 ---
