@@ -37,13 +37,19 @@ through the extended claude-picker. Act on its exit code:
   unattended non-interactive pickup; `picker-manual` = the workspace opened the
   interactive picker and a human must complete it there before the pickup
   runs — the spawn notification fires either way and does not name the mode).
-  Nothing more to do here.
+  **If `picker-manual`, tell the user in so many words that they must go finish
+  the picker in that workspace or the successor never starts** — the
+  notification will not tell them. Otherwise nothing more to do here.
 - **Exit 3** — manual fallback (not in a cmux workspace, hop limit reached, quota
   low, a reservation write failed, or spawn failed after reservation). Relay the
   manual resume instructions the script printed (start a fresh session from the
   worktree, run `/pickup <bundle-id>`).
 - **Exit 1** — refused (dirty tree, bundle validation failed, or missing
-  `.active-feature`). Fix the printed precondition and re-run the script.
+  `.active-feature`). Fix the printed precondition and re-run the script. The
+  usual dirty-tree cause is **this** blocked task's own bookkeeping — the
+  `reports/checkpoint-pre-dispatch-NNN.json` and `reports/partner-review-NNN.md`
+  written before the dispatch that got blocked. Step 2 covers them; commit all
+  of `reports/`, not just the last completed task's files.
 
 **5. STOP.** Do not dispatch the next task in this session.
 
