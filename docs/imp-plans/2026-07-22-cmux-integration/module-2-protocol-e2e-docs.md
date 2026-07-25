@@ -165,28 +165,28 @@ Same mutation-proof and test-echo-collision requirements as Task 7 — see that 
 Do **NOT** add `set -u` to the script: `${FORWARDED[*]}` on an empty array raises `unbound variable`
 on bash 3.2 (the verified floor, 3.2.57) while passing on 4.4+.
 
-- [ ] **Step 1: Unchecked reservation writes (`:422-423`).** A failed `.handoff-hops` / `intent` write still proceeds to spawn, weakening Decision 21's durability guarantee. Check both writes; on failure warn, print manual instructions, exit 3. Add a test driving it (unwritable reports dir).
+- [x] **Step 1: Unchecked reservation writes (`:422-423`).** A failed `.handoff-hops` / `intent` write still proceeds to spawn, weakening Decision 21's durability guarantee. Check both writes; on failure warn, print manual instructions, exit 3. Add a test driving it (unwritable reports dir).
 
-- [ ] **Step 2: NM4 — failure-branch `cmux notify` unasserted (`:445`).** Deleting it leaves 58/58 green. One-line fix: assert the notify body inside `test_spawn_failure_keeps_hop_exits_3`.
+- [x] **Step 2: NM4 — failure-branch `cmux notify` unasserted (`:445`).** Deleting it leaves 58/58 green. One-line fix: assert the notify body inside `test_spawn_failure_keeps_hop_exits_3`.
 
-- [ ] **Step 3: mktemp-failure branch untested (`:393-397`).** Safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH to force the failure.
+- [x] **Step 3: mktemp-failure branch untested (`:393-397`).** Safe as written, but a future edit could break rc propagation there undetected. Stub `mktemp` on PATH to force the failure.
 
-- [ ] **Step 4: Task-4 cleanup trio.** `max(0, …)` on the label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further. If a cleanup has no observable behavior change, say so explicitly rather than inventing a test.
+- [x] **Step 4: Task-4 cleanup trio.** `max(0, …)` on the label slice, lone-surrogate `try`-wrap, and confirm the `mkdir` gating fix (already landed in Task 6) needs nothing further. If a cleanup has no observable behavior change, say so explicitly rather than inventing a test.
 
-- [ ] **Step 4b: Two coverage residuals found by the Task-7 quality review (both mutation-proven to survive a green 63-test suite).** These are the `-f`/regex halves that Task 7's Step 3/Step 5 wording under-specified. The script is correct as written — these pin behavior that is currently undetectable.
+- [x] **Step 4b: Two coverage residuals found by the Task-7 quality review (both mutation-proven to survive a green 63-test suite).** These are the `-f`/regex halves that Task 7's Step 3/Step 5 wording under-specified. The script is correct as written — these pin behavior that is currently undetectable.
 
   - **The `-f` half of the version predicate (`:298`).** Reducing the conjunction to a bare `[ -x … ]` leaves 63/63 green (verified independently by the controller). The pre-existing degraded-metadata param fails BOTH halves, so it pins only the conjunction; Task 7 pinned `-x`; `-f` remains unpinned. Test it by installing a **directory** named `2.1.218` under `versions/` — dirs are 0755 so `-x` passes and `-f` fails, and the picker's own `find -type f -perm -u+x` would never discover it. Expect `launch=picker-manual`.
   - **The fractional half of the `QUOTA_MIN_PCT` regex (`:27`).** `^[0-9]+(\.[0-9]+)?$` blesses `12.5`, but every MIN_PCT value in the suite is an integer, so tightening it to `^[0-9]+$` — silently reverting a legitimate fractional threshold to the default — leaves 63/63 green. Test with `SUPERPOWERS_CMUX_QUOTA_MIN_PCT="12.5"` asserting **no** WARNING and `quota=ok` at a 63.0% reading.
 
-- [ ] **Step 4c: Decide the `:299` redundancy explicitly (do not default).** Task 7 proved `command -v claude-picker` at `:299` is redundant with the contract probe at `:301` and unobservable by any black-box test: with the picker absent, `$(claude-picker --handoff-contract 2>/dev/null)` swallows "command not found", the substitution is empty, `"" != "1"`, and `:301` returns 1 anyway. Either keep it (defensible — it documents intent and stays robust if `:301` ever changes) or remove it, but **state the decision and the reason**. Do not leave it decided-by-default.
+- [x] **Step 4c: Decide the `:299` redundancy explicitly (do not default).** Task 7 proved `command -v claude-picker` at `:299` is redundant with the contract probe at `:301` and unobservable by any black-box test: with the picker absent, `$(claude-picker --handoff-contract 2>/dev/null)` swallows "command not found", the substitution is empty, `"" != "1"`, and `:301` returns 1 anyway. Either keep it (defensible — it documents intent and stays robust if `:301` ever changes) or remove it, but **state the decision and the reason**. Do not leave it decided-by-default.
 
-- [ ] **Step 4d: Move `_hermetic_picker_env` from `test_spawn_handoff.py` to `tests/unit/conftest.py`.** The fixture is currently **module-scoped**, so any future spawn-handoff test placed in a *different* file silently inherits the developer's ambient picker env and "metadata absent" stops meaning absent. This is not hypothetical — the Task-7 quality re-reviewer wrote a throwaway probe in a scratchpad file, did not get the fixture, observed an ambient leak, and filed a finding that was wrong *because of it*. Moving it to `conftest.py` closes the class. **Keep `PICKER_ENV_VARS` as the single source of the list** (import it, do not restate it).
+- [x] **Step 4d: Move `_hermetic_picker_env` from `test_spawn_handoff.py` to `tests/unit/conftest.py`.** The fixture is currently **module-scoped**, so any future spawn-handoff test placed in a *different* file silently inherits the developer's ambient picker env and "metadata absent" stops meaning absent. This is not hypothetical — the Task-7 quality re-reviewer wrote a throwaway probe in a scratchpad file, did not get the fixture, observed an ambient leak, and filed a finding that was wrong *because of it*. Moving it to `conftest.py` closes the class. **Keep `PICKER_ENV_VARS` as the single source of the list** (import it, do not restate it).
 
   **Blast radius:** moving it into `conftest.py` makes the fixture autouse for **all of `tests/unit/` (616 tests)**, not just this file's 63. So the verification is `.venv/bin/python3 -m pytest tests/unit/ -q` — **not** just the one file. The deletions use `raising=False` and *should* be inert for unrelated tests, but "should be inert" is precisely the claim this run has repeatedly disproven; run the full suite and report the count.
 
-- [ ] **Step 5: Owed plan-doc corrections in `module-1-spawn-script.md`.** Task 3 Step 2 (both snippet defects — the command-substitution + background-watcher timeout that stalls the full timeout on the success path, and the fallback-less `QUOTA_TOOL=` line whose own Step 1 tests cannot pass; replace with the shipped implementation from commit `7131698`); Task 4's wrong bash caveat (≥4.x → **≥3.2**); and Task 6 Step 2's spawn-id ordering defect (the id must be generated *before* the compose block so the composed fallback tail carries the uuid, per spec §5.4d). Scope is this file only — `plan.md` and `spec.md` do not mirror the snippet.
+- [x] **Step 5: Owed plan-doc corrections in `module-1-spawn-script.md`.** Task 3 Step 2 (both snippet defects — the command-substitution + background-watcher timeout that stalls the full timeout on the success path, and the fallback-less `QUOTA_TOOL=` line whose own Step 1 tests cannot pass; replace with the shipped implementation from commit `7131698`); Task 4's wrong bash caveat (≥4.x → **≥3.2**); and Task 6 Step 2's spawn-id ordering defect (the id must be generated *before* the compose block so the composed fallback tail carries the uuid, per spec §5.4d). Scope is this file only — `plan.md` and `spec.md` do not mirror the snippet.
 
-- [ ] **Step 6: Run the suites.**
+- [x] **Step 6: Run the suites.**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/ -q
@@ -194,7 +194,7 @@ bash scripts/lint-shell.sh
 ```
 Expected: all green; lint-shell clean for this script.
 
-- [ ] **Step 7: Confirm no hook/baseline drift, then commit.**
+- [x] **Step 7: Confirm no hook/baseline drift, then commit.**
 
 ```bash
 git diff --name-only skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/ARaymond-hook-baseline/baseline.txt   # must be EMPTY
@@ -435,6 +435,8 @@ Read `CLAUDE.md` first. Add a new top-level section (near the other feature sect
 - A pointer to the cmux fork-usage guidance ("prefer `--focus false`"; vendored cmux skills are pristine — fork-specific cmux guidance lives here, not in the vendored files).
 
 Add the two env vars to the **Hook Development Gotchas** env-var list (alongside `SUPERPOWERS_CMUX_*`... i.e. next to the context-gate env vars): `SUPERPOWERS_CMUX_MAX_HOPS` (default 3 — hop limit) and `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default 15 — session-quota refusal threshold). Also mention `SUPERPOWERS_CMUX_QUOTA_TIMEOUT` (default 60) and `SUPERPOWERS_CMUX_QUOTA_TOOL` if the implementer kept them (test seams).
+
+- [ ] **Step 1b: Document the deliberate `cmux notify` asymmetry across the exit-3 branches.** (Added by the Task-8 quality review, finding 4 — controller ratified the omission rather than adding the notify.) Three exit-3 branches DO notify — hop-limit, quota-low, and spawn-failed-after-reservation — but the two **reservation-write-failure** branches deliberately do **not**: the plan prescribed exactly "warn, print manual instructions, exit 3", and a broken/unwritable reports dir is relayed via exit 3 plus printed instructions, not a push notification. State this as an intentional rule so a future reader does not "fix" the inconsistency by reflex. Without this line the omission is invisible and indistinguishable from an oversight.
 
 - [ ] **Step 2: Update the customization manifest (read-merge).**
 

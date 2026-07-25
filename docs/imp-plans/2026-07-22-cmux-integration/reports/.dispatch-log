@@ -5,3 +5,8 @@
 2026-07-24T20:41:25Z DISPATCH reviewer task=7 type=quality-review
 2026-07-24T20:50:32Z DISPATCH fix task=7 type=fix
 2026-07-24T20:57:46Z DISPATCH reviewer task=7 type=quality-review
+2026-07-25T00:43:04Z DISPATCH reviewer task=8 type=partner-review
+2026-07-25T00:49:11Z DISPATCH implementer task=8 type=implementer
+2026-07-25T01:20:48Z DISPATCH reviewer task=8 type=spec-review
+2026-07-25T01:28:05Z DISPATCH reviewer task=8 type=quality-review
+2026-07-25T01:43:13Z DISPATCH fix task=8 type=fix
