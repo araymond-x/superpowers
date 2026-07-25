@@ -253,25 +253,10 @@ def test_quota_tool_timeout_proceeds(tmp_path):
 
 from spawn_handoff_helpers import encode_args, install_version
 
-# The forwarding metadata this file exercises is REAL ambient env on any machine
-# whose own session was launched through claude-picker (the developer's is). Since
-# run_spawn snapshots os.environ, an "absent var" case would silently inherit that
-# live value — telemetry-off and append-prompt-empty would both test the opposite
-# of what they claim. Scrub the five vars for every test in this module so absent
-# means absent (and so the pre-Task-4 tests never decode a real payload either).
-PICKER_ENV_VARS = [
-    "CLAUDE_CODE_PICKER_VERSION",
-    "CLAUDE_CODE_PICKER_LABEL",
-    "CLAUDE_CODE_PICKER_ARGS",
-    "CLAUDE_CODE_PICKER_APPEND_PROMPT",
-    "CLAUDE_CODE_ENABLE_TELEMETRY",
-]
-
-
-@pytest.fixture(autouse=True)
-def _hermetic_picker_env(monkeypatch):
-    for var in PICKER_ENV_VARS:
-        monkeypatch.delenv(var, raising=False)
+# The ambient picker-env scrub every test in this file depends on (absent must
+# mean absent) is the autouse `_hermetic_picker_env` fixture in tests/unit/
+# conftest.py — moved there in Task 8 so it is not module-scoped. PICKER_ENV_VARS
+# is defined there as its single source.
 
 
 def _meta(
@@ -743,6 +728,10 @@ def test_spawn_failure_keeps_hop_exits_3(tmp_path):
     # observed this call at all (the Task-5 test-echo collision class).
     assert "Manual resume required" in r.stdout
     assert "Then STOP the current session" in r.stdout
+    # The failure branch's own `cmux notify` had no assertion at all — deleting it
+    # left the suite green. Asserted on the recorded notify argv (not stdout+stderr)
+    # so only an actual notify call satisfies it.
+    assert "Spawn failed after reservation" in _notify_line(tmp_path)
     records = _spawn_log_records(ctx)
     ids = {i for _, i, _ in records}
     assert len(ids) == 1, f"spawn ids diverge across records: {records}"
@@ -1101,3 +1090,217 @@ def test_invalid_quota_timeout_warns_and_quota_gate_stays_live(tmp_path):
     assert _warning_lines(r, "TIMEOUT"), f"no TIMEOUT warning on stderr: {r.stderr!r}"
     assert r.returncode == 3
     assert "quota=low" in r.stderr
+
+
+# --- Task 8 (Sweep B): reservation durability + residual coverage --------------
+
+from spawn_handoff_helpers import make_stub
+
+
+def _cmux_log_text(tmp_path):
+    p = tmp_path / "cmux.log"
+    return p.read_text() if p.exists() else ""
+
+
+RESERVATION_WARN = "[spawn-handoff] reservation write failed:"
+
+
+def _reservation_warning_lines(r, needle):
+    """stderr lines that are this reservation write's OWN warning.
+
+    Prefix-anchored because the post-reservation SPAWN failure also prints the
+    manual instructions and exits 3 — rc and instruction text cannot tell the two
+    branches apart, and bash's own `cannot create` diagnostic would satisfy a
+    loose match. `needle` then separates the two reservation writes from each
+    other: an unwritable reports dir fails BOTH, so a check that accepted either
+    warning would stay green with the write under test left unchecked.
+    """
+    return [
+        ln
+        for ln in r.stderr.splitlines()
+        if ln.startswith(RESERVATION_WARN) and needle in ln
+    ]
+
+
+def test_hops_write_failure_exits_3_without_spawning(tmp_path):
+    # Decision 21 durability: with neither `set -e` nor pipefail, an unchecked
+    # failed redirection would spawn anyway — reserving nothing while the
+    # reserve-before-spawn ORDERING still looked intact.
+    ctx = setup_worktree(tmp_path)
+    env = _reach_spawn(tmp_path, ctx)
+    os.chmod(ctx["reports"], 0o555)  # existing dir, unwritable => the WRITE fails
+    try:
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    finally:
+        os.chmod(ctx["reports"], 0o755)
+    assert r.returncode == 3
+    assert _reservation_warning_lines(
+        r, "cannot record hop"
+    ), f"no hops-write warning: {r.stderr!r}"
+    # The leg that actually proves no spawn happened.
+    assert "new-workspace" not in _cmux_log_text(tmp_path)
+    assert not (ctx["reports"] / ".handoff-hops").exists()
+    assert "Manual resume required" in r.stdout
+
+
+def test_intent_write_failure_exits_3_without_spawning(tmp_path):
+    # The SECOND write, isolated. An unwritable reports dir fails BOTH writes and
+    # exits at the first, leaving this check unpinned — so make only the log write
+    # fail, by occupying its path with a DIRECTORY (`>>` onto a dir is EISDIR).
+    # A read-only FILE would work too but is untracked content in reports/, which
+    # trips the clean-tree precondition and exits 1 for the wrong reason; an empty
+    # directory is invisible to git.
+    ctx = setup_worktree(tmp_path)
+    env = _reach_spawn(tmp_path, ctx)
+    (ctx["reports"] / "handoff-spawn.log").mkdir()
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 3
+    assert _reservation_warning_lines(
+        r, "cannot append intent record"
+    ), f"no intent-write warning: {r.stderr!r}"
+    assert "new-workspace" not in _cmux_log_text(tmp_path)
+    # Discriminates this leg from the hops-write leg: the hop IS consumed here.
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+    assert "Manual resume required" in r.stdout
+
+
+def _install_failing_mktemp(tmp_path):
+    """Force every `mktemp` in the script to fail (PATH stub)."""
+    stubs = tmp_path / "stubs"
+    stubs.mkdir(exist_ok=True)
+    make_stub(stubs, "mktemp", "exit 1")
+
+
+def test_mktemp_failure_still_spawns_uncaptured(tmp_path):
+    # The spawn core captures cmux's stdout through a temp FILE; when mktemp is
+    # unavailable it must still spawn (uncaptured) rather than skip the spawn.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    _install_failing_mktemp(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 0
+    assert "new-workspace" in _cmux_log_text(tmp_path)
+    assert _outcome_workspace(ctx) == "(spawned)"  # nothing captured to parse
+
+
+def test_mktemp_failure_preserves_spawn_failure_rc(tmp_path):
+    # The uncaptured branch must propagate cmux's own exit code: the whole ladder
+    # (non-zero -> exit 3, hop consumed) hangs off that `rc=$?`.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    _install_failing_mktemp(tmp_path)
+    body = (
+        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
+        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; exit 5; fi\n'
+        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    )
+    r = run_spawn(ctx, tmp_path, "b1", cmux_body=body)
+    assert r.returncode == 3
+    assert _outcome_workspace(ctx) == "spawn-failed"
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+
+def test_version_installed_as_directory_degrades_to_picker_manual(tmp_path):
+    # The `-f` half of the preflight's `-f && -x` conjunction. A DIRECTORY named
+    # like a version is mode 0755, so `-x` passes and only `-f` refuses — while
+    # the picker's own `find -type f -perm -u+x` discovery would never find it.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    vdir = tmp_path / "home" / ".local" / "share" / "claude" / "versions"
+    vdir.mkdir(parents=True, exist_ok=True)
+    (vdir / "2.1.218").mkdir()
+    env = _meta(args_b64=encode_args([]))
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    assert r.returncode == 0
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+    assert _successor_cmd(r) == "claude-picker '/pickup b1'"
+    # POSITIVE CONTROL. preflight is a five-way AND, so picker-manual above is
+    # only evidence about `-f` if EVERY other predicate holds in this fixture.
+    # Same env, same everything — only the version becomes a regular executable.
+    (vdir / "2.1.218").rmdir()
+    install_version(tmp_path, "2.1.218")
+    r2 = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+    assert "launch=auto" in (r2.stdout + r2.stderr), "control leg never reached auto"
+
+
+# 63.0 is PACE_OK's reading; 13.0 sits BETWEEN a fractional threshold of 12.5 and
+# the script's integer default of 15, which is what makes the fractional regex
+# half behaviorally observable. Derived from PACE_OK rather than re-escaped by
+# hand, and defined here because spawn_handoff_helpers.py is Task 7's file.
+PACE_BETWEEN = PACE_OK.replace("63.0", "13.0")
+
+
+def test_fractional_quota_min_pct_is_accepted(tmp_path):
+    # A fractional threshold is legitimate (the regex blesses `12.5`), so it must
+    # not trip the invalid-value warning.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        pace_body=PACE_OK,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_MIN_PCT": "12.5"},
+    )
+    assert r.returncode == 0
+    assert not _warning_lines(r, "MIN_PCT"), f"fractional value warned: {r.stderr!r}"
+    assert "quota=ok" in r.stderr
+
+
+def test_fractional_quota_min_pct_threshold_is_honoured(tmp_path):
+    # The behavioral half of the same guard: at 13.0% the fractional threshold
+    # (12.5) proceeds, while a silent revert to the default (15) would refuse with
+    # exit 3. Unlike the absence assertion above, this flips an OUTCOME.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        pace_body=PACE_BETWEEN,
+        env_extra={"SUPERPOWERS_CMUX_QUOTA_MIN_PCT": "12.5"},
+    )
+    assert r.returncode == 0, f"13.0% refused against a 12.5% threshold: {r.stderr!r}"
+    assert "quota=ok:13.0" in r.stderr
+
+
+def test_lone_surrogate_arg_degrades_without_traceback(tmp_path):
+    # A lone surrogate cannot be UTF-8 encoded, so the decoder's final write
+    # raises. The degrade (ARGS_OK=0 -> picker-manual) was always correct; the
+    # DIAGNOSTIC was a raw Python traceback on the script's stderr.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args(["\udcff"])),
+    )
+    assert r.returncode == 0
+    assert "launch=picker-manual" in (r.stdout + r.stderr)
+    assert "Traceback" not in r.stderr
+
+
+def test_label_slice_does_not_leak_base_when_suffix_exceeds_ceiling(tmp_path):
+    # A pathological `-Session-<250 digits>` label makes the suffix alone exceed
+    # the 255 ceiling. Without max(0, …) the negative bound truncates the base
+    # from the RIGHT, leaking a fragment of the old label into the new one.
+    # (No result can be under 255 here; this pins deterministic truncation.)
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    install_version(tmp_path, "2.1.218")
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        "--dry-run",
+        env_extra=_meta(args_b64=encode_args([]), label="ProjectXYZ-Session-" + "9" * 250),
+    )
+    m = re.search(r"label=\[([^\]]*)\]", r.stdout + r.stderr)
+    assert m, "no label diagnostic emitted"
+    assert m.group(1).startswith("-Session-")
+    assert "Proje" not in m.group(1)

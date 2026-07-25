@@ -589,24 +589,38 @@ def test_quota_ok_proceeds(tmp_path):
 
 Run → quota tests FAIL (skeleton exits 0 with no `quota=` string).
 
-- [x] **Step 2: Insert the quota check.** _(shipped implementation diverges from the snippet below — see deviations.md; snippet correction owed)_
+- [x] **Step 2: Insert the quota check.** _(snippet below corrected in Task 8 Step 5 to the shipped implementation, commit `7131698` — the original had two defects: a command-substitution-wrapped watcher that stalled the success path for the full timeout, and a `QUOTA_TOOL=` line with no PATH fallback, which its own Step 1 tests could not pass.)_
 
 Replace the `# (Task 3 inserts the quota check here.)` marker with:
 
 ```bash
 # --- Precondition 5: quota (fail-open; parameters pinned in spec §5.3) ------
+# Tool resolution: an explicit SUPERPOWERS_CMUX_QUOTA_TOOL override is
+# authoritative — a bad override classifies `unchecked`, it never silently falls
+# back. Only the pinned default is allowed a PATH lookup, for installs where
+# ~/.claude/bin is absent (it is not on PATH by default).
 QUOTA_TOOL="${SUPERPOWERS_CMUX_QUOTA_TOOL:-$QUOTA_TOOL_DEFAULT}"
+if [ -z "$SUPERPOWERS_CMUX_QUOTA_TOOL" ] && [ ! -x "$QUOTA_TOOL" ]; then
+  QUOTA_TOOL="$(command -v claude-usage-pace 2>/dev/null)"
+fi
 QUOTA_TIMEOUT="${SUPERPOWERS_CMUX_QUOTA_TIMEOUT:-60}"
 QUOTA_STATUS="unchecked"
 check_quota() {
   # Emits ok:<pct> | low:<pct> | unchecked  (never fails the caller).
   if [ ! -x "$QUOTA_TOOL" ]; then echo "unchecked"; return 0; fi
-  local out rc pct
-  out="$("$QUOTA_TOOL" --json --no-log 2>/dev/null & pid=$!
-         ( sleep "$QUOTA_TIMEOUT"; kill -9 $pid 2>/dev/null ) & watcher=$!
-         wait $pid 2>/dev/null; rc=$?; kill $watcher 2>/dev/null; exit $rc)"
-  rc=$?
+  local out rc pct tmpf pid watcher
+  # macOS has no `timeout`, so bound the tool with a background watcher. Capture
+  # through a temp FILE, not a pipe: the watcher's `sleep` (and any child the
+  # tool forks) inherits a command-substitution pipe and holds it open, stalling
+  # the read for the full timeout even on the success path.
+  tmpf="$(mktemp)" || { echo "unchecked"; return 0; }
+  "$QUOTA_TOOL" --json --no-log >"$tmpf" 2>/dev/null & pid=$!
+  ( sleep "$QUOTA_TIMEOUT"; kill -9 $pid 2>/dev/null ) >/dev/null 2>&1 & watcher=$!
+  wait $pid; rc=$?
+  kill $watcher 2>/dev/null
+  out="$(cat "$tmpf" 2>/dev/null)"; rm -f "$tmpf"
   if [ $rc -ne 0 ]; then echo "unchecked"; return 0; fi
+  # $out is passed as sys.argv[1], never interpolated into the program text.
   pct="$("$PYTHON" - "$out" <<'PY' 2>/dev/null
 import json,sys
 try:
@@ -835,7 +849,7 @@ if [ "${CLAUDE_CODE_ENABLE_TELEMETRY:-}" = "1" ]; then TELEMETRY="on"; else TELE
 echo "[spawn-handoff] forwarded=${FORWARDED[*]} label=[$LABEL] telemetry=$TELEMETRY" >&2
 ```
 
-> **Bash version caveat:** confirm `env bash --version` is ≥ 4.x (Homebrew) on the target and note the requirement in Task 9 docs. The decode does the `/pickup` strip in python (no bash negative indexing), so the array ops here are append + `${FORWARDED[*]}` only — safe on bash 3.2 too.
+> **Bash version caveat (corrected in Task 8 Step 5):** the floor is **≥ 3.2**, not ≥ 4.x — verified against the system bash 3.2.57. The decode does the `/pickup` strip in python (no bash negative indexing), so the array ops here are append + `${FORWARDED[*]}` only. Note the ≥ 3.2 requirement in the Task 9 docs. (This is also why the script must never adopt `set -u`: `${FORWARDED[*]}` on an empty array raises `unbound variable` on 3.2 while passing on 4.4+.)
 
 - [x] **Step 3: Run tests → pass.**
 
@@ -1083,7 +1097,11 @@ if [ "$DRY_RUN" = "1" ]; then
 fi
 
 # --- Spawn sequence (Decision 21 — reserve BEFORE spawn) -------------------
-SPAWN_ID="$("$PYTHON" -c 'import uuid;print(uuid.uuid4())')"
+# $SPAWN_ID is NOT generated here (corrected in Task 8 Step 5): spec §5.4d makes
+# the composed runtime-picker-failure fallback tail the FOURTH record carrying the
+# id, so it must be generated BEFORE the Task-5 compose block. Generating it here
+# would leave the composed tail with no id; generating a second one here would
+# break the very correlation the id exists for.
 mkdir -p "$REPORTS_DIR"
 # 1. Reserve (SP_HOP computed in Task 2 after the hop-limit check).
 printf '%s\n' "$SP_HOP" > "$HOPS_FILE"

@@ -253,8 +253,14 @@ if ap_b64:                            # prefer content: rematerialize + substitu
         if argv[i].startswith("--append-system-prompt-file="):
             argv[i] = "--append-system-prompt-file=" + target
         i += 1
-with open(out, "wb") as f:
-    f.write(b"".join(x.encode() + b"\0" for x in argv))   # each element NUL-terminated
+try:
+    with open(out, "wb") as f:
+        f.write(b"".join(x.encode() + b"\0" for x in argv))   # each element NUL-terminated
+except Exception:
+    # Distinct code (the shell only tests != 0, but 3 and 4 above are documented
+    # as specific diagnostics): an element that cannot be UTF-8 encoded, e.g. a
+    # lone surrogate. Degrades the same way -> ARGS_OK=0 -> picker-manual.
+    sys.exit(5)
 PY
   if [ $? -ne 0 ]; then
     ARGS_OK=0                         # corrupt body or rematerialization failure
@@ -277,7 +283,12 @@ base = re.sub(r"[^A-Za-z0-9_.-]", "", base)
 if not base:
     print(""); sys.exit(0)
 suffix = "-Session-%d" % n
-print(base[:255 - len(suffix)] + suffix)
+# max(0, …): a pathological input (…-Session-<hundreds of digits>) makes the
+# suffix alone exceed the ceiling, and a NEGATIVE slice bound silently truncates
+# the base from the RIGHT instead of emptying it — leaking a middle fragment of
+# the old label. Nothing can bring such a result under 255; this only keeps the
+# truncation deterministic and intentional.
+print(base[:max(0, 255 - len(suffix))] + suffix)
 PY
 )"
 
@@ -296,6 +307,10 @@ preflight_ok() {
   # Match the picker's own version discovery predicate (`find -type f -perm -u+x`),
   # not a lenient `-e` — otherwise preflight can pass a version the picker rejects.
   { [ -f "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ] && [ -x "$VERSIONS_DIR/${CLAUDE_CODE_PICKER_VERSION}" ]; } || return 1
+  # KEPT deliberately although the probe below subsumes it today (an absent picker
+  # yields an empty substitution, which already fails the equality test): spec
+  # §5.4c enumerates PATH resolution as its own predicate, so dropping it would
+  # make the script diverge from a spec-enumerated condition for a one-line saving.
   command -v claude-picker >/dev/null 2>&1 || return 1
   # String equality, not >=: a future v2 picker must degrade, never pass.
   [ "$(claude-picker --handoff-contract 2>/dev/null)" = "$PICKER_CONTRACT" ] || return 1
@@ -422,9 +437,23 @@ fi
 # — do NOT regenerate it here, or the child's runtime-failure record stops
 # correlating with this hop's intent record.
 mkdir -p "$REPORTS_DIR"
-# 1. Reserve (SP_HOP computed in Task 2 after the hop-limit check).
-printf '%s\n' "$SP_HOP" > "$HOPS_FILE"
-printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"
+# 1. Reserve (SP_HOP computed in Task 2 after the hop-limit check). BOTH writes
+# are checked: Decision 21's guarantee is that the reservation is DURABLE before
+# the workspace exists, and this script runs with neither `set -e` nor pipefail,
+# so an unchecked failed redirection would spawn anyway — the reserve-before-spawn
+# ordering would still hold while reserving nothing. A failure routes to the
+# existing exit 3 (manual fallback): nothing was spawned, so manual resume is the
+# correct recovery and the 0/3/1 ladder is unchanged.
+if ! printf '%s\n' "$SP_HOP" > "$HOPS_FILE"; then
+  echo "[spawn-handoff] reservation write failed: cannot record hop in $HOPS_FILE (no hop consumed, no spawn attempted) — manual fallback." >&2
+  print_manual_instructions
+  exit 3
+fi
+if ! printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"; then
+  echo "[spawn-handoff] reservation write failed: cannot append intent record to $SPAWN_LOG (hop $SP_HOP consumed, no spawn attempted) — manual fallback." >&2
+  print_manual_instructions
+  exit 3
+fi
 # 2. Spawn.
 if spawn_claude_workspace "$WORKTREE_ROOT" "$SUCCESSOR_CMD" "SDD resume: $FEATURE_NAME" \
      "Hop $SP_HOP/$MAX_HOPS — successor spawned in {workspace}"; then
