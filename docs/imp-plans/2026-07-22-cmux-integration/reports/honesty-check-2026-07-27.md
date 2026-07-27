@@ -95,4 +95,22 @@ I also deviated **upward** from the template on model choice: `controller-partne
 
 **Round 3 — APPROVED.** I did **not** proceed to the implementer until this. It also raised one observation with no action required — that a phrase of mine said `:389` "explicitly says" something that was actually my inference from it. That is the same attribute-to-the-wrong-source class the review had just caught three times, so I fixed it anyway rather than accepting the pass.
 
+---
+
+## Remediation outcome (appended 2026-07-27, after the user reviewed the recommendation)
+
+The prioritized recommendation was presented to the user, who replied *"proceed with your recommendation"* — approving H1 and authorizing H2 + H3.
+
+| Item | From | Outcome |
+|---|---|---|
+| **H1** — criterion `plan.md:217` deferral | Q7 / gate | **Approved by the user.** Checkbox deliberately **left unchecked**; approval and the reasoning recorded in `deviations.md`. The pre-completion script will keep reporting `all_checkboxes_checked: FAIL (84/85)` **by design** — the SKILL's gate is satisfied by its documented "dispositioned with human approval" path, which the script cannot represent. Explicitly marked "do not fix by ticking the box." |
+| **H2** — fix round 2 closed on self-verification only | Q4, Q6 | **Closed.** A dispatched re-review of `3917602` returned **PASS with zero findings** and two positive controls (one falsifying the doc's own regex claim, one perturbing the frozen script and restoring it). Recorded as Round 3 in `task-011-quality-review.md`. It also **improved on my reasoning**: it argued the `$`-anchor caveat should *not* be documented because "enumerates exactly those six" is itself the tripwire — a second prose claim could drift independently of the first. |
+| **H3** — full suite never re-run against the final commit | Q6 | **Closed.** All five suites re-run by the controller against `0a02613`: install **PASSED (104/0/0)** · regression **159 PASS / 0 FAIL / 2 WARN** · unit **625 passed** · e2e **`E2E PIPELINE PASS - 15 steps composed correctly`** · hook baseline **PASS, 7 hooks intact, no re-capture**. The green claim now covers what actually ships, not an ancestor commit. |
+
+M1, M2, L1 and the Warnings (W1–W4) were presented and remain open by the user's choice; W1–W2 are filed as **N52**, the partner-provenance gap as **N53**, and the opt-out gap the user raised separately as **N55**.
+
+**A note on H2 and H3 together:** both were cases where I had substituted sound reasoning for direct verification — "a prose-only edit cannot reach the test suites", "a one-clause fix supplied verbatim does not need a reviewer". Both turned out to be correct. That is the point worth recording: *being right is not the same as having checked*, and this run's entire error record is plausible reasoning that happened to be wrong. The cost of closing them was ten minutes.
+
+---
+
 **Provenance note (a real finding, not an excuse):** `.dispatch-log` shows only **one** `task=11 type=partner-review` row (06:07:57Z) despite three rounds, because rounds 2 and 3 were `SendMessage` resumes of the same agent, which do not pass through the `PreToolUse → Agent` hook. **This session is itself a concrete instance of BACKLOG N53** — the provenance log cannot distinguish "re-reviewed via resume" from "never re-reviewed."

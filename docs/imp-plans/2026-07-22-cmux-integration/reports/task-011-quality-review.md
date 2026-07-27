@@ -70,3 +70,24 @@ Second control: the heading-convention hypothesis made falsifiable predictions a
    → **PARTIALLY ACCEPTED.** The six bare exit-site cites and the manifest's ladder duplication are fixed. **The bullet-5 field grammar is retained — controller decision, with evidence the reviewer did not check:** CLAUDE.md *already* documents `context-observations.log`'s field grammar inline (`format: <ISO-8601> task=<N> type=<...> tokens=<T> source=<probe|byte-proxy|bypass> tier=<below|soft|hard> action=<allow|nudge|block|fallback>`). Documenting a sibling log's grammar inline is therefore established house style, not a novel second source of truth — **and the "do not conflate these two logs" warning is only actionable if a reader can see how the formats differ.** Removing one of the two grammars would weaken the exact warning the bullet exists to give.
 
 **No Critical or Important findings.** The notify-asymmetry, `set -u`/3.2, cwd, and not-a-hook bullets are the strongest content in the section and were not touched by the fix round.
+
+---
+
+## Round 3 — dispatched re-review of fix round 2 (`3917602`) — **PASS, zero findings**
+
+> **Why this exists.** Fix round 2 was originally closed by **controller self-verification only** — no reviewer was
+> dispatched. The honesty check (2026-07-27, Q4/Q6) named that as the session's one violation of this run's own
+> hard-won rule, *"always re-review after a fix round"* — a rule learned twice, including once inside this very task
+> when round 1's re-review caught a defect round 1 had introduced. Raised to the user as remediation item **H2**;
+> the user approved closing it. **This dispatch replaces the self-verification with an independent check.**
+
+**Status: PASS, zero findings.** Scope was `3917602` alone (1 file, 1 line).
+
+- **Introduced no defect.** Claims re-verified against source: the five causes are listed in *source order*, so the six grep hits map positionally; `.handoff-hops` first (`:464` = `HOPS_FILE`), spawn log second (`:469` = `SPAWN_LOG`). The "three comment lines" claim is **precise, not merely true** — `:400` and `:455` genuinely *do* describe the ladder, so singling out `:269` (a comment about the **decoder's** `sys.exit(3/4/5)`) as the misleading one is correct.
+- **Fix A resolves the inconsistency, and the distinction is true rather than a rationalization.** Verified on both bullets: a drifted `:125` in the notify bullet would assert that branch "cannot notify" — contradicted by `cmux notify` at `:134` *and* by the bullet's own first sentence (self-catching); in the homogeneous ladder list a swapped number still lands on an exit-3 branch with no per-number assertion to contradict (silent). **`:484`/`:439` are not a self-violation** — each carries a distinct assertion (`:439` the `--dry-run` short-circuit, `:484` post-successful-spawn), and `grep -nE '^[[:space:]]*exit 0'` returns exactly those two, so they satisfy the rule the sentence establishes.
+- **Fix B correct and honest.** Anchored form returns exactly `125 137 195 464 469 491`; bare form returns 9.
+- **The `$`-anchor caveat should NOT be added** — reviewer's reasoning, which the controller accepts as better than its own: the phrase *"enumerates exactly those six"* **is itself the tripwire**. An editor who tightens the regex and re-runs gets five, and the sentence falsifies on the spot. A prose caveat would add a second claim that can drift independently of the first; the numeric claim is load-bearing and self-checking, the caveat would be neither.
+- **Scope proof by construction:** one line changed against its true parent means **every other line is byte-identical**, which covers the notify, cwd, `set -u`/bash-3.2, not-a-hook, and the deliberately-declined `handoff-spawn.log` bullets in one stroke (corroborated by md5 of that bullet at `056c453` vs HEAD: identical). Frozen script and hook baseline absent from the commit.
+
+**Positive controls (two).** (1) `grep -nE '^[[:space:]]*exit 3$'` → **5**, dropping `:195` (`exit 3 ;;`) — proving the documented claim is falsifiable and the method detects it. (2) Appended a dummy `exit 3` branch to the frozen script → anchored count went **6 → 7**, surfacing `:496`. Restored with `git checkout --`, `git diff --name-only` clean, count back to 6, `diff -q` against a pre-mutation copy byte-identical. **No `git stash`.**
+

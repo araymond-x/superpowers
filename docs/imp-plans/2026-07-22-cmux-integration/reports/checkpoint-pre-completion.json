@@ -20,8 +20,8 @@
       "detail": "All 17 report(s) have required sections"
     },
     "honesty_check_missing": {
-      "status": "FAIL",
-      "detail": "Missing or empty reports/honesty-check-YYYY-MM-DD.md \u2014 the honesty check must be completed before the Pre-Completion Gate. Present the honesty check prompt to the user, save their response, then re-run this checkpoint."
+      "status": "PASS",
+      "detail": "Honesty check response present"
     },
     "trace_audit_missing": {
       "status": "PASS",
@@ -50,8 +50,7 @@
   },
   "warnings": [],
   "blockers": [
-    "all_checkboxes_checked",
-    "honesty_check_missing"
+    "all_checkboxes_checked"
   ],
   "progress": {
     "tasks_total": 12,
