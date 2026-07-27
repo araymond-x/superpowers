@@ -16,16 +16,16 @@
       "detail": "All 12 task(s) have report files in docs/imp-plans/2026-07-22-cmux-integration/reports"
     },
     "all_reports_complete": {
-      "status": "FAIL",
-      "detail": "Incomplete reports: task-007-implementer-report-fix.md (4/5 sections)"
+      "status": "PASS",
+      "detail": "All 17 report(s) have required sections"
     },
     "honesty_check_missing": {
       "status": "FAIL",
       "detail": "Missing or empty reports/honesty-check-YYYY-MM-DD.md \u2014 the honesty check must be completed before the Pre-Completion Gate. Present the honesty check prompt to the user, save their response, then re-run this checkpoint."
     },
     "trace_audit_missing": {
-      "status": "FAIL",
-      "detail": "Missing or empty reports/execution-trace-audit.md \u2014 run extract-execution-trace.py and dispatch the trace auditor subagent before declaring completion."
+      "status": "PASS",
+      "detail": "Execution trace audit present"
     },
     "excessive_minimum_tier_quality": {
       "status": "PASS",
@@ -51,9 +51,7 @@
   "warnings": [],
   "blockers": [
     "all_checkboxes_checked",
-    "all_reports_complete",
-    "honesty_check_missing",
-    "trace_audit_missing"
+    "honesty_check_missing"
   ],
   "progress": {
     "tasks_total": 12,
