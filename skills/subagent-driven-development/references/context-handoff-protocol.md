@@ -19,15 +19,38 @@ response is to hand off, not to push through.
 `reports/`, updated plan checkboxes, and `deviations.md` are all committed. The
 fresh session resumes from committed state only.
 
-**3. Build the fresh-session handoff.** Invoke the `handoff` skill to create a
-bundle whose entry skill is `superpowers:subagent-driven-development` (the N39
-flow). The bundle captures the goal, the plan/manifest, and next-action context.
+**3. Build the fresh-session handoff and capture its id.** Invoke the `handoff`
+skill to create a bundle whose entry skill is
+`superpowers:subagent-driven-development` (the N39 flow). The bundle captures the
+goal, the plan/manifest, and next-action context. **Capture the bundle id** the
+`/handoff` output prints (e.g. `2026-07-23T01-19-43Z-<repo>`) — step 4 needs it.
 
-**4. Tell the user how to resume.** Instruct them to start a FRESH session FROM
-the worktree (so the enforcement hooks bind to the worktree CWD) and run
-`/pickup`. The new session invokes SDD via the entry skill and resumes mid-plan
-per `references/session-recovery.md` (plan checkboxes + `deviations.md` +
-`reports/` → first unchecked task).
+**4. Spawn the successor (or fall back).** Run:
+
+    ~/.claude/skills/superpowers/subagent-driven-development/scripts/spawn-handoff-session.sh <bundle-id>
+
+The script verifies the clean tree, validates the bundle, checks cmux reachability,
+the hop limit, and session quota, then spawns the successor in a new cmux workspace
+through the extended claude-picker. Act on its exit code:
+
+- **Exit 0** — spawned. Report the workspace ref and launch mode (`auto` =
+  unattended non-interactive pickup; `picker-manual` = the workspace opened the
+  interactive picker and a human must complete it there before the pickup
+  runs — the spawn notification fires either way and does not name the mode).
+  **If `picker-manual`, tell the user in so many words that they must go finish
+  the picker in that workspace or the successor never starts** — the
+  notification will not tell them. Otherwise nothing more to do here.
+- **Exit 3** — manual fallback (not in a cmux workspace, hop limit reached, quota
+  low, a reservation write failed, or spawn failed after reservation). Relay the
+  manual resume instructions the script printed (start a fresh session from the
+  worktree, run `/pickup <bundle-id>`).
+- **Exit 1** — refused (dirty tree, bundle validation failed, or missing
+  `.active-feature`). Fix the printed precondition and re-run the script. The
+  usual dirty-tree cause is **this** blocked task's own bookkeeping — the
+  `reports/checkpoint-pre-dispatch-NNN.json` and `reports/partner-review-NNN.md`
+  written before the dispatch that got blocked. Step 2's "its reports under
+  `reports/`" reads as the *completed* task's; commit **all** of `reports/`,
+  including the blocked task's own files.
 
 **5. STOP.** Do not dispatch the next task in this session.
 
@@ -38,3 +61,8 @@ handoff still depends on you following steps 2–5.
 
 **A soft nudge** (context ≥ soft, < hard) is the same guidance offered earlier,
 without the stop — handing off at the nudge is preferred to waiting for the block.
+
+**Soft-nudge use:** handing off at the soft nudge (context ≥ soft, < hard) is
+preferred to waiting for the hard block, and the **same** `spawn-handoff-session.sh`
+serves it — build the bundle early (step 3) and run the script (step 4) at the
+nudge rather than pushing to the block.

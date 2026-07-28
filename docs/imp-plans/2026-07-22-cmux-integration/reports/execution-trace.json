@@ -1,0 +1,632 @@
+{
+ "coverage": {
+  "session_files_found": 15,
+  "session_files_extracted": 15,
+  "files": [
+   {
+    "session": "078d8afc-0d1a-46d3-b3cc-6aa45e9b17c3",
+    "messages": 12,
+    "task_numbers": [],
+    "anomalies": 0
+   },
+   {
+    "session": "0cb72a1c-6e54-458d-bf35-63e08b4ced31",
+    "messages": 562,
+    "task_numbers": [
+     6
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "275df3f0-d697-4eee-a9d1-f6b90a7846d6",
+    "messages": 512,
+    "task_numbers": [
+     7
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "2870dd5e-8962-4de4-af21-4923be25512d",
+    "messages": 797,
+    "task_numbers": [
+     7
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "32c04d40-6fe7-4cbd-99c7-7a3b88642d69",
+    "messages": 35,
+    "task_numbers": [],
+    "anomalies": 0
+   },
+   {
+    "session": "330ec33e-a056-4642-b747-993c5a6c23db",
+    "messages": 10,
+    "task_numbers": [],
+    "anomalies": 0
+   },
+   {
+    "session": "3a4b3476-b516-4856-99f3-d029a04e55c7",
+    "messages": 44,
+    "task_numbers": [],
+    "anomalies": 0
+   },
+   {
+    "session": "71ebf894-f333-4820-a5a2-6f0b4cd3f2ca",
+    "messages": 233,
+    "task_numbers": [
+     3
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "72ab7c50-8382-4eaa-a345-87d0d60ac3d0",
+    "messages": 418,
+    "task_numbers": [
+     3
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "763aa781-0ed4-4838-bd06-d9dce78322c0",
+    "messages": 576,
+    "task_numbers": [
+     0,
+     1,
+     2
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "b3f6af91-89ca-4041-b2d0-3c79f42cdd1e",
+    "messages": 10,
+    "task_numbers": [],
+    "anomalies": 0
+   },
+   {
+    "session": "b62fe624-d304-4772-a213-27c4fd2bcc1f",
+    "messages": 484,
+    "task_numbers": [
+     8
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "b9995239-224c-415e-a69f-332631a717b7",
+    "messages": 588,
+    "task_numbers": [
+     9,
+     10
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "c0f4c6cb-0f38-43b9-aadf-299a931bd6a9",
+    "messages": 410,
+    "task_numbers": [
+     5
+    ],
+    "anomalies": 0
+   },
+   {
+    "session": "e3812350-9b8b-4a0e-8180-283863073763",
+    "messages": 478,
+    "task_numbers": [
+     11
+    ],
+    "anomalies": 0
+   }
+  ],
+  "distinct_task_numbers_attributed": [
+   0,
+   1,
+   2,
+   3,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "expected_task_numbers": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10,
+   11
+  ],
+  "not_attributed_by_extractor": [
+   4
+  ]
+ },
+ "tasks": [
+  {
+   "task_number": 6,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer implementing **Task 6: Spawn sequence, reservation ordering, exit codes, --dry",
+    "message_index": 178
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 438
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "0cb72a1c-6e54-458d-bf35-63e08b4ced31"
+  },
+  {
+   "task_number": 7,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+    "message_index": 247
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 316
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 360
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "275df3f0-d697-4eee-a9d1-f6b90a7846d6"
+  },
+  {
+   "task_number": 7,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are an implementation readiness auditor. Your job is to catch plan defects before they reach subagents \u2014 type mismat",
+    "message_index": 267
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "2870dd5e-8962-4de4-af21-4923be25512d"
+  },
+  {
+   "task_number": 3,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are the SDD Controller Partner. Your job is to verify the controller is doing its job correctly before an implemente",
+    "message_index": 171
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": false,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "71ebf894-f333-4820-a5a2-6f0b4cd3f2ca"
+  },
+  {
+   "task_number": 3,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+    "message_index": 136
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 199
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 211
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "72ab7c50-8382-4eaa-a345-87d0d60ac3d0"
+  },
+  {
+   "task_number": 0,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+    "message_index": 262
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 308
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 168
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "763aa781-0ed4-4838-bd06-d9dce78322c0"
+  },
+  {
+   "task_number": 1,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer implementing **Task 1** of the cmux-integration repo-3 plan.  Your COMPLETE ta",
+    "message_index": 359
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 379
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "763aa781-0ed4-4838-bd06-d9dce78322c0"
+  },
+  {
+   "task_number": 2,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer implementing **Task 2** of the cmux-integration repo-3 plan.  Your COMPLETE ta",
+    "message_index": 432
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 468
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "763aa781-0ed4-4838-bd06-d9dce78322c0"
+  },
+  {
+   "task_number": 8,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+    "message_index": 198
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 288
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 328
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "b62fe624-d304-4772-a213-27c4fd2bcc1f"
+  },
+  {
+   "task_number": 9,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "[task 9 fix]  You are applying a small, precise review-driven correction. **One bullet, three lines.** Do exactly this a",
+    "message_index": 303
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 247
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 290
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "b9995239-224c-415e-a69f-332631a717b7"
+  },
+  {
+   "task_number": 10,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Build exactly what the spec asks \u2014 nothing more, nothing less. When requireme",
+    "message_index": 453
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 482
+    },
+    "code_quality": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 497
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "b9995239-224c-415e-a69f-332631a717b7"
+  },
+  {
+   "task_number": 5,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+    "message_index": 158
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 308
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "c0f4c6cb-0f38-43b9-aadf-299a931bd6a9"
+  },
+  {
+   "task_number": 11,
+   "task_name": null,
+   "dispatch": {
+    "found": true,
+    "description_snippet": "**[task 11 fix]** \u2014 a single-clause documentation fix from a re-review finding. Scope is deliberately tiny; do exactly t",
+    "message_index": 379
+   },
+   "subagent_return": {
+    "found": false,
+    "status": null,
+    "had_concerns": false,
+    "concern_text": null,
+    "had_deviations": false,
+    "deviation_text": null,
+    "message_index": null
+   },
+   "reviews": {
+    "spec_compliance": {
+     "dispatched": true,
+     "result": null,
+     "message_index": 320
+    },
+    "code_quality": {
+     "dispatched": false,
+     "result": null,
+     "message_index": null
+    }
+   },
+   "deviations_logged": true,
+   "report_file_exists": true,
+   "plan_checkbox_updated": false,
+   "anomalies": [],
+   "_session": "e3812350-9b8b-4a0e-8180-283863073763"
+  }
+ ],
+ "skills_invoked": {
+  "pickup": 4,
+  "superpowers:subagent-driven-development": 10,
+  "handoff": 8,
+  "superpowers:writing-plans": 1
+ },
+ "scripts_run": {
+  "validate-plan:": 18,
+  "validate-report:": 10,
+  "controller-checkpoint:pre-execution": 13,
+  "estimate-task-tokens:": 1,
+  "controller-checkpoint:mid-execution": 11,
+  "extract-execution-trace:": 2
+ },
+ "anomaly_summary_totals": {
+  "total_anomalies": 0,
+  "reviews_skipped": 0,
+  "concerns_not_logged": 0,
+  "tasks_without_reports": 0,
+  "blocked_retried_unchanged": 0,
+  "done_with_concerns_not_routed": 0,
+  "plan_checkboxes_not_updated": 0
+ },
+ "anomaly_details": []
+}
