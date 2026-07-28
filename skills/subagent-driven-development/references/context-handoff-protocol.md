@@ -25,6 +25,37 @@ skill to create a bundle whose entry skill is
 goal, the plan/manifest, and next-action context. **Capture the bundle id** the
 `/handoff` output prints (e.g. `2026-07-23T01-19-43Z-<repo>`) — step 4 needs it.
 
+**Before step 4 — preconditions the script does NOT set up for you.**
+
+*Where to run it:* from the **repo root of the target worktree**. The script takes no path
+argument — it resolves the worktree with a bare `git rev-parse --show-toplevel` against
+*your current directory*. Run it from anywhere else and it silently targets a different
+repo; run it outside a repo and it exits 1.
+
+*What must already be true:* a **clean tree**, an existing **`.active-feature`**, and a
+`/handoff` bundle of type `work` whose entry skill is
+`superpowers:subagent-driven-development`, in this same repo. Any of these missing → exit 1
+with the cause printed. Fix and re-run; nothing was consumed.
+
+*What the session must be:* launched via **`claude-picker`, inside cmux**. That is not
+ceremony — the picker exports `CLAUDE_CODE_PICKER_VERSION`, `_ARGS`, `_LABEL` and
+`_APPEND_PROMPT`, and those four ARE the input to the successor command. cmux supplies
+`CMUX_WORKSPACE_ID`.
+
+*The failure that does not look like one:* if any picker variable is missing (or its
+version file isn't executable, or the picker isn't on PATH, or its `--handoff-contract`
+probe doesn't return `1`), the script **does not error**. It falls back to
+`launch=picker-manual`, drops `--non-interactive`, **exits 0**, and reports a spawned
+successor — but that successor sits on an interactive menu until a human finishes it. The
+notification does not mention the mode. **Read the `launch=` value; do not infer success
+from exit 0.** A plain terminal, or any non-picker session, degrades this way by default.
+
+*Hop budget:* `.handoff-hops` lives in the ACTIVE FEATURE's `reports/` dir, so it is
+**per-feature**, not global — a different project starts fresh at 0. Default limit 3
+(`SUPERPOWERS_CMUX_MAX_HOPS`). Sibling knobs: `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default 15),
+`_QUOTA_TIMEOUT` (60), `_QUOTA_TOOL`. Every spawn attempt is recorded in
+`reports/handoff-spawn.log` — check it first when diagnosing.
+
 **4. Spawn the successor (or fall back).** Run:
 
     ~/.claude/skills/superpowers/subagent-driven-development/scripts/spawn-handoff-session.sh <bundle-id>
