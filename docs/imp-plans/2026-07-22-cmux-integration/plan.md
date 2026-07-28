@@ -214,7 +214,7 @@ All three modules share the same external contracts, verified once in **Task 0**
 
 ## Acceptance Criteria (plan-level)
 
-- [ ] `spawn-handoff-session.sh <bundle-id> --dry-run` in a real picker-launched cmux SDD session prints a composed successor command with the same version, decoded+re-quoted forwarded args, and correctly incremented label — and spawns/increments nothing.
+- [x] `spawn-handoff-session.sh <bundle-id> --dry-run` in a real picker-launched cmux SDD session prints a composed successor command with the same version, decoded+re-quoted forwarded args, and correctly incremented label — and spawns/increments nothing. **(Verified live 2026-07-28; two sub-clauses were vacuous in the live env and were covered by labelled synthetic dry-run probes instead — see the `Task 11 (feature close)` deviations row.)**
 - [x] The full unit matrix (§7 of the spec) passes: preconditions, all quota classes, all label cases (incl. 255 boundary), strip guard, compose-quoting survival, reservation ordering, both launch modes, `--dry-run`.
 - [x] e2e `sdd-e2e-test.sh` reaches Step 14 and passes; banner reads `15 steps`.
 - [x] `context-handoff-protocol.md` steps 3–5 drive the script; steps 1–2 byte-identical.
