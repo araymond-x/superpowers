@@ -17,7 +17,19 @@ SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
 [ -x "$PYTHON" ] || PYTHON="python3"   # this script needs only json/base64 stdlib
 
-MAX_HOPS="${SUPERPOWERS_CMUX_MAX_HOPS:-3}"
+# Runaway-chain guard. Validated for the same reason the quota knobs below are,
+# and with the same warn-and-revert contract — but the motivation here is stronger:
+# this is the ONLY guard against an unbounded spawn chain, and an unvalidated value
+# made it fail OPEN. `[ "$HOPS" -ge "$MAX_HOPS" ]` with a non-numeric operand emits
+# "integer expression expected", the branch is NOT taken, and execution falls
+# through to spawn. A typo in a kill switch must never mean "proceed".
+# MAX_HOPS=0 remains a valid, deliberate refuse-everything setting.
+MAX_HOPS_DEFAULT=3
+MAX_HOPS="${SUPERPOWERS_CMUX_MAX_HOPS:-$MAX_HOPS_DEFAULT}"
+if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to default $MAX_HOPS_DEFAULT." >&2
+  MAX_HOPS="$MAX_HOPS_DEFAULT"
+fi
 # Percent threshold; may legitimately be fractional (e.g. 12.5). Validated because
 # it is interpolated into an awk program below — an unvalidated value is code
 # injection. Invalid input warns and reverts to the default (never exits: the
@@ -55,7 +67,37 @@ if [ -z "$WORKTREE_ROOT" ]; then echo "REFUSED: not in a git repository" >&2; ex
 cd "$WORKTREE_ROOT" || { echo "REFUSED: cannot cd to worktree root" >&2; exit 1; }
 if [ ! -f .active-feature ]; then
   echo "REFUSED: missing .active-feature (SDD sessions always have one)" >&2; exit 1; fi
-FEATURE_DIR="$(cat .active-feature)"
+# `.active-feature` is repository-controlled content that becomes a WRITE path:
+# REPORTS_DIR feeds `mkdir -p`, the hop counter and the spawn log. It previously
+# went unvalidated straight into that path, so a stale or hostile value such as
+# `../../elsewhere` directed every bookkeeping write outside the worktree — and
+# the run still reported a normal spawn, because the clean-tree check cannot see
+# destinations outside the tree. Note the inconsistency this closes: the bundle
+# path below is charset-checked, canonicalized with `pwd -P` and containment-tested,
+# while the path with WRITE authority got none of that.
+# `head -n 1` (not `cat`) is deliberate — the file is specified as single-line, and
+# it is not a pipe, so no SIGPIPE/pipefail hazard. Lexical rules mirror the fork's
+# IntegrationTest model: non-empty, non-absolute, no `..` segments.
+FEATURE_DIR="$(head -n 1 .active-feature 2>/dev/null)"
+case "$FEATURE_DIR" in
+  "") echo "REFUSED: .active-feature is empty (expected a worktree-relative feature dir)" >&2; exit 1 ;;
+  /*) echo "REFUSED: .active-feature must be worktree-relative, got absolute path: $FEATURE_DIR" >&2; exit 1 ;;
+esac
+# Segment-precise `..` test — `*..*` would also reject a legitimate name like `v1..2`.
+case "/$FEATURE_DIR/" in
+  */../*) echo "REFUSED: .active-feature contains a '..' segment: $FEATURE_DIR" >&2; exit 1 ;;
+esac
+# Belt-and-braces for a symlinked feature dir, which the lexical rules cannot catch.
+# Guarded on existence because the dir legitimately may not exist yet — `mkdir -p`
+# creates reports/ later in the spawn sequence.
+if [ -d "$WORKTREE_ROOT/$FEATURE_DIR" ]; then
+  _real_feature="$(cd "$WORKTREE_ROOT/$FEATURE_DIR" 2>/dev/null && pwd -P)"
+  _real_root="$(cd "$WORKTREE_ROOT" 2>/dev/null && pwd -P)"
+  case "$_real_feature" in
+    "$_real_root"/*) : ;;
+    *) echo "REFUSED: .active-feature resolves outside the worktree: ${_real_feature:-<unresolvable>}" >&2; exit 1 ;;
+  esac
+fi
 REPORTS_DIR="$WORKTREE_ROOT/$FEATURE_DIR/reports"
 FEATURE_NAME="$(basename "$FEATURE_DIR")"
 HOPS_FILE="$REPORTS_DIR/.handoff-hops"
@@ -127,6 +169,21 @@ fi
 
 # --- Precondition 4: hop limit ---------------------------------------------
 HOPS="$(cat "$HOPS_FILE" 2>/dev/null)"; [ -n "$HOPS" ] || HOPS=0
+# Absent/empty is the legitimate first-hop case and stays 0 (handled above).
+# Present-but-non-numeric is NOT: it defeats the comparison below exactly as an
+# invalid MAX_HOPS does, and additionally makes `$((HOPS + 1))` treat the value as
+# an unset name -> 0 -> SP_HOP=1, so the reservation write would silently RESET the
+# chain. This state is not hypothetical — the reservation write at the bottom of
+# this script documents its own truncating-partial-write failure mode (ENOSPC,
+# quota), and this file is committed, so a merge conflict marker reaches it too.
+# Fails CLOSED (exit 3, manual fallback): for a runaway guard, refusing on
+# unreadable state is the only safe direction. Nothing has been spawned or
+# reserved at this point, so manual resume is the correct recovery.
+if ! [[ "$HOPS" =~ ^[0-9]+$ ]]; then
+  echo "[spawn-handoff] hop counter at $HOPS_FILE is malformed (value: '$HOPS') — refusing to spawn rather than bypass the runaway-chain guard. Repair it (write a single non-negative integer) or delete the file to reset the chain to 0, then re-run." >&2
+  print_manual_instructions
+  exit 3
+fi
 # SP_HOP is the successor's hop number; defined early because the Task-5 launch
 # composition references it in the runtime fallback chain.
 SP_HOP=$((HOPS + 1))

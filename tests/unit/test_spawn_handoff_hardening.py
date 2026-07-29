@@ -1,0 +1,235 @@
+"""Guards for the two Major findings from the 2026-07-28 outside (Codex) review.
+
+Both were fail-OPEN defects in guards whose whole purpose is to refuse:
+
+  M1  the runaway-chain hop guard fell through and SPAWNED when either
+      SUPERPOWERS_CMUX_MAX_HOPS or the persisted .handoff-hops counter was
+      non-numeric (`[ "$HOPS" -ge "$MAX_HOPS" ]` errors, branch not taken).
+  M2  .active-feature was interpolated straight into the bookkeeping WRITE path
+      with no validation, so `../..`-style content redirected mkdir/hop-counter/
+      spawn-log writes outside the worktree while still reporting a normal spawn.
+
+Every test here asserts the REFUSAL *and* that nothing was spawned — a guard that
+refuses but has already spawned is not a guard. Harness: spawn_handoff_helpers.
+
+Provenance: docs/process-improvement-findings/2026-07-28-cmux-cli-capability-gap-analysis.md
+and the review bundle 2026-07-29T01-40-25Z-superpowers (findings.md, M1/M2).
+"""
+
+import subprocess
+
+from spawn_handoff_helpers import (
+    encode_args,
+    install_bundle,
+    install_version,
+    run_spawn,
+    setup_worktree,
+)
+
+
+def _meta(args_b64=None):
+    e = {
+        "CLAUDE_CODE_PICKER_VERSION": "2.1.218",
+        "CLAUDE_CODE_PICKER_LABEL": "Proj",
+    }
+    if args_b64:
+        e["CLAUDE_CODE_PICKER_ARGS"] = args_b64
+    return e
+
+
+def _reach_hop_gate(tmp_path, ctx):
+    """Env/bundle state that reaches the hop gate (past clean-tree + bundle checks)."""
+    install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
+    install_version(tmp_path, "2.1.218")
+    return _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+
+
+def _commit_all(ctx, msg):
+    """Re-clean the tree — the hop gate sits AFTER Precondition 1."""
+    subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)
+    subprocess.run(["git", "commit", "-qm", msg], cwd=ctx["wt"], check=True)
+
+
+def _cmux_log(tmp_path):
+    p = tmp_path / "cmux.log"
+    return p.read_text() if p.exists() else ""
+
+
+def _did_not_spawn(tmp_path):
+    return "new-workspace" not in _cmux_log(tmp_path)
+
+
+# ── M1: the runaway-chain guard must fail CLOSED ──────────────────────────────
+
+
+def test_nonnumeric_max_hops_reverts_to_default_and_still_refuses(tmp_path):
+    """A typo in the kill switch must not mean 'proceed'.
+
+    Positive control on the revert: the counter is seeded at 3, which is the
+    DEFAULT limit. If the revert did not happen, `-ge` errors on 'abc', the branch
+    is skipped, and the script spawns. Reaching the refusal proves MAX_HOPS was
+    restored to a usable integer rather than merely warned about.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    (ctx["reports"] / ".handoff-hops").write_text("3\n")
+    _commit_all(ctx, "seed hops")
+    env["SUPERPOWERS_CMUX_MAX_HOPS"] = "abc"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert any(
+        ln.startswith("WARNING:") and "MAX_HOPS" in ln for ln in r.stderr.splitlines()
+    ), f"no MAX_HOPS warning on stderr: {r.stderr!r}"
+    assert r.returncode == 3, r.stderr
+    assert _did_not_spawn(tmp_path), "spawned despite an invalid runaway-chain limit"
+
+
+def test_max_hops_zero_is_honoured_as_a_deliberate_kill_switch(tmp_path):
+    """0 is a VALID integer and must keep working as refuse-everything.
+
+    Guards the validator against over-tightening into `^[1-9][0-9]*$`, which would
+    silently remove the only env-level way to disable auto-spawn entirely.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    env["SUPERPOWERS_CMUX_MAX_HOPS"] = "0"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 3, r.stderr
+    assert not any(
+        ln.startswith("WARNING:") and "MAX_HOPS" in ln for ln in r.stderr.splitlines()
+    ), "0 must not be treated as invalid"
+    assert _did_not_spawn(tmp_path)
+
+
+def test_malformed_hop_counter_file_fails_closed(tmp_path):
+    """A corrupt persisted counter refuses rather than bypassing the guard.
+
+    Not hypothetical: the reservation write truncates at open, so ENOSPC/quota can
+    leave a partial value, and the file is committed so a conflict marker reaches
+    it too.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    (ctx["reports"] / ".handoff-hops").write_text("abc\n")
+    _commit_all(ctx, "corrupt hops")
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 3, r.stderr
+    assert "malformed" in (r.stdout + r.stderr).lower()
+    assert _did_not_spawn(tmp_path), "spawned on an unreadable hop counter"
+
+
+def test_malformed_hop_counter_is_not_silently_reset(tmp_path):
+    """The pre-fix path also RESET the chain.
+
+    `$((HOPS + 1))` treats 'abc' as an unset name -> 0 -> SP_HOP=1, so the
+    reservation write would have overwritten the counter with 1 and erased the
+    chain's memory. Refusing must leave the corrupt value in place for a human to
+    inspect rather than papering over it.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    hops = ctx["reports"] / ".handoff-hops"
+    hops.write_text("abc\n")
+    _commit_all(ctx, "corrupt hops")
+    run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert hops.read_text() == "abc\n", "refusal must not rewrite the counter"
+
+
+def test_absent_and_empty_hop_counter_remain_the_first_hop_case(tmp_path):
+    """Regression fence: the validator must not break the normal first spawn.
+
+    Absent and empty both legitimately mean 'hop 0'. Tightening M1 into a blanket
+    'must be numeric' on raw file contents would refuse every first-ever handoff.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)  # file absent
+    assert r.returncode == 0, f"absent counter must spawn: {r.stderr!r}"
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+
+# ── M2: .active-feature is a write-path authority and must be contained ───────
+#
+# These run BEFORE the clean-tree precondition, so no commit is needed: the
+# refusal happens while resolving the feature dir.
+
+
+def _set_active_feature(ctx, value):
+    (ctx["wt"] / ".active-feature").write_text(value)
+
+
+def test_active_feature_parent_traversal_refused(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _set_active_feature(ctx, "../escape\n")
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 1, r.stderr
+    assert ".." in r.stderr and "REFUSED" in r.stderr
+    assert _did_not_spawn(tmp_path)
+
+
+def test_active_feature_traversal_writes_nothing_outside_the_worktree(tmp_path):
+    """The payload of M2, asserted directly.
+
+    Pre-fix, REPORTS_DIR resolved outside WORKTREE_ROOT and `mkdir -p` created it,
+    then the hop counter and spawn log were written there — invisible to the
+    clean-tree check, which only sees inside the tree.
+
+    The traversal value is COMMITTED before the run. Without that the tree is
+    dirty, Precondition 1 refuses first, and the test passes pre-fix for entirely
+    the wrong reason — it would assert "nothing was written outside" about a run
+    that never reached any write at all. Committing forces the script past the
+    clean-tree check and onto the real path, which is what makes this a guard
+    rather than a coincidence.
+    """
+    ctx = setup_worktree(tmp_path)
+    _set_active_feature(ctx, "../../escape-target\n")
+    _commit_all(ctx, "traversal in .active-feature")
+    env = _reach_hop_gate(tmp_path, ctx)
+    escape_a = tmp_path / "escape-target"
+    escape_b = tmp_path.parent / "escape-target"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 1, r.stderr
+    assert ".." in r.stderr
+    assert not escape_a.exists(), f"created {escape_a} outside the worktree"
+    assert not escape_b.exists(), f"created {escape_b} outside the worktree"
+    assert _did_not_spawn(tmp_path)
+
+
+def test_active_feature_absolute_path_refused(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _set_active_feature(ctx, str(tmp_path / "elsewhere") + "\n")
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 1, r.stderr
+    assert "absolute" in r.stderr.lower()
+    assert _did_not_spawn(tmp_path)
+
+
+def test_active_feature_empty_refused(tmp_path):
+    """Empty previously resolved REPORTS_DIR to WORKTREE_ROOT/reports.
+
+    Not outside the tree, but it silently writes bookkeeping to the wrong place —
+    a different feature's spawn log — so it is a refusal, not a default.
+    """
+    ctx = setup_worktree(tmp_path)
+    _set_active_feature(ctx, "\n")
+    r = run_spawn(ctx, tmp_path, "b1")
+    assert r.returncode == 1, r.stderr
+    assert "empty" in r.stderr.lower()
+    assert _did_not_spawn(tmp_path)
+    assert not (ctx["wt"] / "reports").exists()
+
+
+def test_feature_dir_name_containing_dots_is_still_accepted(tmp_path):
+    """Precision fence on the `..` rule.
+
+    A naive `*..*` glob would reject a legitimate directory like `v1..2`. The check
+    is segment-anchored (`*/../*`), so only a real parent-traversal segment fails.
+    """
+    ctx = setup_worktree(tmp_path)
+    feat = "docs/imp-plans/v1..2"
+    (ctx["wt"] / feat / "reports").mkdir(parents=True)
+    _set_active_feature(ctx, feat + "\n")
+    _commit_all(ctx, "dotted feature dir")
+    env = _reach_hop_gate(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    assert r.returncode == 0, f"legitimate dotted dir refused: {r.stderr!r}"
+    assert (ctx["wt"] / feat / "reports" / ".handoff-hops").exists()
