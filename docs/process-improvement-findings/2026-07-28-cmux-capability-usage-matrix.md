@@ -857,8 +857,15 @@ advertise is already in the binary.
 
 ## 6. Proposed BACKLOG rows
 
-**NOT applied** — `BACKLOG.md` is owned by another session. Copy-paste ready, matching the file's
-column format.
+> **SUPERSEDED 2026-07-29 — these rows were APPLIED to `BACKLOG.md` (commit `cf1fb65`), which is now
+> the single source of truth for them. The block below is preserved as the historical proposal; do not
+> edit it and do not paste from it.** Two rows have already diverged: **N68** and **N72** were amended
+> at apply time for the `cmux claude-hook` discovery, and **N72** gained a *third* axis afterwards
+> (release-channel watching) when `Fork Conversation` turned out to have no programmatic surface at all
+> — see **N75**. Read the live rows in `BACKLOG.md`.
+
+**Originally NOT applied** — `BACKLOG.md` was owned by another session at the time of writing.
+Copy-paste ready, matching the file's column format.
 
 > **Renumbered N62–N69 → N66–N73 on 2026-07-29 to avoid a real ID collision.** These rows were drafted
 > as N62–N69 per the original brief. While this document was being written, the concurrent session
