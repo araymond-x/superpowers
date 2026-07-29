@@ -308,7 +308,7 @@ If you are not sure whether your integration loads the bootstrap at session star
 - Hooks receive CWD from session start, NOT from `! cd`. Worktree SDD sessions must be started FROM the worktree: `cd /path/to/worktree && claude`
 - `! cd` changes the prompt CWD but NOT the hook CWD — hooks always run from the original session directory
 - Branch check blocks on main when SDD artifacts exist (agent drifted out of worktree). Override with `.allow-main` file.
-- **A spawned session needs its own WORKTREE, not just its own cmux workspace.** A cmux workspace isolates the *terminal*; only a git worktree isolates the *branch*. Spawning with `--cwd "$PWD"` gives the child the former and silently shares the latter. Observed 2026-07-29: a spawned audit session began on `main`, the parent then ran `git checkout -b` while it was still working, and the child's commit followed the parent's HEAD onto a branch it never knew existed. It landed somewhere sensible only by luck — an unrelated branch would have made it hard to find. **If two sessions must share a worktree, do not switch branches while the other is running**; prefer giving the child its own worktree. Related: two agents in one tree can also each stage the other's in-flight files, so `git add -A` is unsafe there.
+- Concurrent sessions sharing this checkout: see `skills/using-git-worktrees/SKILL.md` Step 0 ("if you SPAWN a session, isolate it") — a spawned session needs its own worktree, not merely its own terminal. Generic worktree/multi-session mechanics live in that skill, not here.
 
 ## .active-feature File
 - Single-line plaintext file at project root containing relative path to active feature directory

@@ -44,6 +44,30 @@ Has the user already indicated their worktree preference in your instructions? I
 
 Honor any existing declared preference without asking. If the user declines consent, work in place and skip to Step 3.
 
+### The converse: if you SPAWN a session, isolate it
+
+Step 0 asks whether *you* are isolated. The mirror-image obligation applies when you start another
+session: **a spawned session needs its own worktree, not merely its own terminal.** A terminal
+multiplexer's window/tab/pane isolates the *terminal*; only a worktree isolates the *branch*. Spawning
+a child with `--cwd "$PWD"` (or any inherited cwd) gives it the former and silently shares the latter —
+one `.git`, one index, one `HEAD`.
+
+Two consequences, both observed:
+
+- **The parent can move the child's branch.** A parent that runs `git checkout -b` while a child is
+  working relocates the child's `HEAD`; the child then commits onto a branch it never knew existed.
+  Recorded 2026-07-29: a spawned session started on `main` and its commit's parent turned out to be the
+  parent session's second commit on a new branch. It landed usefully by luck.
+- **`git add -A` is unsafe in a shared tree** — the index is shared, so a blanket stage sweeps the
+  other session's in-flight files into your commit. *(Hazard by construction, not observed in that
+  incident, where the child staged only its own file. The related failure that WAS observed
+  previously: `git stash` in a shared tree sweeping in-flight SDD artifacts.)* Stage explicit paths.
+
+**So:** give a spawned session its own worktree. If two sessions genuinely must share one, do not
+switch branches while the other is running, and never stage by wildcard. When you finish work another
+session may have contributed to, check what actually landed (`git log --format='%h %s%n  parent: %p'`)
+rather than assuming your own branch topology held.
+
 ## Step 1: Create Isolated Workspace
 
 **You have two mechanisms. Try them in this order.**
