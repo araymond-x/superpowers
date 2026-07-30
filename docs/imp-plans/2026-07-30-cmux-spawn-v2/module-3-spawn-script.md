@@ -272,13 +272,13 @@ case "$1" in
   workspace)     [ "$2" = "create" ] || { echo OK; exit 0; }
                  [ -n "$CMUX_WS_CREATE_RC" ] && exit "$CMUX_WS_CREATE_RC"
                  echo "OK workspace:9"; exit 0 ;;
-  list-pane-surfaces) printf 'surface:11 terminal [selected]\n'; exit 0 ;;
+  list-pane-surfaces) printf '* surface:11  SDD resume: demo  [selected]\n'; exit 0 ;;
   *) echo OK; exit 0 ;;
 esac
 '''
 ```
 
-(Exact `list-pane-surfaces` line format: copy from Task 0's `cmux-verb-shapes.json` capture — the stub must mirror the real shape, then the script's parser is written against it.)
+(Exact `list-pane-surfaces` line format: copy from Task 0's `cmux-verb-shapes.json` — the stub MUST carry the `* ` selected-row marker and the two-space non-selected indent (key `selected_row_marker`). A marker-less stub is exactly what made the old `$1` parser look green while failing 100% in production.)
 
 - [ ] **Step 2: Failing tests** (`test_spawn_handoff_v2.py`):
 
@@ -367,13 +367,13 @@ create_workspace_target() {   # one-shot fallback — canonical verb (Decision 1
   cat "$out_f" >&2; rm -f "$out_f"
   [ $rc -eq 0 ] || return 1
   case "$SPAWN_WORKSPACE_REF" in workspace:*) : ;; *) return 1 ;; esac
-  # A workspace ref cannot be sent to — resolve its selected surface. The awk
-  # must print EXACTLY ONE line: remember line 1, prefer the [selected] line,
-  # fall back in END. (A naive `/[selected]/{...} NR==1{...}` prints TWO lines
-  # whenever the selected surface is not listed first, and the multi-line ref
-  # passes the surface:* glob because * matches the newline.)
+  # Resolve the selected surface. Task 0 MEASURED `* ` prefixing the selected row, so awk's
+  # $1 there is `*`, NOT the ref — and this fallback's fresh workspace has exactly ONE
+  # always-selected surface: a $1 parser fails 100% in production yet passes a marker-less
+  # stub. Match `surface:N` by PATTERN; print EXACTLY ONE line (a multi-line ref globs OK).
   SPAWN_SURFACE_REF="$(cmux list-pane-surfaces --workspace "$SPAWN_WORKSPACE_REF" 2>/dev/null \
-                        | awk 'NR==1{first=$1} /\[selected\]/{print $1; f=1; exit} END{if(!f) print first}')"
+    | awk '{ref="";for(i=1;i<=NF;i++)if($i~/^surface:[0-9]+$/){ref=$i;break};if(ref=="")next
+            if(first=="")first=ref; if(index($0,"[selected]")){print ref;f=1;exit}} END{if(!f)print first}')"
   case "$SPAWN_SURFACE_REF" in surface:*) : ;; *) return 1 ;; esac
   return 0
 }
