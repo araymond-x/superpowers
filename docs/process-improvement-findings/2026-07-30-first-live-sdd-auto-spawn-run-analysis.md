@@ -116,3 +116,39 @@ design-only spikes producing their own BACKLOG rows. BACKLOG rows corrected from
 analysis: N55 (MAX_HOPS defect fixed by `7425e38`), N61 (command-chain token design does not
 work — corrected to the session-start-hook signal), N56/N57/N64/N67/N70/N73 (status/scope
 updates), N76 (new, F7).
+
+---
+
+## Addendum — session-driving observations (2026-07-30 afternoon, live cross-session tests)
+
+Gathered while relaying operator notes into the two in-flight sessions (plan + executor). All
+a-run unless labeled.
+
+**A1 — `read-screen` is viewport-only against an alt-screen TUI (measured).** Claude Code runs
+on the terminal's alternate screen buffer: `read-screen --scrollback --lines 100000` against a
+live session returned **42 lines** — the current frame. The TUI's own collapse chips
+(`… +160 lines`, `… +18 tool uses`) are unexpandable from the screen side. Screen reads are a
+liveness/state probe (running? dialog up? composer content?), never a history channel.
+
+**A2 — the transcript is the complete observation channel.** A session's `.jsonl` under
+`~/.claude/projects/<encoded-LAUNCH-cwd>/` carries every message, full uncollapsed tool
+output, per-call usage, and subagent transcript pointers. Gotcha: the encoding keys on the
+session's LAUNCH cwd — a session that enters a worktree after launch keeps writing under its
+original project dir (the plan session's transcript sat in the main-checkout dir; its
+executor's in the worktree dir).
+
+**A3 — injected input can be silently captured; two distinct states observed.**
+(i) An **AskUserQuestion selector overlay** consumes `cmux send` text (send returns `OK`,
+nothing reaches the composer, nothing reaches the transcript). (ii) With the surface showing
+the **"Jump to bottom" scrolled-viewport indicator**, sends were likewise swallowed — N=2
+correlation, unreproduced (surface closed before a controlled probe), hypothesis: tmux-copy-
+mode-style input capture. **Exonerated by transcript evidence: `/remote-control`** — a note
+sent ~20 min after `/rc` activation landed and was acted on, so rc-active sessions accept
+injected input normally. An earlier draft of the executor bundle's addendum blamed `/rc`; the
+bundle carries the correction.
+
+**A4 — the surviving driving discipline** (now the documented recipe): read-screen for overlay
+state BEFORE driving; send text; read-screen VERIFY the composer holds it; only then Enter;
+and when delivery matters, confirm receipt in the target's transcript — the only ground truth.
+Sends during a busy turn queue fine (proven live); sends into menus/scrolled surfaces vanish
+with `OK` status.
