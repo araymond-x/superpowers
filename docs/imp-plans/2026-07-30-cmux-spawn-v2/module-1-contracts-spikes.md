@@ -72,9 +72,9 @@ ids reserved at plan time.
 - Create: `tests/unit/fixtures/spawn-handoff/cold-start-timing.json`
 - Create: `tests/unit/test_spawn_handoff_v2.py` (fixture-contract section only)
 
-No other task may start until this one completes. All work happens inside a **throwaway cmux workspace** so the user's sidebar is disturbed only by clearly-named `task0-*` entries that this task deletes on exit.
+No other task may start until this one completes. All work happens inside a **throwaway cmux workspace** so the user's sidebar is disturbed only by clearly-named `task0-*` entries that this task deletes on exit. — **COMPLETE:** quality review round 1 CHANGES_REQUESTED → `[task 0 fix]` round (live re-capture, same binary) → round 2 **APPROVED** (71 mutations, 0 survivors, 4 negative controls held). Finding 4's consumer half landed as a Module 3 Task 9 plan amendment (`949d310`); see `deviations.md`.
 
-- [ ] **Step 1: Verify environment or take the blocked path**
+- [x] **Step 1: Verify environment or take the blocked path**
 
 ```bash
 cmux --version           # expect: cmux 0.64.20 (100) [14e3400b9] — record verbatim if different
@@ -85,7 +85,7 @@ cmux --version           # expect: cmux 0.64.20 (100) [14e3400b9] — record ver
 
 Blocked path (only on explicit controller instruction): do not fabricate fixtures. Write `cold-start-timing.json` with `"measured": false, "default_seconds": 120`; copy capability-matrix §4.2 shapes into `cmux-verb-shapes.json` with `"captured": "matrix-fallback"` and every Step-2b/2c/4b key `"unavailable"`; log a `deviations.md` row (post-merge live smoke must re-measure); then skip to **Step 7**. (Not Step 5 — Step 5 *rewrites* `cold-start-timing.json` with the `measured: true` shape and a `runs_seconds` array the blocked path never produced.)
 
-- [ ] **Step 2: Capture per-verb shapes into a scratch log**
+- [x] **Step 2: Capture per-verb shapes into a scratch log**
 
 ```bash
 WS_OUT=$(CMUX_QUIET=1 cmux workspace create --name "task0-shapes" --cwd "$HOME" --focus false)
@@ -110,7 +110,7 @@ CS_OUT=$(cmux close-surface --surface "$SURF_REF" 2>&1); echo "close_surface: $C
 # capture verbatim — the spec pins that this returns a plausible WRONG ref; it is a negative fixture
 ```
 
-- [ ] **Step 2b: Probe for a durable surface UUID (audit order A1)** — **run BEFORE the `close-surface` line above**; it needs a live surface. Short refs (`surface:73`) renumber across cmux app restarts, so the outcome record needs permanent identity. Nothing in the plan establishes such a UUID is obtainable; the parent writes the log, so the question is whether the PARENT can learn the CHILD's UUID from a verb. (A surface does export its own `CMUX_SURFACE_ID`, UUID-shaped.)
+- [x] **Step 2b: Probe for a durable surface UUID (audit order A1)** — **run BEFORE the `close-surface` line above**; it needs a live surface. Short refs (`surface:73`) renumber across cmux app restarts, so the outcome record needs permanent identity. Nothing in the plan establishes such a UUID is obtainable; the parent writes the log, so the question is whether the PARENT can learn the CHILD's UUID from a verb. (A surface does export its own `CMUX_SURFACE_ID`, UUID-shaped.)
 
 ```bash
 cmux identify --json 2>&1; cmux identify --json --id-format both 2>&1
@@ -120,7 +120,7 @@ cmux new-surface --help 2>&1 | grep -i "id-format\|uuid"
 
 Record `surface_uuid_source` as `{"available": true, "verb": …, "key_path": …, "example": …}` or `{"available": false, "transcript": …}`. **Unavailable is a legitimate documented outcome, not a failure** — say so plainly and the controller converts operator addendum #1 into a recorded refusal. Do NOT invent a substitute identity scheme.
 
-- [ ] **Step 2c: Probe `wait-for` latching (audit order A2 — possible ESCALATION)** — Step 2 proves only wait-then-signal. Task 10 calls `wait_for_token` **twice** (bounded re-wait). If a token signaled between the first wait's return and the second wait's start is LOST, a healthy successor yields `handshake=timeout` + a consumed hop — a false negative on "token is the ONLY exit-0 path".
+- [x] **Step 2c: Probe `wait-for` latching (audit order A2 — possible ESCALATION)** — Step 2 proves only wait-then-signal. Task 10 calls `wait_for_token` **twice** (bounded re-wait). If a token signaled between the first wait's return and the second wait's start is LOST, a healthy successor yields `handshake=timeout` + a consumed hop — a false negative on "token is the ONLY exit-0 path".
 
 ```bash
 cmux wait-for -S task0-latch; sleep 3
@@ -132,13 +132,13 @@ cmux wait-for task0-gap --timeout 10; echo "second_rc=$?"        # 0 => survived
 
 Record `wait_for_latching: {"latching": true|false, "transcript": …}`. **If false: STOP and report to the controller** — Task 10's two-call re-wait is unsound as designed and needs a plan amendment (single longer wait, or a continuously-held waiter). Do not redesign it or work around it.
 
-- [ ] **Step 3: Write `cmux-verb-shapes.json`** — one key per verb: `{"verb", "argv", "stdout", "exit"}` from the captures above, plus `"cmux_version"` and `"captured": "live"`. Every value verbatim — no hand-editing.
+- [x] **Step 3: Write `cmux-verb-shapes.json`** — one key per verb: `{"verb", "argv", "stdout", "exit"}` from the captures above, plus `"cmux_version"` and `"captured": "live"`. Every value verbatim — no hand-editing.
 
 Beyond the per-verb keys, this fixture also carries the three audit-ordered probe results:
 `surface_uuid_source` (Step 2b), `wait_for_latching` (Step 2c), and `rc_confirmation_screen`
 (Step 4b, written after the timing runs). Write the first two now; add the third in Step 4b.
 
-- [ ] **Step 4: Measure true cold start (5 runs)**
+- [x] **Step 4: Measure true cold start (5 runs)**
 
 Pinned method. Each run: fresh workspace + fresh surface (no warm claude process anywhere in the run), picker version already on disk (excluded from timing), poll `read-screen` every 2s as the measurement instrument.
 
@@ -168,7 +168,7 @@ done
 
 Note: `-p` completes a full headless turn, so each sample slightly OVERestimates boot→SessionStart — the safe direction for a timeout. If a run reports `timeout`, investigate before proceeding (a dead picker invalidates the sample set).
 
-- [ ] **Step 4b: Capture the real `/rc` confirmation string (audit order A3a)**
+- [x] **Step 4b: Capture the real `/rc` confirmation string (audit order A3a)**
 
 **Ordering is load-bearing: run ONLY after all five Step-4 timing runs finish, in its OWN workspace (`task0-rc`).** Step 4 requires "no warm claude process anywhere in the run"; booting Claude here first, or in a shared workspace, contaminates the measurement.
 
@@ -190,7 +190,7 @@ cmux read-screen --surface "$S" --scrollback 2>&1                     # CAPTURE 
 
 Record `rc_confirmation_screen: {"rc_screen": …, "rename_screen": …, "send_after_rc_landed": true|false}`. In your report, name the exact substring that proves `/rc` is active **and cannot appear in the sent line itself** — that becomes Task 11's anchor.
 
-- [ ] **Step 5: Derive and record the default**
+- [x] **Step 5: Derive and record the default**
 
 p95 of 5 samples = max sample. `default = max(60, 2 × max_sample)` rounded UP to the nearest 10 seconds. Write `cold-start-timing.json`:
 
@@ -201,9 +201,9 @@ p95 of 5 samples = max sample. `default = max(60, 2 × max_sample)` rounded UP t
  "p95_seconds": <max>, "default_seconds": <derived>}
 ```
 
-- [ ] **Step 6: Clean up** — delete every `task0-*` workspace (probe the canonical close verb first: `cmux workspace --help` lists subcommands; legacy `close-workspace` also works). This now includes `task0-shapes`, the five `task0-cold-*`, and `task0-rc`. Verify with `cmux list-workspaces` that no `task0-*` entries remain. These are the user's real sidebar entries — a leaked workspace is a visible defect, not a cosmetic one.
+- [x] **Step 6: Clean up** — delete every `task0-*` workspace (probe the canonical close verb first: `cmux workspace --help` lists subcommands; legacy `close-workspace` also works). This now includes `task0-shapes`, the five `task0-cold-*`, and `task0-rc`. Verify with `cmux list-workspaces` that no `task0-*` entries remain. These are the user's real sidebar entries — a leaked workspace is a visible defect, not a cosmetic one.
 
-- [ ] **Step 7: Write the fixture-contract test section**
+- [x] **Step 7: Write the fixture-contract test section**
 
 ```python
 # tests/unit/test_spawn_handoff_v2.py
@@ -253,7 +253,7 @@ def test_audit_ordered_probe_keys_present():
     assert rc.get("rc_screen"), "the /rc confirmation text is Task 11's verification anchor"
 ```
 
-- [ ] **Step 8: Run and commit**
+- [x] **Step 8: Run and commit**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff_v2.py -v` — expect 3 PASS.
 

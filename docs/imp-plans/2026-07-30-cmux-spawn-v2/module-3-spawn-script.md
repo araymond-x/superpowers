@@ -278,7 +278,7 @@ esac
 '''
 ```
 
-(Exact `list-pane-surfaces` line format: copy from Task 0's `cmux-verb-shapes.json` — the stub MUST carry the `* ` selected-row marker and the two-space non-selected indent (key `selected_row_marker`). A marker-less stub is exactly what made the old `$1` parser look green while failing 100% in production.)
+(Exact `list-pane-surfaces` line format: copy from Task 0's `cmux-verb-shapes.json` — the stub MUST carry the `* ` selected-row marker and the two-space non-selected indent (key `selected_row_marker`). A marker-less stub is exactly what made the old `$1` parser look green while failing 100% in production. **Also close three MINOR residuals from Task 0's round-2 review while you are in `test_spawn_handoff_v2.py`:** pin the marker↔`[selected]` *correlation* (round 2 showed 5 inversion mutations survive — the marker and `[selected]` can be moved to different rows unnoticed, which is the semantic content of the whole finding); relax `assert len(rows) == 2` to `>= 2`, since 2 is an accidental capture value and a 3-surface re-capture would go RED for the wrong reason; and fix the comment that cites "Step 2c" for `surface_uuid_source.available`, a field Step 2b defines — and whose `false` outcome Step 2b calls *legitimate*, not an escalation.)
 
 - [ ] **Step 2: Failing tests** (`test_spawn_handoff_v2.py`):
 
