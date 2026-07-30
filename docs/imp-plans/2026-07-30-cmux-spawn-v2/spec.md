@@ -77,7 +77,7 @@ Headline measurements driving the design:
 | 2 | Successor placement | Surface (top tab) in the caller's workspace; legacy workspace spawn retained as one-shot fallback (`topology=workspace-fallback`), then manual |
 | 3 | Surface launch driver | `cmux send` of the composed command + `\n` (NOT `respawn-pane`: a fast-failing launch must leave a readable tab) |
 | 4 | Readiness signal | Deterministic `cmux wait-for` token signaled by `hooks/session-start` when `SUPERPOWERS_SPAWN_ID` is set; parent blocks with timeout. Screen reading is diagnosis-only, never success |
-| 5 | Timeout diagnosis | On wait-for timeout, `read-screen` classifies: Claude banner → alive-slow (exit 0, logged); trust/permission dialog → notify naming the dialog; picker error/other → spawned-but-never-started rung, notify + manual instructions, hop stays consumed |
+| 5 | Timeout diagnosis | On wait-for timeout, `read-screen` classifies: Claude banner → alive-slow (**exit 0**, `handshake=late`); trust/permission dialog → **exit 0**, `handshake=dialog`, notify names the dialog AND the protocol requires the controller to tell the user in so many words (same contract as `picker-manual`: successor exists, human action pending); picker error/other/unreadable → spawned-but-never-started rung (**exit 3**), `handshake=timeout`, notify + manual instructions, hop stays consumed |
 | 6 | Post-spawn setup | Script-driven after handshake: `send "/rename <title>"` → `send-key Enter` → `read-screen` verify → `send "/rc"` → `send-key Enter` → verify `/remote-control is active`. Default title `hop<N> SDD <feature>`; `cmux rename-tab` gets the same title |
 | 7 | Post-spawn knobs | `SUPERPOWERS_CMUX_POST_SPAWN` (default `rename,rc`; empty disables); title format override env |
 | 8 | Hop budget semantics | Progress-aware: `tasks_done` recorded per spawn; consecutive zero-progress hops > `SUPERPOWERS_CMUX_MAX_STALL_HOPS` (default 1) → refuse. `expected_hops` advisory (notify when exceeded). Absolute ceiling `SUPERPOWERS_CMUX_MAX_HOPS`, default derived `max(6, 2 × expected_hops)`; explicit env wins |
@@ -113,8 +113,9 @@ Changes:
   `SUPERPOWERS_CMUX_*` overrides that must survive into the successor (a sent command runs in
   the workspace shell env, not the parent session's).
 - **Handshake**: after the send, block on `cmux wait-for "sdd-hop-$SPAWN_ID" --timeout
-  "$SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT"` (default measured in Task 0 of the plan — cold
-  start + skill load; do not guess). Timeout → Decision 5 diagnosis via
+  "$SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT"` (default measured in Task 0 of the plan — a **true
+  cold start**: fresh surface, no warm claude process, picker version download excluded;
+  shipped default = measured p95 × 2, pinned in the plan from that measurement; do not guess). Timeout → Decision 5 diagnosis via
   `cmux read-screen --surface <ref> --scrollback`.
 - **Fallback ladder**: `new-surface` or `rename-tab`/`send` failure → one attempt via the
   legacy workspace path (now `cmux workspace create`, Decision 19), logged
@@ -139,14 +140,21 @@ affects hook exit). Baselined hook → `check-hooks.sh --capture` in the same ch
 
 Decision 6 sequence, each `send` verified by `read-screen` before the next step; verification
 failure is WARNING-level (logged in the outcome record as `post_spawn=partial:<step>`), never
-a spawn failure — the successor is alive; naming is cosmetic. Recipe and the
-"`--session-label` is telemetry; `/rename` is the phone-visible session name" distinction are
-added to `references/context-handoff-protocol.md`.
+a spawn failure — the successor is alive; naming is cosmetic. `references/context-handoff-protocol.md`
+changes: the recipe; the "`--session-label` is telemetry; `/rename` is the phone-visible
+session name" distinction; the `settings.local.json`-not-read-mid-session warning; and a
+**rewrite of the existing step-4 text and exit-code table**, which currently say "spawns the
+successor in a new cmux workspace" and describe workspace-topology causes — the doc must
+describe the surface default, the workspace fallback, and the new `handshake=` outcome
+states, or it will contradict the shipped behavior.
 
 ### 5.4 Hop budget (`materialize-manifest.py`, `sdd_session.py`, spawn script)
 
-- Manifest gains optional `handoff: {expected_hops: int, spawn_policy: str}` (defaults
-  applied when absent; old manifests remain valid — no schema bump).
+- Manifest gains optional `handoff: {expected_hops: int, spawn_policy: str}`. Old manifests
+  remain valid (no schema bump) with pinned absent-block behavior: `spawn_policy` defaults to
+  `auto`; `expected_hops` is **re-derived at spawn time via the Decision 9 formula from the
+  manifest's task ranges** — so the over-expected notify fires identically for pre-v2
+  manifests (never silently skipped).
 - Spawn script stall logic: read previous outcome record's `tasks_done`; count current;
   equal → stall candidate; consecutive stalls > `SUPERPOWERS_CMUX_MAX_STALL_HOPS` → refuse
   exit 3 with notify "chain spawning without progress". Exceeding `expected_hops` → notify +
@@ -174,8 +182,10 @@ pre-commit; also invocable standalone by the protocol's manual-fallback path.
 - `materialize-manifest.py` copies it into `handoff.spawn_policy`.
 - Spawn script: Decision 14 mechanics (`ask` ⇒ require `--user-approved`).
 - `sdd-stop-hook.sh`: WARNING `systemMessage` when a bundle for the active feature was
-  created during the session (bundle dir mtime within session window) but the spawn log has
-  no matching outcome and no `decline` record. New record type `decline` writable by the
+  created during the session but the spawn log has no matching outcome and no `decline`
+  record. **Matching key is the bundle id** (outcome records already carry `bundle=<id>`),
+  not mtime alone — an mtime-only heuristic false-positives on unrelated bundles in the
+  shared `~/.claude-codex-handoff/bundles/` dir; mtime only bounds the candidate set. New record type `decline` writable by the
   controller via a documented one-liner in the protocol. Baselined hook → same-change
   re-capture.
 
