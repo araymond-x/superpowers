@@ -7,7 +7,7 @@ files_changed:
   - path: docs/process-improvement-findings/2026-07-30-sp2-workspace-env-probe.md
     description: "Fix round for the Task 1 quality review: axis-3 limit withdrawn and rewritten (cmux rpc is a CLI path to arbitrary RPC params); new Axis 4 (exhaustive 127-verb CLI sweep, a-run) added as the leg that actually carries the primary-path conclusion; new Re-capture section with the complete live transcript of the keystone SP2_SURF_MARK read-back plus the workspace-level read-back; flip condition rewritten against shipped code; H2/H3 help captures made byte-complete and H1's elision marked; fence annotations moved outside code blocks; D5 (per-invocation deprecation hint) added to the divergence table; a-run label on both spellings now earned; deviations table extended to 10 rows."
   - path: docs/process-improvement-findings/BACKLOG.md
-    description: "Two rows, both edited in place, no other line touched: N76 clause (1) now carries the read-back evidence (I1) and its flip condition is rewritten against the shipped spawn verb with the cmux rpc residual stated (I3+B1); N67's status column and Notes gain an UPDATE 2026-07-30 discharging the stale 'not exercised — probe before building' instruction and pointing at N76 (I2)."
+    description: "Two rows, both edited in place, no other line touched: N76 clause (1) now carries the read-back evidence (I1), its flip condition is rewritten against the shipped spawn verb with the cmux rpc residual stated (I3+B1), its summary clause's unqualified 'no env channel on any axis' is scoped to documented CLI verbs, and its status column is aligned with the rewritten flip condition; N67's status column and Notes gain an UPDATE 2026-07-30 discharging the stale 'not exercised — probe before building' instruction and pointing at N76 (I2). Delivered across two commits — the summary-clause and status-column qualification landed in a follow-up after a coherence re-read."
 tests:
   written: 0
   passing: 0
@@ -111,9 +111,14 @@ The invalid chain was: capabilities is names-only → the socket was not driven 
 exists"* → sufficient, because the spawn script is a CLI consumer. That requires CLI and socket to be
 disjoint layers, and `cmux rpc` is the counterexample.
 
-**Fixed in three places, not one.** The review pointed at the blockquote; the same unearned bound
-also appeared in §"What could not be established" #1 and was echoed in the Bottom line's item 3. All
-three now carry the corrected framing. (The mirrors in the *original* implementer report — its
+**Fixed in five places, not one.** The review pointed at the blockquote; the same unearned bound also
+appeared in §"What could not be established" #1, in the Bottom line's item 3, in §Disposition's
+"Why not to adopt it here" bullet, and in the N76 row's summary clause. All five now carry the
+corrected framing or an explicit pointer to the limit. **The last two were caught on a coherence
+re-read after the first commit, not by the original edit pass** — the Disposition bullet was the
+worst of them, because it is the sentence that carries the do-not-adopt recommendation and a reader
+who goes Bottom line → Disposition and stops would have seen the corrected claim once and the
+withdrawn one once, with no pointer. (The mirrors in the *original* implementer report — its
 "Could not establish" #1 and Self-Review #4 — are outside this round's write scope and are corrected
 here instead; that file is an immutable historical artifact.)
 
@@ -295,7 +300,19 @@ only route these take to the deviations register. **Controller action required f
    the limits "would only ever add an env channel on the workspace-creation verb," which is false — a
    hidden verb could carry env to a surface. I rewrote it and probed the two known hidden verbs. The
    class remains open and the doc says so.
-4. **The `send` payload had a quoting trap I could have walked into.** `cmux send` interprets `\n` as
+4. **My first pass fixed the blocking claim in three of its five locations and I called it done.** A
+   coherence re-read found it surviving verbatim in §Disposition's "Why not to adopt" bullet and in
+   the N76 row's summary clause — including one I had *already* identified as needing scoping in the
+   BACKLOG row while leaving its twin in the doc untouched. The lesson is mechanical, not
+   attitudinal: after withdrawing a claim, `grep` for the claim's *phrasing* across the artifact
+   rather than trusting the review's location list, because a review points at instances it happened
+   to read. Both were fixed in a follow-up commit.
+5. **The Axis 4 fence I added reintroduced M2 in the very section I added this round.** My first
+   draft rendered the sweep with a `<cmds>` placeholder and a `<(cmux --help)` process substitution I
+   had not actually used — an un-copyable block reconstructed from memory, in the leg designated as
+   the one that carries the conclusion, in a document about transcript fidelity. Replaced with the
+   exact bytes.
+6. **The `send` payload had a quoting trap I could have walked into.** `cmux send` interprets `\n` as
    Enter, so a `printf` format string containing `\n` would have been mangled mid-payload; and double
    quotes locally would have expanded the probe variables in my own shell. I used a single-quoted
    `echo` payload and verified by **result** (the `alpha` had to appear), not by shape. Had the

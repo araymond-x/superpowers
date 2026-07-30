@@ -503,17 +503,24 @@ the capabilities-name argument it replaces, because it enumerates the surface a 
 actually reach through documented verbs.
 
 Every command name in `cmux --help`'s `Commands:` block was extracted and each one's own `--help`
-was run and grepped for an `--env` flag:
+was run and grepped for an `--env` flag. **Exact bytes as run** — copyable and re-runnable as-is
+(a here-string, never a producer piped into `grep -q`, per this repo's SIGPIPE rule):
 
 ```
-$ awk '/^Commands:/{f=1;next} /^[A-Za-z].*:$/{if(f)f=0} f && /^[ \t]+[a-z]/{print $1}' \
-    <(cmux --help) | sort -u | wc -l
-127
+cmux --help >/tmp/top.out 2>/tmp/top.err
+awk '/^Commands:/{f=1;next} /^[A-Za-z].*:$/{if(f)f=0} f && /^[ \t]+[a-z]/{print $1}' \
+    /tmp/top.out | sort -u > /tmp/cmds.txt
+printf 'command count = %s\n' "$(wc -l </tmp/cmds.txt)"
+while read -r c; do
+  out=$(cmux "$c" --help 2>&1)
+  if grep -qi -- '--env' <<< "$out"; then printf 'ENV-FLAG: %s\n' "$c"; fi
+done < /tmp/cmds.txt
+```
 
-$ while read -r c; do
-    out=$(cmux "$c" --help 2>&1)
-    grep -qi -- '--env' <<< "$out" && printf 'ENV-FLAG: %s\n' "$c"
-  done < <cmds>
+Output:
+
+```
+command count =      127
 ENV-FLAG: new-workspace
 ```
 
@@ -678,8 +685,10 @@ Reading the result:
   is the ref `send` and `read-screen` were pointed at. The first session's fourth surface was never
   identified, which is what made a wrong-surface read impossible to rule out.
 
-`cmux send`'s trailing `\n` is an escape *it* interprets as Enter (`send --help`: *"Escape sequences:
-`\n` and `\r` send Enter"*), which is why the payload deliberately contains no other backslash.
+`cmux send`'s trailing `\n` is an escape *it* interprets as Enter — `send --help` states, in full:
+*"Send text to a terminal surface. Escape sequences: `\n` and `\r` send Enter, `\t` sends Tab."* That
+is why the payload deliberately contains no other backslash: a `printf` format string carrying its
+own `\n` would have been consumed as an Enter keystroke mid-payload.
 
 ### Step E — the workspace-level read-back, with exact bytes
 
@@ -742,9 +751,12 @@ path (`--env-file` reads `KEY=VALUE` lines, i.e. it is a scalar loader, so it do
 the `shlex.quote` re-quoting, the `printf`-not-`echo` workaround. That subtraction **does not
 happen**, because:
 
-- the sprint's **primary** topology is `new-surface` into the caller's existing workspace, which has
-  **no env channel on any axis** (§"The primary path"); it can only be reached by the composed
-  command string, so the quoting machinery must stay;
+- the sprint's **primary** topology is `new-surface` into the caller's existing workspace, which
+  **no documented CLI verb can carry env to** — read that qualifier literally: it is established by
+  the 127-verb sweep in §Axis 4 and by the `new-surface` read-back in §Axis 2, and the corrected
+  limit at the end of §Axis 3 states the one residual it does **not** exclude (an undocumented param
+  reached through `cmux rpc`, and why the spawn script would not adopt one anyway). That path can
+  only be reached by the composed command string, so the quoting machinery must stay;
 - Decision 2 pins **both** topologies to ONE shared launch-and-handshake wrapper with the **same**
   inline env. Adopting `--env` on the fallback alone would fork that wrapper's env channel — adding a
   second mechanism while removing none, which is the opposite of N67's intent.
