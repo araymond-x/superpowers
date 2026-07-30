@@ -15,5 +15,5 @@
   ],
   "p95_seconds": 11,
   "default_seconds": 60,
-  "derivation": "max(60, 2 x 11) = 60, rounded up to nearest 10 = 60"
+  "derivation": "max(60, 2 x 11) = 60, rounded up to nearest 10 = 60. NOTE -- the 60s SPEC FLOOR dominated: 2 x p95 is only 22s, so the measurement did NOT set this value, the floor did. The samples establish roughly 5.5x headroom rather than determining the timeout. Consumers must not describe 60 as a measured cold start: Task 9's import-assertion provenance comment reads 'spec floor; Task 0 measured 8-11s cold start'. The floor stops dominating only once a re-measured max sample exceeds 30s."
 }
