@@ -23,12 +23,12 @@
 ## Contract Facts
 
 - **Repo scope:** this fork only. Archetype: extension; nothing removed — workspace spawn demoted to fallback.
-- **Exit ladder is unchanged in shape:** 0 spawned / 3 manual fallback / 1 refused. New exit-3 reasons: `reason=policy`, `reason=stall`, `handshake=timeout`. New exit-0 outcome states: `handshake=ok|late|dialog`; `dialog` and `picker-manual` both carry a mandatory tell-the-user contract.
+- **Exit ladder is unchanged in shape:** 0 spawned / 3 manual fallback / 1 refused. **Exit 0 requires a received wait-for token (`handshake=ok`) — nothing else selects success.** New exit-3 reasons: `reason=policy-off`, `reason=policy-ask` (retryable, pre-reservation, no hop consumed), `reason=stall`, and `handshake=timeout` with `diagnosis=banner|trust-dialog|picker-error|unreadable|none` (read-screen ENRICHES instructions only; `trust-dialog`/`banner` instructions steer to the existing tab, never a fresh session, to prevent double-spawn). `picker-manual` keeps its mandatory tell-the-user contract.
 - **Reservation ordering unchanged:** reserve (`.handoff-hops`, intent record) BEFORE spawn; hop stays consumed on any post-spawn failure; messages must never claim "nothing was spawned" after a spawn.
 - **`.handoff-hops`:** stays a single integer; existing malformed-value fail-closed guard untouched.
 - **`handoff-spawn.log` record format (append-only fields):** intent records gain `tasks_done=<N>`; outcome records gain `surface=<ref>`, `tasks_done=<N>`, `handshake=<state>`, optional `topology=workspace-fallback`, `post_spawn=partial:<step>`, `budget=over-expected`; `workspace=<ref>` field RETAINED. New record type `decline` (controller-written, documented one-liner).
-- **`tasks_done` counting:** implementer report files across `reports/` + `archive-*/`.
-- **Manifest:** optional `handoff: {expected_hops: int, spawn_policy: "auto"|"ask"|"off"}`. Absent block → `spawn_policy=auto`; `expected_hops` re-derived at spawn time from manifest task ranges via the same formula — over-expected notify fires identically for pre-v2 manifests. No schema-version bump.
+- **`tasks_done` counting:** UNIQUE task IDs across `reports/` + `archive-*/` whose implementer report frontmatter parses AND records completed status (verification reports count under their own rules). Filenames alone never count; BLOCKED/incomplete/duplicates must not inflate progress. Persisted in the intent record at reservation. First hop baseline = 0; missing/malformed prior outcome → stall check SKIPs with `stall=indeterminate`.
+- **Manifest:** optional `handoff: {expected_hops: int, spawn_policy: "auto"|"ask"|"off"}`. Absent block → `spawn_policy=auto`; `expected_hops` re-derived at spawn time via the formula with pinned input precedence: (1) validated manifest total-task count; (2) union of unique module task IDs; (3) inclusive active `task_range`. Invalid/zero totals → treat as absent-with-warning (notify suppressed, WARN logged). No schema-version bump.
 - **`expected_hops` formula:** `ceil(total_tasks / 2.5)` standard tier; `1` micro.
 - **Ceiling:** `SUPERPOWERS_CMUX_MAX_HOPS` keeps name + fail-closed validation; default becomes derived `max(6, 2 × expected_hops)`; explicit env value wins absolutely.
 - **Stall rule:** consecutive zero-progress hops > `SUPERPOWERS_CMUX_MAX_STALL_HOPS` (default 1) → refuse exit 3.
@@ -56,10 +56,10 @@
 | # | Decision | Chosen |
 |---|----------|--------|
 | 1 | Sprint composition | Six items + spikes SP1–SP4 |
-| 2 | Successor placement | Surface (top tab) in caller's workspace; one-shot workspace fallback (`topology=workspace-fallback`), then manual |
+| 2 | Successor placement | Surface (top tab) in caller's workspace; one-shot workspace fallback (`topology=workspace-fallback`), then manual. BOTH topologies use ONE shared launch-and-handshake wrapper (same inline env, token, timeout ladder, post-spawn setup, outcome fields). Fallback only when the surface path fails BEFORE its launch command is accepted; a token timeout after a successful `send` NEVER spawns twice |
 | 3 | Surface launch driver | `cmux send` of composed command + `\n` (NOT `respawn-pane`) |
 | 4 | Readiness signal | `wait-for` token signaled by session-start hook on `SUPERPOWERS_SPAWN_ID`; parent blocks with timeout |
-| 5 | Timeout diagnosis | banner → exit 0 `handshake=late`; trust/permission dialog → exit 0 `handshake=dialog` + mandatory tell-the-user, and the notify must NAME the dialog seen; error/other/unreadable → exit 3 `handshake=timeout`, notify + manual instructions, hop consumed |
+| 5 | Timeout handling | Received token = ONLY exit-0 path (`handshake=ok`). Timeout → one bounded re-wait (same duration) → still no token → exit 3 `handshake=timeout`, hop consumed, `diagnosis=` from read-screen enriches record + instructions (dialog diagnosis must NAME the dialog; notify fires on every timeout). The scrape never selects the exit code |
 | 6 | Post-spawn setup | Script-driven after handshake: `send "/rename <title>"` → `send-key Enter` → `read-screen` verify → `send "/rc"` → `send-key Enter` → verify "/remote-control is active". Title default `hop<N> SDD <feature>`; `rename-tab` gets same title |
 | 7 | Post-spawn knobs | `SUPERPOWERS_CMUX_POST_SPAWN` (default `rename,rc`); title format env override |
 | 8 | Hop budget semantics | Progress-aware stall rule + advisory `expected_hops` (notify only) + absolute ceiling |
@@ -68,7 +68,7 @@
 | 11 | `tasks_done` counting | Implementer report files across `reports/` + `archive-*/` |
 | 12 | Mechanics card | Script-generated `reports/handoff-mechanics.md` (contents per §5.5 below) |
 | 13 | Bookkeeping commits | Spawn script commits post-spawn (`chore(sdd): record handoff hop N`); `--no-commit` escape |
-| 14 | Consent dial | `handoff_spawn: auto|ask|off` → manifest `spawn_policy`; `off` → exit 3 `reason=policy`; `ask` → refuse without `--user-approved` |
+| 14 | Consent dial | `handoff_spawn: auto|ask|off` → manifest `spawn_policy`; `off` → exit 3 `reason=policy-off`; `ask` without `--user-approved` → exit 3 `reason=policy-ask`, retryable, checked BEFORE reservation (no hop consumed) |
 | 15 | Step-completion check | Stop-hook WARNING `systemMessage`: bundle created this session, no matching outcome/decline — matched by **bundle id** (mtime only bounds candidates) |
 | 16 | Check 3b compatibility | Pre-dispatch hook naming allowlist gains `handoff-` prefix |
 | 17 | Check 9 compatibility | `_check_verification_git_reality` git log gains `:(exclude)<feature-dir>` pathspec |
@@ -114,7 +114,7 @@ Add: post-spawn `/rename`+`/rc` recipe; "`--session-label` is telemetry; `/renam
 
 ## Testing Requirements
 
-- Unit (`tests/unit/test_spawn_handoff*.py` + new): surface happy path; per-verb `OK` parsing incl. `close-surface` wrong-ref negative fixture; workspace fallback; handshake success/timeout × `late`/`dialog`/`error` branches via stub `read-screen` fixtures; stall detection (progress / 1 stall allowed / 2 refused); ceiling derivation + env override; policy dial (`auto`/`ask`±`--user-approved`/`off`); mechanics-card golden-file; generated report skeleton passes `validate-report.py` structurally; model round-trips; Check 3b (card allowed, junk blocked); Check 9 pathspec both directions.
+- Unit (`tests/unit/test_spawn_handoff*.py` + new): surface happy path; per-verb `OK` parsing with exit-status + verb-specific response predicate for every state-changing verb, plus negative/malformed fixtures for `new-surface`/`rename-tab`/`send`/`send-key` (incl. `close-surface` wrong-ref; never reuse `rename-tab`/`close-surface` output as a target ref); workspace fallback THROUGH the shared wrapper (fallback success + fallback token-timeout; no double-spawn after a successful `send`); banner-with-no-token is non-success; timeout → re-wait → exit 3 per `diagnosis=` branch via stub `read-screen` fixtures; stall detection (progress / 1 stall / 2 refused / first-hop baseline / `stall=indeterminate`); `tasks_done` (BLOCKED not counted, duplicates deduped, archives counted, verification rules); `expected_hops` precedence + legacy shapes + invalid-total degradation; ceiling derivation + env override; policy dial (incl. `policy-ask` retry, hop untouched); mechanics-card golden-file; generated report skeleton passes `validate-report.py` structurally; model round-trips; Check 3b (card allowed, junk blocked); Check 9 pathspec both directions; byte-proxy interference invariant (card counted by `ctx_byte_estimate`, matched by no task/stale scan).
 - E2E: Step 14 rewritten (surface topology, handshake via token-signaling stub, `tasks_done` fields, policy dial); stubs for all new verbs.
 - Hook baseline: one `check-hooks.sh --capture` covering all three changed hooks, same change.
 - Regression: `validate-all-skills.py` after doc edits.
@@ -129,6 +129,6 @@ Add: post-spawn `/rename`+`/rc` recipe; "`--session-label` is telemetry; `/renam
 - [ ] `expected_hops` appears in the manifest and the over-expected notify fires (e2e stub).
 - [ ] The successor's first dispatch requires no report-naming, checkpoint, or Check 9 remediation caused by handoff artifacts.
 - [ ] `handoff_spawn: ask` blocks scripted spawn without `--user-approved`; `off` refuses with `reason=policy`.
-- [ ] Handshake diagnosis branches behave per Decision 5 under stubbed `read-screen` fixtures: `late`/`dialog` exit 0 with distinct outcome fields; `timeout` exits 3.
+- [ ] The wait-for token is the only exit-0 path: stubbed banner/dialog screens with no token exit 3 with the matching `diagnosis=` field; a received token exits 0 (`handshake=ok`).
 - [ ] All suites green (unit, e2e with updated banner count, regression, install); hook baseline re-captured in the same change.
 - [ ] SP1–SP4 deliverables committed under `docs/process-improvement-findings/` (SP1 may instead land as a `context-probe.py` fix with tests).
