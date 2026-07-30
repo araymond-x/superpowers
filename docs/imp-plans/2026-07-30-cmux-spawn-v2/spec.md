@@ -125,10 +125,11 @@ Changes:
   New: reservation intent record carries `tasks_done=<N>`; after a successful spawn +
   handshake, the script generates the mechanics card, then commits `.handoff-hops`,
   `handoff-spawn.log`, `handoff-mechanics.md` (Decision 13).
-- **Exit ladder**: 0 spawned (auto | picker-manual, unchanged semantics) — plus the
-  spawned-but-never-started rung inside exit 3 with a distinguishing outcome field
-  (`workspace=<ref> surface=<ref> handshake=timeout`); 3 manual fallback (existing causes +
-  `reason=policy`, `reason=stall`); 1 refused (unchanged causes).
+- **Exit ladder**: 0 spawned (auto | picker-manual, unchanged semantics; now also
+  `handshake=ok|late|dialog` outcomes, with `dialog` carrying the mandatory tell-the-user
+  contract); 3 manual fallback (existing causes + `reason=policy`, `reason=stall`, and the
+  spawned-but-never-started rung with `handshake=timeout` in the outcome record);
+  1 refused (unchanged causes).
 
 ### 5.2 `hooks/session-start` (handshake signal)
 
@@ -213,8 +214,9 @@ pre-commit; also invocable standalone by the protocol's manual-fallback path.
 ## 7. Error handling summary
 
 - Every new failure path maps to the existing 0/3/1 ladder; no new exit codes.
-- Handshake timeout is the one post-spawn failure: hop stays consumed (reservation is
-  durable), outcome record distinguishes it, message must never claim "nothing was spawned".
+- `handshake=timeout` is the one post-spawn *failure* (exit 3): hop stays consumed
+  (reservation is durable), outcome record distinguishes it, message must never claim
+  "nothing was spawned". `handshake=late|dialog` are exit-0 non-failures with logged state.
 - Post-spawn setup failures are cosmetic WARNINGs (`post_spawn=partial`).
 - All cmux verbs remain best-effort-guarded as today (`2>/dev/null || true` only where a
   precondition has already proven reachability; the notify asymmetry rules are unchanged).
@@ -258,6 +260,8 @@ pre-commit; also invocable standalone by the protocol's manual-fallback path.
       remediation caused by handoff artifacts (interference audit holds under test).
 - [ ] `handoff_spawn: ask` blocks scripted spawn without `--user-approved`; `off` refuses
       with `reason=policy`.
+- [ ] Handshake diagnosis branches behave per Decision 5 under stubbed `read-screen`
+      fixtures: `late`/`dialog` exit 0 with distinct outcome fields; `timeout` exits 3.
 - [ ] All suites green: unit, e2e (banner count updated), regression, install;
       hook baseline re-captured in the same change.
 - [ ] SP1–SP4 deliverables committed under `docs/process-improvement-findings/` (SP1 may
