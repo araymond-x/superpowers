@@ -6,6 +6,8 @@ status: DONE_WITH_CONCERNS
 files_changed:
   - path: "tests/unit/fixtures/spawn-handoff/cmux-verb-shapes.json"
     description: "Live re-capture (same binary): added list_pane_surfaces_multi + selected_row_marker; added capture_note_addendum provenance seam and close_surface.wrong_ref_note; rewrote ref_resolution_scoping.impact to the measured consequence"
+  - path: "tests/unit/fixtures/spawn-handoff/cold-start-timing.json"
+    description: "Corrected the `derivation` prose to record that the 60s spec floor dominated (2 x p95 = 22s), so 60 is not describable as a measured cold start. Numeric values unchanged."
   - path: "tests/unit/test_spawn_handoff_v2.py"
     description: "Hardened from 3 to 6 tests: error-class pinning, provenance pinning, escalation-trigger value assertions, unconditional cold-start derivation equality, marker-shape and non-invertibility assertions"
 tests:
@@ -16,7 +18,7 @@ tests:
 contract_compliance:
   - constraint: "Write scope is exactly three files; no plan/module/deviations edits"
     status: compliant
-    detail: "Two of the three were modified; cold-start-timing.json needed no change (its stored values already satisfy the newly encoded rule). No other file touched."
+    detail: "All three modified. cold-start-timing.json's NUMERIC values were left byte-unchanged (they already satisfy the newly encoded rule); only its derivation prose was corrected. No other file touched."
   - constraint: "Live re-capture only if the Step 1 environment check passes"
     status: compliant
     detail: "cmux --version byte-identical to the fixture stamp, ping PONG, CMUX_WORKSPACE_ID set. Re-verified before capture; blocked path not taken."
@@ -164,10 +166,20 @@ itself a multiple of 10 and round-up-to-10 is monotone. Verified exhaustively ov
 zero disagreements. Encoded once with a comment recording the equivalence, so a future re-measure
 past 30s cannot resurface the question.
 
-**4. `cold-start-timing.json` was not modified.** The prompt permitted writing it, but the newly
-encoded rule holds against the stored values exactly as landed (`p95_seconds: 11`,
-`max(runs_seconds) == 11`, rule yields 60, `default_seconds: 60`). The prompt's instruction was to
-stop rather than adjust the fixture to fit; no adjustment was needed. The file stays byte-unchanged.
+**4. `cold-start-timing.json`: numbers untouched, one prose field corrected.** The newly encoded rule
+holds against the stored values exactly as landed (`p95_seconds: 11`, `max(runs_seconds) == 11`, rule
+yields 60, `default_seconds: 60`) — the prompt's instruction was to stop rather than adjust the
+fixture to fit, and no numeric adjustment was needed.
+
+Its `derivation` prose, however, carried **the same defect class as finding 5**: right value, wrong
+implied mechanism. `"max(60, 2 x 11) = 60, rounded up to nearest 10 = 60"` is arithmetically correct
+but reads as though the measurement produced 60. It did not — `2 x p95` is 22s, so the **spec floor
+set the value and the samples only establish ~5.5x headroom**. `deviations.md` already records this
+and states that Task 9's provenance comment "must say 'spec floor; Task 0 measured 8–11s cold start'
+rather than implying 60 was measured", but a Module 3 implementer reading only the fixture would not
+have learned it. Corrected in place, including the condition under which the floor stops dominating
+(a re-measured max sample above 30s). My test pins `derivation` as non-empty, not as any particular
+content, so this is a fidelity fix rather than a test-driven one.
 
 **5. MINOR items deliberately deferred, with reasoning** (none silently dropped):
 
