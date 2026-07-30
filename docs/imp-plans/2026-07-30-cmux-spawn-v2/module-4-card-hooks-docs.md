@@ -17,7 +17,7 @@ tasks:
     depends_on: [13]
   - id: 15
     title: "Check 9 :(exclude) pathspec + both-direction tests"
-    depends_on: [13]
+    depends_on: [13, 14]
   - id: 16
     title: "context-handoff-protocol.md rewrite"
     depends_on: [14]

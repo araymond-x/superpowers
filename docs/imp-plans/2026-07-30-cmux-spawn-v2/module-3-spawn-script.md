@@ -434,14 +434,18 @@ fi
 
 Also: delete the old `spawn_claude_workspace` success/failure call-site stanza it replaces; keep `spawn_claude_workspace()` DELETED (its mechanics live on in `create_workspace_target` + shared wrapper — remove the dead function, its argv/notify behavior is superseded) and update the dry-run echo: `--dry-run: would spawn surface in $CMUX_WORKSPACE_ID (workspace fallback armed) — quota=$QUOTA_STATUS launch=$LAUNCH_MODE policy=$SPAWN_POLICY tasks_done=$TASKS_DONE`.
 
-- [ ] **Step 4: Add the import assertion** tying the script default to Task 0's measurement (in `test_spawn_handoff_v2.py`):
+- [ ] **Step 4: Add the import assertion** tying the script default to Task 0's measurement (in `test_spawn_handoff_v2.py`). Task 0 creates that file importing only `json`/`Path` and defining only `FIX` — this step must ADD `import re` and the `SCRIPT` constant (verify `parents[N]` actually resolves; a wrong path fails on `read_text()`, not on the assertion). `SPAWN_WAIT_TIMEOUT_DEFAULT=` must stay a **top-level, column-0** assignment — the regex is anchored, so indenting it into a function or `if` block silently breaks the match.
 
 ```python
+SCRIPT = (Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development"
+          / "scripts" / "spawn-handoff-session.sh")
+
 def test_wait_timeout_default_matches_measured_fixture():
     d = json.loads((FIX / "cold-start-timing.json").read_text())
-    script = SCRIPT.read_text()
-    m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)", script, re.M)
-    assert m and int(m.group(1)) == d["default_seconds"]
+    m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)", SCRIPT.read_text(), re.M)
+    assert m, "SPAWN_WAIT_TIMEOUT_DEFAULT= must be a top-level, column-0 assignment (anchored regex)"
+    assert int(m.group(1)) == d["default_seconds"], (
+        f"script default {m.group(1)} != measured {d['default_seconds']} (cold-start-timing.json)")
 ```
 
 - [ ] **Step 5: Run both unit files** — all PASS (old file fully migrated). **Step 6: Commit** — `"feat(cmux-spawn-v2): surface topology + shared launch wrapper + workspace-create fallback"`.

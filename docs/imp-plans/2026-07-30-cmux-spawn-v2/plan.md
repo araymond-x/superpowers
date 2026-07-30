@@ -79,7 +79,7 @@ tasks:
     module_id: 1
   - id: 3
     title: "SP3 + SP4 design docs + BACKLOG rows"
-    depends_on: [0]
+    depends_on: [0, 1, 2]
     module_id: 1
     review_tier: minimum
   - id: 4
@@ -142,7 +142,7 @@ tasks:
     pattern_references: ["stop-hook-systemmessage"]
   - id: 15
     title: "Check 9 :(exclude) pathspec + both-direction tests"
-    depends_on: [13]
+    depends_on: [13, 14]
     module_id: 4
   - id: 16
     title: "context-handoff-protocol.md rewrite"
