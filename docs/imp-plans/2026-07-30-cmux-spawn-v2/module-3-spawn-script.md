@@ -1,0 +1,613 @@
+---
+schema_version: 1
+feature_archetype: extension
+enforcement_tier: standard
+entry_mode: brainstorming
+source_contracts: "docs/imp-plans/2026-07-30-cmux-spawn-v2/spec-distilled.md"
+integration_test:
+  path: tests/integration/sdd-e2e-test.sh
+tasks:
+  - id: 8
+    title: "Spawn script: policy gate, stall/ceiling rework, intent tasks_done"
+  - id: 9
+    title: "Spawn script: surface topology + shared launch wrapper + workspace fallback"
+    depends_on: [8]
+  - id: 10
+    title: "Spawn script: wait-for handshake, re-wait, read-screen diagnosis"
+    depends_on: [9]
+  - id: 11
+    title: "Spawn script: post-spawn setup (/rename, /rc) + knobs"
+    depends_on: [10]
+---
+
+# cmux-spawn-v2 — Module 3: Spawn script core rework
+
+> **Parent plan:** `docs/imp-plans/2026-07-30-cmux-spawn-v2/plan.md`
+> **Module:** 3 of 4
+> **For agentic workers:** Before implementing, invoke `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` via the Skill tool. Do not begin implementation without loading the skill first — direct implementation bypasses review enforcement, quality gates, and hooks.
+
+**Module Goal:** Rework `spawn-handoff-session.sh` in place: consent policy gate, progress-aware stall/ceiling, surface-topology spawn through ONE shared launch-and-handshake wrapper (workspace path demoted to a one-shot fallback on the canonical `workspace create` verb), `wait-for` token handshake as the only success signal, read-screen diagnosis enrichment, and script-driven post-spawn setup. Every task keeps the script and BOTH unit files green.
+
+**Source Contracts:** None
+
+_External contracts were frozen into fixtures by Module 1's Task 0 (repo convention: the mechanical Task-0 gate resolves against the module that owns Task 0). The binding facts this module consumes — spec-distilled Decisions 2-8, 14, 19-20 + §5.1/§5.3, the Task 0 fixtures (`cmux-verb-shapes.json`, `cold-start-timing.json`), the `_handoff_support.py` CLI, and the parent plan's Shared Contract Section — are restated under Contract Constraints below._
+
+**Contract Constraints:** Bash ≥ 3.2; NO `set -u`/`set -e`/pipefail; `printf` not `echo` for composed strings; never pipe a producer into `grep -q` (use here-strings); all env knobs validate-warn-revert (`.handoff-hops`'s fail-closed numeric guard is the ONE fail-closed guard and stays untouched; `SUPERPOWERS_CMUX_MAX_HOPS` keeps its validate-warn-revert contract but its validation MOVES into the ceiling derivation — Task 8(b)/(e)); reservation BEFORE spawn; a received token is the ONLY exit-0 path; fallback fires ONLY before the launch command is accepted (`cmux send` rc 0 = accepted — after that, NEVER spawn again); `policy-off`/`policy-ask` are pre-reservation (no hop consumed); exit codes stay 0/3/1.
+
+## File Map
+
+| File | Responsibility |
+|------|----------------|
+| `skills/subagent-driven-development/scripts/spawn-handoff-session.sh` | The rework target — one function group per task |
+| `tests/unit/spawn_handoff_helpers.py` | + `cmux_v2_stub()` builder (behavior via env: `CMUX_WAITFOR_RC`, `CMUX_SCREEN_FILE`, `CMUX_NEW_SURFACE_RC`, `CMUX_SEND_RC`, `CMUX_WS_CREATE_RC`) |
+| `tests/unit/test_spawn_handoff_v2.py` | New behavior matrix (policy, stall, surface, handshake, post-spawn) |
+| `tests/unit/test_spawn_handoff.py` | Existing matrix — topology-dependent tests MIGRATED in the task that changes the behavior, never later |
+| `tests/unit/fixtures/spawn-handoff/*.json` | + manifests with `handoff` blocks; screen-text fixtures for diagnosis |
+
+## Write-Scope Partitioning
+
+| Task | Owned Files (write) | Read-Only Files | Depends On |
+|------|---------------------|-----------------|------------|
+| Task 8 | `spawn-handoff-session.sh`, `test_spawn_handoff_v2.py`, `test_spawn_handoff.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/*` | `_handoff_support.py` | Task 7 |
+| Task 9 | same set | Task 0 fixtures | Task 8 |
+| Task 10 | same set | Task 0 fixtures | Task 9 |
+| Task 11 | same set | — | Task 10 |
+
+All four tasks write the same files — strictly serialized, never parallel.
+
+### Task 8: Policy gate, stall/ceiling rework, intent tasks_done
+
+**Files:**
+- Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
+- Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`
+
+- [ ] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
+
+```python
+def write_manifest(ctx, expected_hops=None, spawn_policy=None, total_tasks=5,
+                   tier="standard", task_range=(0, 4), omit_handoff=False):
+    """Minimal .sdd-session.json in the feature dir. omit_handoff=True builds a
+    pre-v2 manifest (no handoff block) for derivation-path tests."""
+    import json as _json
+    m = {"tier": tier, "total_tasks": total_tasks, "task_range": list(task_range)}
+    if not omit_handoff:
+        h = {}
+        if expected_hops is not None: h["expected_hops"] = expected_hops
+        if spawn_policy is not None: h["spawn_policy"] = spawn_policy
+        m["handoff"] = h
+    (ctx["wt"] / ctx["feat"] / ".sdd-session.json").write_text(_json.dumps(m))
+
+
+def write_done_report(ctx, task_id, status="DONE"):
+    body = (f"---\nschema_version: 1\ntask_id: {task_id}\nstatus: {status}\n"
+            "files_changed: [{path: x, description: y}]\n"
+            "tests: {written: 1, passing: 1, command: x, result: PASS}\n---\nbody\n")
+    (ctx["reports"] / f"task-{task_id:03d}-implementer-report.md").write_text(body)
+
+
+def append_outcome(ctx, hop, tasks_done, extra=""):
+    line = (f"2026-07-30T00:00:0{hop}Z uuid-{hop} outcome hop={hop} workspace=w surface=s "
+            f"launch=auto bundle=b quota=ok tasks_done={tasks_done} handshake=ok{extra}\n")
+    with open(ctx["reports"] / "handoff-spawn.log", "a") as f:
+        f.write(line)
+
+
+def _commit(ctx, msg="fixture state"):
+    subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)   # fixture repo only
+    subprocess.run(["git", "commit", "-qm", msg], cwd=ctx["wt"], check=True)
+
+
+def _spawn_log_text_or_empty(ctx):
+    p = ctx["reports"] / "handoff-spawn.log"
+    return p.read_text() if p.exists() else ""
+```
+
+Ceiling/stall tests must pop ambient `SUPERPOWERS_CMUX_*` vars (run_spawn copies `os.environ`) — pass `env_extra` overrides explicitly and strip the rest in a small wrapper, or the developer's shell knobs skew derived-ceiling assertions.
+
+Note: these reports/manifests must be **committed** inside the fixture worktree (the script's clean-tree precondition runs first) — add `git add -A && git commit` after writing, mirroring `setup_worktree`.
+
+- [ ] **Step 2: Failing tests** (in `test_spawn_handoff_v2.py`; use `run_spawn` throughout):
+
+```python
+class TestPolicyDial:
+    def test_off_refuses_pre_reservation(self, tmp_path):
+        ctx = setup_worktree(tmp_path); install_bundle(...); write_manifest(ctx, expected_hops=3, spawn_policy="off"); _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1")
+        assert r.returncode == 3 and "reason=policy-off" in r.stderr
+        assert not (ctx["reports"] / ".handoff-hops").exists()      # no hop consumed
+        assert "intent" not in _spawn_log_text_or_empty(ctx)
+
+    def test_ask_without_flag_refuses_retryable(self, tmp_path):
+        ... spawn_policy="ask" ...
+        r = run_spawn(ctx, tmp_path, "b1")
+        assert r.returncode == 3 and "reason=policy-ask" in r.stderr
+        assert "--user-approved" in r.stderr                        # retry instruction printed
+
+    def test_ask_with_flag_proceeds(self, tmp_path):
+        r = run_spawn(ctx, tmp_path, "b1", "--user-approved", ...)
+        assert "reason=policy-ask" not in r.stderr                  # gate passed (later gates may still act)
+
+    def test_absent_manifest_or_block_is_auto(self, tmp_path):
+        # no .sdd-session.json at all -> policy auto, proceeds past the gate
+```
+
+```python
+class TestStallAndCeiling:
+    def test_progress_never_refused_below_ceiling(self, tmp_path):
+        # 2 prior outcomes tasks_done=2,4; 5 DONE reports now; hops file "2" -> proceeds
+    def test_one_stall_allowed(self, tmp_path):
+        # prior outcome tasks_done=3; 3 DONE reports -> streak 1, proceeds
+    def test_two_stalls_refused_with_progress_message(self, tmp_path):
+        # two trailing outcomes tasks_done=3; 3 DONE reports -> exit 3, "reason=stall",
+        # message contains "tasks 3/5" and "hops" and "SUPERPOWERS_CMUX_MAX_STALL_HOPS"
+    def test_first_hop_baseline_not_stall(self, tmp_path):
+        # empty log, 0 reports -> proceeds
+    def test_malformed_prior_outcome_indeterminate_skips(self, tmp_path):
+        # last outcome missing tasks_done= -> proceeds, stderr contains "stall=indeterminate"
+    def test_ceiling_derived_from_expected_hops(self, tmp_path):
+        # manifest expected_hops=2 -> ceiling max(6,4)=6; hops file "6" -> exit 3 hop-limit
+    def test_env_ceiling_wins_absolutely(self, tmp_path):
+        # env MAX_HOPS=1, hops file "1" -> refused even though derived ceiling is 6
+    def test_over_expected_notifies_never_refuses(self, tmp_path):
+        # expected_hops=1, hops file "1", ceiling 6 -> proceeds; cmux.log contains notify
+        # with "expected" in body; stderr notes budget=over-expected
+    def test_intent_record_carries_tasks_done(self, tmp_path):
+        # 2 DONE reports; reach the spawn -> intent line matches r" intent hop=\d+ tasks_done=2$"
+```
+
+Migrate in `test_spawn_handoff.py`: `test_hop_limit_exits_3` currently relies on default `MAX_HOPS=3` — set `SUPERPOWERS_CMUX_MAX_HOPS=3` explicitly in its env (the default is now derived, floor 6).
+
+- [ ] **Step 3: Run to verify failures**, then **Step 4: Implement** in the script:
+
+(a) Arg parse gains the flag: add `--user-approved) USER_APPROVED=1 ;;` beside `--dry-run` (initialize `USER_APPROVED=0`).
+
+(b) Config layer: DELETE the `MAX_HOPS` block from Layer 0 (its validation moves to (e)); add beside the quota knobs:
+
+```bash
+MAX_STALL_HOPS_DEFAULT=1
+MAX_STALL_HOPS="${SUPERPOWERS_CMUX_MAX_STALL_HOPS:-$MAX_STALL_HOPS_DEFAULT}"
+if ! [[ "$MAX_STALL_HOPS" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_STALL_HOPS ($MAX_STALL_HOPS) — reverting to default $MAX_STALL_HOPS_DEFAULT." >&2
+  MAX_STALL_HOPS="$MAX_STALL_HOPS_DEFAULT"
+fi
+SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
+```
+
+(c) After the feature-dir block, resolve the manifest: `MANIFEST_FILE="$WORKTREE_ROOT/$FEATURE_DIR/.sdd-session.json"`.
+
+(d) **Precondition 2b — policy** (immediately after `validate_bundle`, BEFORE the cmux-reachable check; nothing reserved yet):
+
+```bash
+SPAWN_POLICY="auto"
+if [ -f "$MANIFEST_FILE" ]; then
+  SPAWN_POLICY="$("$PYTHON" "$SUPPORT_CLI" spawn-policy --manifest "$MANIFEST_FILE" 2>/dev/null)"
+  case "$SPAWN_POLICY" in auto|ask|off) : ;; *) SPAWN_POLICY="auto" ;; esac
+fi
+if [ "$SPAWN_POLICY" = "off" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=off (reason=policy-off). Auto-spawn is disabled for this plan — resume manually." >&2
+  print_manual_instructions; exit 3
+fi
+if [ "$SPAWN_POLICY" = "ask" ] && [ "$USER_APPROVED" != "1" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=ask without --user-approved (reason=policy-ask). ASK THE USER, then re-run with --user-approved. No hop was consumed — this refusal is retryable." >&2
+  exit 3
+fi
+```
+
+(e) **Precondition 4 rework** (replaces the flat hop-limit check; runs AFTER the cmux-reachable check so notify works; the malformed-`.handoff-hops` guard stays verbatim where it is):
+
+```bash
+# Progress accounting (Decision 8). tasks_done failure degrades to "unknown":
+# the stall check SKIPs (stall=indeterminate) — never fake 0, which would
+# manufacture stalls. The runaway fail-closed guard remains .handoff-hops's own.
+TASKS_DONE="$("$PYTHON" "$SUPPORT_CLI" tasks-done --reports-dir "$REPORTS_DIR" 2>/dev/null)"
+[[ "$TASKS_DONE" =~ ^[0-9]+$ ]] || TASKS_DONE="unknown"
+EXPECTED_HOPS="unknown"
+if [ -f "$MANIFEST_FILE" ]; then
+  EXPECTED_HOPS="$("$PYTHON" "$SUPPORT_CLI" expected-hops --manifest "$MANIFEST_FILE" 2>/dev/null)"
+  [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
+fi
+# Ceiling: explicit env wins absolutely; else derived max(6, 2 x expected).
+if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
+  MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
+  if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
+    DERIVED=6; [ "$EXPECTED_HOPS" != "unknown" ] && { DERIVED=$((EXPECTED_HOPS * 2)); [ "$DERIVED" -lt 6 ] && DERIVED=6; }
+    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to derived default $DERIVED." >&2
+    MAX_HOPS="$DERIVED"
+  fi
+else
+  MAX_HOPS=6
+  [ "$EXPECTED_HOPS" != "unknown" ] && { MAX_HOPS=$((EXPECTED_HOPS * 2)); [ "$MAX_HOPS" -lt 6 ] && MAX_HOPS=6; }
+fi
+```
+
+then, after the existing `SP_HOP=$((HOPS + 1))` / ceiling comparison block (message now says "ceiling"), the stall check:
+
+```bash
+BUDGET_FLAG=""
+if [ "$TASKS_DONE" = "unknown" ]; then
+  echo "[spawn-handoff] stall=indeterminate — tasks_done could not be counted; stall check skipped." >&2
+else
+  STREAK="$("$PYTHON" "$SUPPORT_CLI" stall-streak --spawn-log "$SPAWN_LOG" --tasks-done "$TASKS_DONE" 2>/dev/null)"
+  if [ "$STREAK" = "indeterminate" ]; then
+    echo "[spawn-handoff] stall=indeterminate — previous outcome record missing/malformed; stall check skipped." >&2
+  elif [[ "$STREAK" =~ ^[0-9]+$ ]] && [ "$STREAK" -gt "$MAX_STALL_HOPS" ]; then
+    TOTAL_DISP="?"; [ -f "$MANIFEST_FILE" ] && TOTAL_DISP="$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("total_tasks","?"))' "$MANIFEST_FILE" 2>/dev/null)"
+    cmux notify --title "SDD handoff" --body "Chain spawning without progress (tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS) — manual resume" 2>/dev/null || true
+    echo "[spawn-handoff] refused: $STREAK consecutive zero-progress hops (> SUPERPOWERS_CMUX_MAX_STALL_HOPS=$MAX_STALL_HOPS) at tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS (reason=stall). If this chain is legitimately slow, raise SUPERPOWERS_CMUX_MAX_STALL_HOPS via inline env on the spawn invocation — settings.local.json is NOT read by a running session." >&2
+    print_manual_instructions; exit 3
+  fi
+fi
+if [ "$EXPECTED_HOPS" != "unknown" ] && [ "$SP_HOP" -gt "$EXPECTED_HOPS" ]; then
+  BUDGET_FLAG=" budget=over-expected"
+  cmux notify --title "SDD handoff" --body "Hop $SP_HOP exceeds expected_hops=$EXPECTED_HOPS (advisory — spawning anyway)" 2>/dev/null || true
+  echo "[spawn-handoff] budget=over-expected (hop $SP_HOP > expected $EXPECTED_HOPS) — advisory only." >&2
+fi
+```
+
+(f) The intent record gains the count: `printf '%s %s intent hop=%s tasks_done=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$TASKS_DONE" >> "$SPAWN_LOG"` (same checked-write `if !` wrapper as today).
+
+- [ ] **Step 5: Run both unit files + fix migrations** — `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py tests/unit/test_spawn_handoff_v2.py -v`. All PASS.
+
+- [ ] **Step 6: Commit** — `git add` the four files + fixtures; `git commit -m "feat(cmux-spawn-v2): policy gate + progress-aware stall/ceiling + intent tasks_done"`.
+
+### Task 9: Surface topology + shared launch wrapper + workspace fallback
+
+**Files:** same set as Task 8.
+
+- [ ] **Step 1: Helper.** Add to `spawn_handoff_helpers.py` a v2 cmux stub whose behavior is env-driven (append `cmux_v2_stub()` returning the body string):
+
+```python
+CMUX_V2_STUB = r'''
+if [ "$1" = "ping" ]; then echo PONG; exit 0; fi
+echo "$@" >> "$CMUX_LOG"
+case "$1" in
+  new-surface)   [ -n "$CMUX_NEW_SURFACE_RC" ] && exit "$CMUX_NEW_SURFACE_RC"
+                 echo "OK surface:7 pane:2 workspace:5"; exit 0 ;;
+  rename-tab)    echo "OK action=rename target=surface:7"; exit 0 ;;
+  send)          [ -n "$CMUX_SEND_RC" ] && exit "$CMUX_SEND_RC"; echo OK; exit 0 ;;
+  send-key)      echo OK; exit 0 ;;
+  wait-for)      exit "${CMUX_WAITFOR_RC:-0}" ;;
+  read-screen)   [ -n "$CMUX_SCREEN_FILE" ] && { cat "$CMUX_SCREEN_FILE"; exit 0; }
+                 echo "internal_error: Failed to read terminal text" >&2; exit 1 ;;
+  workspace)     [ "$2" = "create" ] || { echo OK; exit 0; }
+                 [ -n "$CMUX_WS_CREATE_RC" ] && exit "$CMUX_WS_CREATE_RC"
+                 echo "OK workspace:9"; exit 0 ;;
+  list-pane-surfaces) printf 'surface:11 terminal [selected]\n'; exit 0 ;;
+  *) echo OK; exit 0 ;;
+esac
+'''
+```
+
+(Exact `list-pane-surfaces` line format: copy from Task 0's `cmux-verb-shapes.json` capture — the stub must mirror the real shape, then the script's parser is written against it.)
+
+- [ ] **Step 2: Failing tests** (`test_spawn_handoff_v2.py`):
+
+```python
+class TestSurfaceTopology:
+    def test_surface_happy_path(self, tmp_path):
+        # v2 stub, spawnable ctx -> exit 0; cmux.log ORDER: new-surface (with
+        # --workspace TEST-WS --type terminal --focus false) -> rename-tab
+        # --surface surface:7 -> send --surface surface:7 (composed cmd + \n) -> wait-for
+        # outcome record: workspace=TEST-WS surface=surface:7 handshake=ok, NO topology= field
+    def test_sent_command_carries_inline_env(self, tmp_path):
+        # env SUPERPOWERS_CMUX_MAX_STALL_HOPS=2 on the parent -> sent text starts with
+        # "export SUPERPOWERS_SPAWN_ID=" and contains "SUPERPOWERS_CMUX_MAX_STALL_HOPS=2"
+        # and ends with the successor command
+    def test_rename_failure_still_launches(self, tmp_path):
+        # rename-tab exit 1 (extend stub via CMUX_RENAME_RC) -> WARNING, send still happens on surface path
+    def test_new_surface_failure_falls_back_to_workspace_once(self, tmp_path):
+        # CMUX_NEW_SURFACE_RC=1 -> cmux.log shows `workspace create` (canonical verb, NOT
+        # new-workspace) with --focus false; outcome: topology=workspace-fallback
+        # workspace=workspace:9 surface=surface:11 handshake=ok; exit 0
+    def test_send_failure_on_surface_falls_back(self, tmp_path):
+        # CMUX_SEND_RC=1 ONLY for the first send (stub counts via a marker file) ->
+        # fallback attempted; a SECOND send failure -> exit 3 spawn-failed, hop consumed
+    def test_no_double_spawn_after_accepted_send(self, tmp_path):
+        # send rc 0 then CMUX_WAITFOR_RC=1 (timeout) -> exit 3; cmux.log contains
+        # EXACTLY ONE new-surface and ZERO `workspace create` lines
+    def test_reservation_precedes_new_surface(self, tmp_path):
+        # port of test_reservation_lands_before_cmux_new_workspace_runs to the surface verb
+```
+
+Migrate in `test_spawn_handoff.py` (same task, topology changed): `test_auto_spawn_success_exit_0`, `test_new_workspace_and_notify_argv_values_match_spec`, `test_spawn_log_record_fields_match_spec_log_format`, `test_spawn_failure_keeps_hop_exits_3`, `test_workspace_ref_*` (3 tests), `test_cmux_stdout_is_relayed_not_swallowed`, `test_spawn_failure_rc_survives_stdout_capture`, `test_mktemp_failure_*`, `test_reservation_lands_before_cmux_new_workspace_runs` — update them to the v2 stub + surface expectations, or where they pin the pure workspace-core mechanics, drive them through the fallback path (`CMUX_NEW_SURFACE_RC=1`) asserting `workspace create`. **Also migrate the four tests whose old default stub emits no `OK surface:` stdout and which therefore fail against the new ref-shape checks:** `test_picker_manual_spawn_uses_interactive_command` (also asserts the literal `new-workspace`), `test_append_prompt_file_written_on_real_spawn`, `test_fallback_tail_spawn_id_correlates_with_intent_record`, `test_notify_failure_still_exit_0` (custom stub) — switch them to the v2 stub. **Three tests need their PREMISE rewritten, not just the verb:** the old core degraded an empty `OK` capture to `workspace="(spawned)"` and spawned uncaptured when mktemp failed; the v2 ref-shape checks deliberately make the ref load-bearing (rename/send need it), so both degradations become failures. Rewrite `test_workspace_ref_falls_back_when_cmux_emits_nothing`, the `(spawned)` assertion in `test_spawn_log_record_fields_match_spec_log_format`, and `test_mktemp_failure_still_spawns_uncaptured` to pin the NEW contract (empty/garbled ref or mktemp failure → fallback attempt → spawn-failed exit 3, hop consumed, never a fake ref or a blind launch); `test_mktemp_failure_preserves_spawn_failure_rc` survives naturally. Every migrated test keeps its original invariant (ref propagation, rc survival, reservation ordering) — only the verb/topology/degrade-contract changes.
+
+- [ ] **Step 3: Implement.** In the script:
+
+(a) Title (used by rename-tab now, `/rename` in Task 11): in the config layer:
+
+```bash
+TITLE_FORMAT_DEFAULT='hop{hop} SDD {feature}'
+TITLE_FORMAT="${SUPERPOWERS_CMUX_TITLE_FORMAT:-$TITLE_FORMAT_DEFAULT}"
+[ -n "$TITLE_FORMAT" ] || TITLE_FORMAT="$TITLE_FORMAT_DEFAULT"
+```
+
+after `SP_HOP` is known: `TAB_TITLE="${TITLE_FORMAT//\{hop\}/$SP_HOP}"; TAB_TITLE="${TAB_TITLE//\{feature\}/$FEATURE_NAME}"`.
+
+(b) Inline-env prefix (compose beside `SUCCESSOR_CMD`; values shq-quoted; the `export …;` prefix reaches BOTH the primary picker and the runtime-fallback tail):
+
+```bash
+INLINE_ENV="export SUPERPOWERS_SPAWN_ID=$SPAWN_ID"
+for knob in SUPERPOWERS_CMUX_MAX_HOPS SUPERPOWERS_CMUX_QUOTA_MIN_PCT SUPERPOWERS_CMUX_QUOTA_TIMEOUT \
+            SUPERPOWERS_CMUX_QUOTA_TOOL SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT \
+            SUPERPOWERS_CMUX_MAX_STALL_HOPS SUPERPOWERS_CMUX_POST_SPAWN SUPERPOWERS_CMUX_TITLE_FORMAT; do
+  eval "v=\${$knob}"
+  [ -n "$v" ] && INLINE_ENV="$INLINE_ENV $knob=$(shq "$v")"
+done
+SENT_CMD="$INLINE_ENV; $SUCCESSOR_CMD"
+```
+
+(c) New spawn core functions (keep `spawn_claude_workspace` extraction-ready shape as the pattern; the workspace variant migrates its verb):
+
+```bash
+# All three publish refs via globals; return non-zero on failure BEFORE the
+# launch command is accepted. After launch_into_target returns 0 the command
+# is accepted: no caller may create another target (double-spawn guard).
+SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""; SPAWN_TOPOLOGY="surface"
+create_surface_target() {
+  local out_f rc
+  out_f="$(mktemp 2>/dev/null)" || return 1
+  CMUX_QUIET=1 cmux new-surface --workspace "$CMUX_WORKSPACE_ID" --type terminal \
+    --working-directory "$WORKTREE_ROOT" --focus false >"$out_f"
+  rc=$?
+  SPAWN_SURFACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
+  cat "$out_f" >&2; rm -f "$out_f"
+  [ $rc -eq 0 ] || return 1
+  case "$SPAWN_SURFACE_REF" in surface:*) : ;; *) return 1 ;; esac   # per-verb shape, field 2
+  SPAWN_WORKSPACE_REF="$CMUX_WORKSPACE_ID"
+  return 0
+}
+create_workspace_target() {   # one-shot fallback — canonical verb (Decision 19)
+  local out_f rc
+  SPAWN_TOPOLOGY="workspace-fallback"
+  out_f="$(mktemp 2>/dev/null)" || return 1
+  CMUX_QUIET=1 cmux workspace create --name "SDD resume: $FEATURE_NAME" \
+    --cwd "$WORKTREE_ROOT" --focus false >"$out_f"
+  rc=$?
+  SPAWN_WORKSPACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
+  cat "$out_f" >&2; rm -f "$out_f"
+  [ $rc -eq 0 ] || return 1
+  case "$SPAWN_WORKSPACE_REF" in workspace:*) : ;; *) return 1 ;; esac
+  # A workspace ref cannot be sent to — resolve its selected surface. The awk
+  # must print EXACTLY ONE line: remember line 1, prefer the [selected] line,
+  # fall back in END. (A naive `/[selected]/{...} NR==1{...}` prints TWO lines
+  # whenever the selected surface is not listed first, and the multi-line ref
+  # passes the surface:* glob because * matches the newline.)
+  SPAWN_SURFACE_REF="$(cmux list-pane-surfaces --workspace "$SPAWN_WORKSPACE_REF" 2>/dev/null \
+                        | awk 'NR==1{first=$1} /\[selected\]/{print $1; f=1; exit} END{if(!f) print first}')"
+  case "$SPAWN_SURFACE_REF" in surface:*) : ;; *) return 1 ;; esac
+  return 0
+}
+launch_into_target() {   # shared for BOTH topologies (Decision 2)
+  local rt_out
+  rt_out="$(cmux rename-tab --surface "$SPAWN_SURFACE_REF" "$TAB_TITLE" 2>&1)"
+  case "$rt_out" in OK*) : ;; *) echo "[spawn-handoff] warn: rename-tab failed ($rt_out) — cosmetic, continuing." >&2 ;; esac
+  cmux send --surface "$SPAWN_SURFACE_REF" "$SENT_CMD\n"
+}
+```
+
+(`rename-tab` output is success-checked with a `case` on `OK*`, never ref-parsed — its field 2 is `action=rename`.)
+
+(d) Spawn sequence rewrite (reservation block unchanged above it):
+
+```bash
+LAUNCH_ACCEPTED=0
+if create_surface_target && launch_into_target; then
+  LAUNCH_ACCEPTED=1
+else
+  if [ "$LAUNCH_ACCEPTED" = "0" ] && [ "$SPAWN_TOPOLOGY" = "surface" ]; then
+    echo "[spawn-handoff] surface path failed before launch accepted — one workspace-fallback attempt." >&2
+    SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""
+    if create_workspace_target && launch_into_target; then LAUNCH_ACCEPTED=1; fi
+  fi
+fi
+if [ "$LAUNCH_ACCEPTED" != "1" ]; then
+  printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=none%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "${SPAWN_SURFACE_REF:--}" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" \
+    "$([ "$SPAWN_TOPOLOGY" = "workspace-fallback" ] && printf ' topology=workspace-fallback')" >> "$SPAWN_LOG"
+  cmux notify --title "SDD handoff" --body "Spawn failed after reservation — manual resume" 2>/dev/null || true
+  echo "[spawn-handoff] spawn failed AFTER reservation (hop $SP_HOP consumed) — manual fallback." >&2
+  print_manual_instructions; exit 3
+fi
+# Handshake (Task 10 expands this): token or nothing.
+TOPOLOGY_FIELD=""; [ "$SPAWN_TOPOLOGY" = "workspace-fallback" ] && TOPOLOGY_FIELD=" topology=workspace-fallback"
+if cmux wait-for "sdd-hop-$SPAWN_ID" --timeout "$SPAWN_WAIT_TIMEOUT"; then
+  printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
+  cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
+    echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+  echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
+  exit 0
+fi
+# timeout: Task 10 replaces this stanza with re-wait + diagnosis
+```
+
+`SPAWN_WAIT_TIMEOUT` config (validate-warn-revert; default from Task 0's `cold-start-timing.json` — copy the literal `default_seconds` value into `SPAWN_WAIT_TIMEOUT_DEFAULT` with a comment citing the fixture):
+
+```bash
+SPAWN_WAIT_TIMEOUT_DEFAULT=<default_seconds from tests/unit/fixtures/spawn-handoff/cold-start-timing.json>
+SPAWN_WAIT_TIMEOUT="${SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT:-$SPAWN_WAIT_TIMEOUT_DEFAULT}"
+if ! [[ "$SPAWN_WAIT_TIMEOUT" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT ($SPAWN_WAIT_TIMEOUT) — reverting to default $SPAWN_WAIT_TIMEOUT_DEFAULT." >&2
+  SPAWN_WAIT_TIMEOUT="$SPAWN_WAIT_TIMEOUT_DEFAULT"
+fi
+```
+
+Also: delete the old `spawn_claude_workspace` success/failure call-site stanza it replaces; keep `spawn_claude_workspace()` DELETED (its mechanics live on in `create_workspace_target` + shared wrapper — remove the dead function, its argv/notify behavior is superseded) and update the dry-run echo: `--dry-run: would spawn surface in $CMUX_WORKSPACE_ID (workspace fallback armed) — quota=$QUOTA_STATUS launch=$LAUNCH_MODE policy=$SPAWN_POLICY tasks_done=$TASKS_DONE`.
+
+- [ ] **Step 4: Add the import assertion** tying the script default to Task 0's measurement (in `test_spawn_handoff_v2.py`):
+
+```python
+def test_wait_timeout_default_matches_measured_fixture():
+    d = json.loads((FIX / "cold-start-timing.json").read_text())
+    script = SCRIPT.read_text()
+    m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)", script, re.M)
+    assert m and int(m.group(1)) == d["default_seconds"]
+```
+
+- [ ] **Step 5: Run both unit files** — all PASS (old file fully migrated). **Step 6: Commit** — `"feat(cmux-spawn-v2): surface topology + shared launch wrapper + workspace-create fallback"`.
+
+### Task 10: wait-for handshake, re-wait, read-screen diagnosis
+
+**Files:** same set.
+
+- [ ] **Step 1: Screen fixtures** — `tests/unit/fixtures/spawn-handoff/screens/`: `trust-dialog.txt` (contains `Do you trust the files in this folder?`), `banner.txt` (a Claude session banner WITHOUT any token side-effect — e.g. `Claude Code v2` + composer chrome), `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk).
+
+- [ ] **Step 2: Failing tests:**
+
+```python
+class TestHandshake:
+    def test_token_is_only_success(self, tmp_path):
+        # CMUX_WAITFOR_RC=1 + CMUX_SCREEN_FILE=banner.txt -> exit 3, NOT 0:
+        # a full banner on screen never selects success (three live incidents)
+        # outcome: handshake=timeout diagnosis=banner
+    def test_timeout_rewaits_once_same_duration(self, tmp_path):
+        # cmux.log contains exactly TWO wait-for lines, both --timeout <same value>
+    def test_diagnosis_trust_dialog_names_dialog_and_steers_to_tab(self, tmp_path):
+        # screen=trust-dialog.txt -> stderr names the trust dialog, contains the surface
+        # ref, and does NOT contain the fresh-session manual instructions block
+    def test_diagnosis_picker_error(self, tmp_path):        # diagnosis=picker-error
+    def test_diagnosis_none_on_noise(self, tmp_path):       # diagnosis=none
+    def test_diagnosis_unreadable_on_cold_surface(self, tmp_path):
+        # no CMUX_SCREEN_FILE -> stub errors internal_error -> diagnosis=unreadable, no crash
+    def test_timeout_notifies_and_keeps_hop(self, tmp_path):
+        # notify line present; .handoff-hops still incremented; message NEVER claims
+        # "nothing was spawned" (assert the string is absent)
+    def test_token_success_exits_0_handshake_ok(self, tmp_path):
+        # CMUX_WAITFOR_RC=0 -> exit 0, outcome handshake=ok
+```
+
+- [ ] **Step 3: Implement.** Replace Task 9's placeholder timeout tail:
+
+```bash
+wait_for_token() {   # one bounded wait; caller decides on re-wait
+  cmux wait-for "sdd-hop-$SPAWN_ID" --timeout "$SPAWN_WAIT_TIMEOUT"
+}
+diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision 5)
+  local screen
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>&1)"
+  if [ $? -ne 0 ] || grep -qi "internal_error" <<< "$screen"; then
+    printf 'unreadable'; return 0
+  fi
+  if grep -qi "do you trust the files" <<< "$screen"; then printf 'trust-dialog'; return 0; fi
+  if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then printf 'picker-error'; return 0; fi
+  if grep -qiE "claude code|esc to interrupt" <<< "$screen"; then printf 'banner'; return 0; fi
+  printf 'none'
+}
+```
+
+(pattern constants may be hoisted; every grep uses here-strings, never a pipe. The banner regex is finalized against Task 0's live captures if they contain a better anchor — record the choice in the code comment.)
+
+Timeout tail:
+
+```bash
+if ! wait_for_token; then
+  echo "[spawn-handoff] no readiness token after ${SPAWN_WAIT_TIMEOUT}s — one re-wait." >&2
+  if ! wait_for_token; then
+    DIAG="$(diagnose_target)"
+    printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout diagnosis=%s%s%s\n' \
+      "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$DIAG" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
+    cmux notify --title "SDD handoff" --body "Successor in $SPAWN_SURFACE_REF spawned but NOT confirmed (diagnosis=$DIAG) — check that tab" 2>/dev/null || true
+    case "$DIAG" in
+      trust-dialog)
+        echo "[spawn-handoff] handshake=timeout: the successor in $SPAWN_SURFACE_REF is sitting on Claude's FOLDER-TRUST DIALOG ('Do you trust the files in this folder?'). Go to that tab and answer it — do NOT start a fresh session (a successor was spawned; a second one is a double-spawn)." >&2 ;;
+      banner)
+        echo "[spawn-handoff] handshake=timeout: a Claude session IS visible in $SPAWN_SURFACE_REF but no readiness token arrived. Attach to that tab and continue there — do NOT start a fresh session." >&2 ;;
+      picker-error)
+        echo "[spawn-handoff] handshake=timeout: the picker errored in $SPAWN_SURFACE_REF (hop $SP_HOP consumed). Inspect that tab; a spawn WAS attempted — check the tab before any manual resume." >&2
+        print_manual_instructions ;;
+      *)
+        echo "[spawn-handoff] handshake=timeout (diagnosis=$DIAG, hop $SP_HOP consumed). A spawn WAS attempted in $SPAWN_SURFACE_REF — check that tab first; only then resume manually." >&2
+        print_manual_instructions ;;
+    esac
+    exit 3
+  fi
+fi
+# token received — handshake=ok success stanza (from Task 9) continues here
+```
+
+- [ ] **Step 4: Run + commit** — both unit files PASS; `"feat(cmux-spawn-v2): wait-for handshake + re-wait + read-screen diagnosis enrichment"`.
+
+### Task 11: Post-spawn setup (/rename, /rc) + knobs
+
+**Files:** same set.
+
+- [ ] **Step 1: Failing tests:**
+
+```python
+class TestPostSpawn:
+    def test_default_sequence_rename_then_rc(self, tmp_path):
+        # screen file returns text containing the title after /rename and
+        # "/remote-control is active" after /rc (stub: CMUX_SCREEN_FILE with both) ->
+        # cmux.log order: send "/rename hop1 SDD feat" -> send-key enter -> read-screen
+        # -> send "/rc" -> send-key enter -> read-screen; outcome has NO post_spawn= field
+    def test_verify_failure_warns_partial_never_fails_spawn(self, tmp_path):
+        # screen without "/remote-control is active" -> exit STILL 0;
+        # outcome contains post_spawn=partial:rc
+    def test_knob_disables_all(self, tmp_path):
+        # SUPERPOWERS_CMUX_POST_SPAWN="" -> no /rename or /rc sends; exit 0
+    def test_knob_subset_and_invalid_token(self, tmp_path):
+        # "rc" -> only /rc; "rename,bogus" -> WARNING + revert to default both
+    def test_title_format_override(self, tmp_path):
+        # SUPERPOWERS_CMUX_TITLE_FORMAT='{feature} h{hop}' -> /rename feat h1 (and Task 9's rename-tab used it too)
+```
+
+- [ ] **Step 2: Implement.** Config (beside the other knobs):
+
+```bash
+POST_SPAWN_DEFAULT="rename,rc"
+POST_SPAWN="${SUPERPOWERS_CMUX_POST_SPAWN-$POST_SPAWN_DEFAULT}"   # NOTE ${var-def}: empty string is a VALID value (disables)
+if [ -n "$POST_SPAWN" ] && ! [[ "$POST_SPAWN" =~ ^(rename|rc)(,(rename|rc))*$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_POST_SPAWN ($POST_SPAWN) — reverting to default $POST_SPAWN_DEFAULT." >&2
+  POST_SPAWN="$POST_SPAWN_DEFAULT"
+fi
+```
+
+Functions + wiring (between handshake success and the outcome record; `POST_SPAWN_FIELD` joins the outcome printf like `TOPOLOGY_FIELD`):
+
+```bash
+post_spawn_send_verified() {
+  # $1=text to send, $2=expected on screen, $3=step name, $4=match mode (fixed|regex).
+  # rename verifies the TITLE (arbitrary user text -> fixed-string -F); rc
+  # verifies a known phrase (regex alternation -E). Both here-strings, no pipes.
+  local screen
+  cmux send --surface "$SPAWN_SURFACE_REF" "$1" 2>/dev/null
+  cmux send-key --surface "$SPAWN_SURFACE_REF" enter 2>/dev/null
+  sleep 2
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>/dev/null)"
+  if [ "$4" = "fixed" ]; then
+    grep -qiF "$2" <<< "$screen" && return 0
+  else
+    grep -qiE "$2" <<< "$screen" && return 0
+  fi
+  echo "[spawn-handoff] warn: post-spawn step '$3' unverified — cosmetic, successor is alive (post_spawn=partial:$3)." >&2
+  return 1
+}
+POST_SPAWN_FIELD=""
+run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
+  local step
+  local IFS=','
+  for step in $POST_SPAWN; do
+    case "$step" in
+      rename) post_spawn_send_verified "/rename $TAB_TITLE" "$TAB_TITLE" "rename" "fixed" || { POST_SPAWN_FIELD=" post_spawn=partial:rename"; return 0; } ;;
+      rc)     post_spawn_send_verified "/rc" "/remote-control is active|remote.control" "rc" "regex" || { POST_SPAWN_FIELD=" post_spawn=partial:rc"; return 0; } ;;
+    esac
+  done
+  return 0
+}
+[ -n "$POST_SPAWN" ] && run_post_spawn
+```
+
+(First failed step records `partial:<step>` and stops the sequence — the record names where it stopped.)
+
+- [ ] **Step 3: Run + commit** — both files PASS; `"feat(cmux-spawn-v2): script-driven /rename + /rc post-spawn setup + knobs"`.
+
+## Module 3 Acceptance Criteria
+
+- [ ] `handoff_spawn: off` / un-approved `ask` refuse pre-reservation (no hop consumed, retryable message).
+- [ ] Two consecutive zero-progress hops refuse with `tasks X/Y, hops N` + the inline-env raise instruction; progress chains are never refused below the ceiling; first hop and indeterminate history SKIP.
+- [ ] Ceiling defaults to `max(6, 2×expected_hops)`; explicit env wins absolutely; `.handoff-hops` fail-closed guard untouched.
+- [ ] Success path: `new-surface --focus false` in the caller's workspace → `rename-tab` → `send` (inline `export` env prefix) → token → `handshake=ok` → exit 0. Outcome carries `workspace=`, `surface=`, `tasks_done=`.
+- [ ] Surface-path failure BEFORE an accepted send falls back ONCE through the SAME wrapper via `workspace create` (`topology=workspace-fallback`); an accepted send NEVER spawns twice.
+- [ ] Timeout → one re-wait → exit 3 `handshake=timeout` with `diagnosis=` enrichment; a stubbed banner with no token is NOT success; trust-dialog/banner instructions steer to the existing tab; every timeout notifies; no message claims nothing was spawned.
+- [ ] Post-spawn `/rename` + `/rc` verified by read-screen; failures are `post_spawn=partial:<step>` WARNINGs, never spawn failures; `SUPERPOWERS_CMUX_POST_SPAWN=""` disables.
+- [ ] `tests/unit/test_spawn_handoff.py` fully migrated in the same tasks that changed the behavior; both unit files green after every task.
