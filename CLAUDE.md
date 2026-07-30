@@ -138,6 +138,7 @@ Quick reference: test layers — regression (static), install (static), unit (py
 ## Process Improvement Findings (`docs/process-improvement-findings/`)
 Real-world issues from using superpowers in production projects. Use these to inform fork customizations.
 - `BACKLOG.md` — **living ledger** of open/in-flight/done improvements (stable IDs B*/I*/C*/N*/P*, size estimates, sequencing). Start here for "what's left to improve and how big is it."
+- `2026-07-30-first-live-sdd-auto-spawn-run-analysis.md` — the first full production run of the N43(D) auto-spawn (5-session hop chain, transcripts + telemetry): transport flawless, every loss was knowledge failing to travel. Evidence base for the `cmux-spawn-v2` sprint; F1–F11 map to its items/spikes.
 - `2026-05-21-skill-evaluation.md` — Cross-repo Critical findings (plan-reference code unrun, integration bugs pass unit tests, controller skips discipline under pressure)
 - `subagent-claude-md-enforcement.md` — Subagents skip subdirectory CLAUDE.md files; prompt template fix for implementer and spec-reviewer
 - `2026-03-16-statement-reconciliation-lessons-learned.md` — Post-mortem from a large SDD session; handoff quality and context gaps
