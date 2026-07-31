@@ -40,6 +40,10 @@ Review tier **upgraded minimum → standard** by controller decision (shared fil
 - **`cmux rpc <method> [json-params]` is a CLI path to arbitrary v2 methods.** It invalidated an earlier "no CLI path exists" bound, which was withdrawn from five locations. It also **silently ignores unrecognized param names** — `{"workspace": …}` is ignored, `{"workspace_id": "<uuid>"}` is honored — so settling whether `rpc surface.create` takes an env param needs a correctly-guessed param name *plus* a create *plus* a read-back.
 - **Sweep per finding, not per severity.** Round 3 swept exhaustively for the BLOCKING finding (five sites found where the review named three) but fixed the lesser findings only at named sites, leaving one gap in the BACKLOG row — closed in round 4.
 
+## Live SP1 evidence captured out-of-band (read before dispatching Task 2)
+
+`reports/sp1-live-observation-controller-session.md` records a probe reading of **539,691** followed by **305,208** minutes later on the controller's own transcript, with both instruments agreeing on the re-run. Sidechain contamination and cross-session entries are **ruled out by evidence**; the residual hypothesis is auto-compaction, stated as a hypothesis and not established. Two consequences for Task 2: the probe total is **not monotonic**, so the plan's suggested *"drop rows that jump >50% against both neighbors"* exclusion rule would discard true pre-compaction peaks; and the archived `373139` row's spike shape is consistent with BOTH misattribution and a genuine pre-compaction peak, so the implementer must positively discriminate rather than infer from the shape.
+
 ## Standing process constraints (carry into every remaining dispatch)
 
 - **Reviewer premises are claims to verify, not verdicts to execute.** Two premises were wrong this sprint and both refusals were upheld on independent verification.
