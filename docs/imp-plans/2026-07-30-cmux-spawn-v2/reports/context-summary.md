@@ -67,4 +67,5 @@ Review tier **upgraded minimum → standard** by controller decision (shared fil
 | OP-1 Task 9 compression pass | Module 3, before its first amendment |
 | Deferred audit orders B1, A3b/c+B2, B3, B4, B7, B8a | Their owning tasks — see Deferred Work table |
 | **N67 will conflict on merge** — `main` edited it since the merge-base and so did this branch. The resolution MUST preserve both sides: main's edits AND this branch's `UPDATE 2026-07-30 — DISPOSITIONED BY N79` clause. A "take theirs" drops the discharge instruction and sends a future reader to re-run a probe already run. Rows main touched since `fa2d482`: N55, N56, N57, N61, N63, N64, N66, N67, N68, N70, N73, plus new N76–N78 | Merge step |
+| **Main's N76 (the SP1 row) must be UPDATED at merge**, not duplicated. Its replacement text is the final section of `docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md` (Task 2's deliverable), which states the merge action verbatim. Task 2 appends no BACKLOG row by design | Merge step |
 | **Task 3 must allocate ids against `main`, not this branch.** Free on both: **N80, N81**. Enumerate at execution time rather than trusting these | Task 3 |

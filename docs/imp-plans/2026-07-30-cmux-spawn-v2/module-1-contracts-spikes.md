@@ -302,11 +302,11 @@ Gate note: this spike blocks threshold tuning only, NOT the sprint. If the root 
 - [ ] **Step 1: Locate the poisoned row and its transcript**
 
 ```bash
-grep -rn "tokens=373139" docs/imp-plans/*/reports/context-observations.log
-# Expect one `[task 5 fix]`-era row with source=probe between neighbors ~171k and ~210k.
+grep -rn "tokens=373139" ~/projects/claude-custom/*/docs/imp-plans/*/reports/context-observations.log ~/projects/claude-custom/*/.worktrees/*/docs/imp-plans/*/reports/context-observations.log
+# CORRECTED: the row is in ANOTHER REPO — claude-codex-handoff/.worktrees/cmux-transport, feature 2026-07-29-cmux-transport. Neighbors 171666/210693. READ-ONLY across repos.
 ```
 
-Identify the session transcript that dispatch ran against (`ls -t ~/.claude/projects/*/…jsonl` around the row's ISO timestamp; the cmux-integration feature dir's reports narrow the date).
+Identify the session transcript that dispatch ran against — retained under `~/.claude/projects/-Users-araymond-projects-claude-custom-claude-codex-handoff--worktrees-cmux-transport/` (12 `.jsonl`, Jul 29–31; do NOT filter by mtime). The ORIGINAL pointer here named the cmux-integration feature dir — wrong feature AND wrong repo; superseded.
 
 - [ ] **Step 2: Reproduce the probe's answer against the retained transcript** — run `context-probe.py --transcript <file>` and bisect: which assistant `usage` block yields 373139? Compare `input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens` across the final assistant entries. Candidate hypotheses to test explicitly: (a) a sidechain/subagent entry's usage was the "most recent assistant block" at dispatch time; (b) a retry/error turn carried inflated `cache_creation`; (c) the row is genuine (a real transient spike) and the probe is correct.
 
