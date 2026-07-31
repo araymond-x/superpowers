@@ -132,6 +132,12 @@ green on revert; full unit suite 649 passed (641 baseline + 8 new).
   reading rather than to an error.
 - **`advisor_message`-last is unobserved** (0 of 793). Pinned by test with a sentinel top-level
   value so the branch is chosen, not accidental.
+- **Live-hook path checked, not assumed.** `usage_total` is what the pre-dispatch context gate
+  reads, so `bash tests/integration/sdd-e2e-test.sh` was run: **15/15 steps PASS**, including
+  Step 13, which drives the hook against an over-HARD transcript and asserts `exit 2` +
+  `source=probe` + `action=block`. Its fixture (`hard.jsonl`) carries no `iterations` key —
+  `grep -rl iterations tests/integration/` returns nothing — so it takes the fallback path and
+  its 450,000 reading is unchanged.
 - **Test scope check:** `test_context_probe_fixtures.py` (the hand-written parity mirror) was
   deliberately left unmodified — its fixtures carry no `iterations` key, so it still agrees
   with the probe and remains a valid pin of the legacy sum on well-formed single-iteration
