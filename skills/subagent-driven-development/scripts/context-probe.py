@@ -29,9 +29,13 @@ PARTIAL mirror):
      `type: "message"` iterations ONLY; a non-`message` iteration (e.g.
      `advisor_message`) is excluded from them. Each `message` call re-reads
      the same cached prompt, so `cache_read_input_tokens` is counted once per
-     `message` iteration and the naive top-level sum reports roughly N x the
-     true context, where N is the number of `message` iterations (measured
-     range on two-`message` turns: ~2x; a three-`message` turn measures ~3x).
+     `message` iteration and the naive top-level sum reports close to — but
+     ALWAYS STRICTLY BELOW — N x the true context, where N is the number of
+     `message` iterations. Strictly below because the last iteration's own
+     `cache_creation_input_tokens` and `output_tokens` are not duplicated;
+     only the re-read prompt is. Measured: two-`message` turns run 1.94x-2.00x
+     and are exactly 2.0 in none of them; a three-`message` turn measures
+     ~2.9x (2.9258 on the committed fixture, 2.9679 on the quality review's).
      This probe therefore reads the LAST `type: "message"` iteration — the
      turn's final model call, whose prompt is the accumulated context — and
      falls back to the top-level fields when no such iteration exists or when
@@ -122,19 +126,43 @@ def usage_total(usage) -> int:
     turn). Falls back to the top-level fields, which is the legacy behavior
     and is exactly equal on single-iteration turns.
 
-    The fallback ALSO fires when the preferred iteration sums to 0, and that
-    is a safety property rather than a tidy-up: this probe feeds a BLOCKING
-    pre-dispatch gate, where a total of 0 reads as `tier=below action=allow`.
-    A `0` from a preferred-but-unusable source must never be mistaken for a
-    measurement — it would present as a successful probe of an empty context
-    and silently disarm the gate (worse than a probe failure, which routes to
-    the byte-proxy and eventually to the fallback-streak block). `_coerce_int`
-    maps every non-int — including floats, which are valid JSON numbers — to
-    0, and `iterations` is an undocumented, version-unstable shape, so this
-    branch is the degradation path for a future shape change as much as for
-    corruption today.
+    The preferred iteration is trusted only when it is COMPLETE: all four
+    `FIELDS` present on it as genuine ints (`bool` excluded, since
+    `_coerce_int` maps `True` to 0). A partially readable iteration is not a
+    partial measurement — it is a small wrong number. `_coerce_int` maps every
+    unreadable field to 0, so an iteration that lost one field reports the sum
+    of the survivors and exits 0, presenting as a successful measurement. That
+    matters because `cache_read_input_tokens` is the overwhelming majority of a
+    real iteration's total, so losing it alone collapses a genuinely large
+    context to a small allowed number: a real archived 493,759-token block
+    reads as 24,234 with that one field renamed. This probe feeds a BLOCKING
+    pre-dispatch gate, where a small total reads as `tier=below action=allow`
+    and additionally resets an in-progress fallback streak — worse than a probe
+    failure, which routes to the byte-proxy and eventually blocks.
+
+    What the completeness guard trades, stated because it is deliberate: an
+    `iterations` shape that changes in a way the guard does not recognize now
+    degrades to the LEGACY TOP-LEVEL READING, which is the known double-
+    counting path this divergence exists to correct. That is the intended
+    failure direction. In a blocking gate a known-wrong-HIGH reading fails
+    safe — it can only over-block, and an over-block is retryable by a human —
+    while a wrong-LOW reading silently disarms the gate. `iterations` is an
+    undocumented, version-unstable shape, so this is the degradation path for a
+    future shape change as much as for corruption today.
+
+    `if total:` survives the guard and is NOT dead code: it covers the one
+    shape the guard admits but cannot use — all four fields present as int `0`,
+    summing to 0. A `0` from the PREFERRED-ITERATION source must never be
+    mistaken for a measurement. (The top-level fallback source is not held to
+    that rule; a top-level block carrying no recognized fields still yields 0.
+    That is pre-existing legacy behavior, unchanged here.)
     """
     iteration = _last_message_iteration(usage)
+    if iteration is not None and not all(
+        isinstance(iteration.get(f), int) and not isinstance(iteration.get(f), bool)
+        for f in FIELDS
+    ):
+        iteration = None
     if iteration is not None:
         total = _sum_fields(iteration)
         if total:
