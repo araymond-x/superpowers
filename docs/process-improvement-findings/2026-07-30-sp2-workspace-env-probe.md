@@ -45,9 +45,13 @@ against adopting it in this sprint.**
 3. **But the primary path has no env channel any *documented CLI verb* reaches.** `new-surface` has
    no `--env` (proved by a read-back, not by its absence from `--help`), an existing workspace's env
    **cannot be mutated** — no CLI verb does it and `cmux capabilities` exposes no env-setting
-   *method* — and the one per-surface env channel that does exist (`--layout` `surfaces[].env`) is
-   **workspace-creation-time only**. **a-run.** Read the scope qualifier literally: a sweep of all
-   127 documented top-level verbs (§Axis 4) is what establishes this, and it does **not** exclude an
+   *method* — and the per-surface env channel that does exist (`--layout` `surfaces[].env`) is
+   **workspace-creation-time only**. (The contract names a second per-surface channel, SSH startup
+   env; `cmux ssh` creates a workspace of its own, so it is likewise no route into an existing one —
+   see §"Per-surface env channels".) **a-run.** Read the scope qualifier literally: a sweep of the
+   documented top-level verbs (§Axis 4 — 127 unique names from the `Commands:` block, plus the
+   alternation siblings that extraction collapses, probed separately) is what establishes this, and
+   the sweep's own scope limits state what it does **not** reach. It does **not** exclude an
    undocumented param reached through `cmux rpc` — see the corrected limit in §Axis 3, which also
    gives the argument for why the disposition is unaffected.
 4. **Therefore `--env` cannot subtract the quoting machinery**, which was N67's actual motivation.
@@ -383,9 +387,11 @@ The read-back is what proves the value never arrives: a surface created with `--
 where `SP2_SURF` is a name the workspace env does **not** carry, reports `SP2_SURF_MARK=|alpha` —
 `SP2_SURF` empty, and `SP2_PROBE=alpha` still arriving from the *workspace* env as an in-band
 positive control. The first session recorded that value without a transcript; **§"Re-capture" below
-re-runs it end to end with surface refs, exit codes and both streams**, and adds a third leg the
-first session did not have (the surface-level `--env` key never appears in the configured view
-either, so it is not merely unexported — it is never recorded). **a-run**
+re-runs it end to end with surface refs, exit codes and both streams**. That re-capture also records
+that `SP2_SURF` never appears in the configured view (**a-run**) — which rules out `new-surface
+--env` being a covert *workspace*-env setter, but **cannot** adjudicate a surface-scoped
+implementation either way, because the configured view reports no surface-scoped env at all. See
+§Step C, where that limit is spelled out. The load-bearing datum is the read-back. **a-run**
 
 Had the control been skipped, this task would have filed a third false-premise row claiming an
 undocumented `new-surface --env`.
@@ -446,7 +452,8 @@ env-related method among the 26 `surface.*` methods. **a-run**
 > `cmux rpc` is a first-class top-level verb (it is in `cmux --help`'s Commands block) that calls
 > **any** v2 method with **arbitrary** JSON params. So `cmux rpc surface.create '{…,"env":…}'` would
 > be exactly a CLI path to an undocumented param on the method named as the residual exposure. It was
-> **not** probed. **a-run** that the verb exists and works:
+> **not** probed. **a-run** that the verb exists and returns a well-formed payload (this says nothing
+> about whether the param below was honored — see immediately after):
 >
 > ```
 > $ cmux rpc workspace.env '{"workspace":"workspace:2"}'
@@ -454,6 +461,23 @@ env-related method among the 26 `surface.*` methods. **a-run**
 > { "count": 0, "env": {}, "window_id": "836F9638-…", "window_ref": "window:1",
 >   "workspace_id": "5BC6A8A3-…", "workspace_ref": "workspace:2" }
 > ```
+>
+> **That transcript is itself an instance of the silent-ignore trap, not a contrast to it.** The
+> `workspace` key passed above is **not a param name this method honors**, so the matching
+> `workspace_ref` in the payload is a coincidence of whatever that session's no-param default happened
+> to be — not evidence the param routed. Measured read-only against the same pinned binary: `{}`,
+> `{"workspace":"workspace:2"}`, `{"workspace":"workspace:9999"}` and
+> `{"workspace":"totally-bogus-not-a-ref"}` all return the identical payload, while
+> `{"workspace_id":"<uuid>"}` **is** honored and the camelCase `{"workspaceId":"<uuid>"}` is not. The
+> no-param default was observed taking two different values on two calls; no mechanism for it is
+> asserted here. **Measured by the round-2 adversarial re-review (2026-07-30, same pinned binary) —
+> reviewer-sourced, not this document's own a-run.**
+>
+> So the section's *first* invocation already demonstrates silent-ignore; the bogus-param call below
+> is a second, independent demonstration rather than the only one. And this does **not** resurrect the
+> withdrawn bound: `{"workspace_id":"<uuid>"}` being honored proves `cmux rpc` routes
+> correctly-**named** params to the method, so `cmux rpc surface.create '{…,"env":…}'` remains a live,
+> unprobed CLI path.
 >
 > **What is actually established** is narrower and needs both halves stated separately:
 >
@@ -475,9 +499,16 @@ env-related method among the 26 `surface.*` methods. **a-run**
 >   exit=0   → byte-identical normal payload, no error, no warning
 >   ```
 >
->   So settling `cmux rpc surface.create` requires **creating a surface and reading the value back**,
->   exactly the discipline axis 2 already teaches. That probe is left undone and is listed under
->   §"What could not be established".
+>   So settling `cmux rpc surface.create` requires **three** things, not two: a **correctly-guessed
+>   parameter name**, a surface actually created, and an in-surface **read-back** — the discipline
+>   axis 2 already teaches, plus a step axis 2 never faced. The name is the hard part: a wrong name is
+>   silently ignored and is **indistinguishable from an unimplemented feature**, and the CLI's own ref
+>   vocabulary is demonstrably *not* the RPC vocabulary (`workspace:2` ignored where
+>   `workspace_id: <uuid>` is honored, above). That **strengthens** the do-not-adopt disposition
+>   rather than weakening it — a channel whose param names must be guessed, whose wrong guesses fail
+>   silently, and whose vocabulary diverges from the documented CLI's is not something the spawn
+>   script should build on. That probe is left undone and is listed under §"What could not be
+>   established".
 >
 > **Does the disposition survive?** Yes, but by argument rather than by inference — and the argument
 > should be read as a judgment about adoption, not as a claim the param does not exist:
@@ -524,8 +555,9 @@ command count =      127
 ENV-FLAG: new-workspace
 ```
 
-**Exactly one of the 127 documented top-level commands exposes an `--env` flag**, and it is the
-workspace-creation verb. Broadening the grep from `--env` to any mention of `env` returns eight
+**Exactly one of the 127 probed command names exposes an `--env` flag**, and it is the
+workspace-creation verb. (127 unique command *names* extracted from the `Commands:` block; alternation
+siblings collapse to their first token and were probed separately — scope limit 3 below.) Broadening the grep from `--env` to any mention of `env` returns eight
 commands; the other seven were read individually and none is a surface-env channel (`ai-accounts`,
 `claude-teams`, `omc`, `omo`, `omx` refer to the caller's shell environment or a "tmux-like
 environment"; `vm` is cloud-VM scope; `workspace` matches only because the noun help lists the `env`
@@ -545,16 +577,34 @@ them is a genuine residual, not a formality.**
 2. **Nouns with subcommands have no per-subcommand help** (finding H1), so `workspace create`'s flags
    are invisible to this sweep. Harmless here, and it is precisely why the contract (axis 1) and the
    live exercise (§Step 2) are separate legs — between them they cover the creation verb in full.
+3. **The 127 are unique command *names*, not every member of the `Commands:` block.** The extractor
+   takes the **first token** of each indented line, so an alternation row collapses to its first
+   sibling. Seven real top-level names are printed by `cmux --help` and were therefore never given
+   their own `--help` by the loop: `enable-browser`, `browser-status`, `logout`, `previous-window`,
+   `last-window`, `unbind-key`, `copy-mode`. All seven were probed individually afterwards — exit 0,
+   zero `--env` hits — so the gap is a naming artifact of the extraction and the conclusion is
+   unaffected. **Probed by the round-2 adversarial re-review (2026-07-30, same pinned binary) —
+   reviewer-sourced, not this document's own a-run.**
 
 The residual in (1) is narrower than it looks for the question at hand, because axis 2 does not
 depend on enumeration at all: the primary path's actual verb is `new-surface`, and a **read-back**
 shows the value does not arrive. A hidden verb would have to be some *third* command that injects env
 into an already-existing workspace's surfaces — possible, unexcluded, and unclaimed here.
 
-### The one per-surface env channel that does exist — and why it does not help
+### Per-surface env channels — both the contract names, and why neither helps
 
 The contract states an *"explicit per-surface environment (a layout `surfaces[].env`, SSH startup
-env) overrides the workspace value for that surface."* This was exercised rather than assumed:
+env) overrides the workspace value for that surface."*
+
+**That sentence names two channels; this section exercises the layout one.** The SSH half is disposed
+of rather than dropped: `cmux ssh --help` reads *"Create a new workspace, mark it as remote-SSH, and
+start an SSH session in that workspace"* and carries **zero** `env` mentions. So whatever SSH startup
+env is, it is **not a channel into an already-existing workspace's surfaces** — `cmux ssh` creates a
+workspace of its own, and the primary path (a surface added to the caller's existing workspace) is
+untouched by it. **Read by the round-2 adversarial re-review (2026-07-30, same pinned binary) —
+reviewer-sourced, not this document's own a-run; the help prose was read, `cmux ssh` was not run.**
+
+The layout half was exercised rather than assumed:
 
 ```
 $ cmux workspace create --name "sp2-layout" … --layout '{"direction":"horizontal","split":0.5,
@@ -650,9 +700,23 @@ SP2_PROBE=alpha
 SP2_SECOND=beta
 ```
 
-**The third leg the first session lacked:** `SP2_SURF` does not appear in the configured view either.
-So the surface-level `--env` is not merely *unexported* — it is **never recorded at all**. The flag
-is consumed and discarded.
+**What this second read establishes — and, deliberately, what it does not.** `SP2_SURF` is absent
+from the configured view. That rules out exactly one alternative: `new-surface --env` is **not a
+covert workspace-env setter** — it does not write into the workspace-level configured set. It
+establishes nothing beyond that, and an earlier draft of this section overreached by concluding the
+flag was therefore "never recorded at all."
+
+That conclusion is refuted by this document's own §"Per-surface env channels". The `--layout`
+`surfaces[].env` channel demonstrably **works** (`SP2_LAYOUT=delta` was printed by the surface's own
+process) and is **equally invisible** to `cmux workspace env` — as measured, the configured view
+reports the workspace-level configured set and nothing else. So silence from that view **cannot
+distinguish** "`new-surface --env` is unimplemented" from "`new-surface --env` is implemented as
+surface-scoped, exactly like layout env." Reading it as proof of the former would be "not in
+`workspace env`, therefore absent" — the same absence-of-evidence move this document rejects
+elsewhere, aimed at an instrument this document itself measured as blind.
+
+The primary-path conclusion needs no help from here: **Step D's read-back is direct evidence** that
+the value does not reach the process, and it carries the section on its own.
 
 ### Step D — drive the surface and read back
 
@@ -785,7 +849,8 @@ State it against the code instead:
 > withdrawn.
 
 Both branches are therefore covered: **sprint landed** ⇒ not actionable (the surface path has no env
-channel, so the command string stays); **sprint never landed, or landed and was reverted** ⇒
+channel any *documented CLI verb* reaches, so the command string stays); **sprint never landed, or
+landed and was reverted** ⇒
 actionable, and `--env` becomes strictly better than the inline prefix, making N67's subtraction
 available in full. The check is one `grep` over the shipped script, not a judgment about intent.
 
@@ -804,9 +869,14 @@ Stated plainly, because a wrong disposition here becomes a third false-premise r
    of reach. See the corrected limit at the end of §Axis 3 for what *is* established and for the
    three-part argument that the disposition nonetheless holds.
 
-   **What would close it:** `cmux rpc surface.create` with a candidate env param, followed by an
-   in-surface **read-back**. An exit code is useless here — `cmux rpc` silently ignores unknown
-   params (a-run, above), so a bogus param returns exit 0 and a normal payload. Deliberately not run:
+   **What would close it:** `cmux rpc surface.create` with a **correctly-named** candidate env param,
+   followed by an in-surface **read-back**. An exit code is useless here — `cmux rpc` silently ignores
+   unknown params, so a bogus param returns exit 0 and a normal payload. The parameter *name* is a
+   third requirement and the hardest one: a wrong name is silently ignored and is indistinguishable
+   from the feature not existing, and the CLI's ref vocabulary is not the RPC vocabulary
+   (`{"workspace":"workspace:2"}` is ignored on `workspace.env` where `{"workspace_id":"<uuid>"}` is
+   honored — see §Axis 3's corrected limit). A channel with that property is one more reason the spawn
+   script should not build on `rpc`. Deliberately not run:
    it mutates cmux state, it is discretionary per the Task 1 quality review, and its natural home is
    the capability matrix rather than this sprint.
 2. **Whether `--layout` can express the sprint's full fallback spawn** (correct cwd, the composed
@@ -873,7 +943,7 @@ implementer report — the only path by which they reach the deviations register
 | 7 | Exercised **`--layout` `surfaces[].env`** | self-initiated | The contract asserts a per-surface env channel; the primary-path answer is only honest if it is tested |
 | 8 | Disposition (a)'s consequent departed from: the BACKLOG row proposes a **topology-conditioned watch item**, not "the swap" | self-initiated | Raised by the Task 1 spec review, which asked it be carried as a deviation. The plan's (a) reads "viable → BACKLOG row proposing the swap"; the measured answer is viable-but-blocked-by-topology, so proposing the swap outright would misrecord it |
 | 9 | **A second live probe session was run** (`sp2fix-env` = `workspace:41`), beyond the plan's single `sp2-env` workspace | quality-review-directed | Remediating the Task 1 quality review's I4/M1: the keystone `SP2_SURF_MARK` datum had no transcript and was un-re-verifiable read-only, and `new-workspace --env` had never been exercised. Same cleanup discipline; zero residuals |
-| 10 | Added an **exhaustive sweep of all 127 documented top-level CLI verbs** (axis 4) | quality-review-directed | The quality review showed axis 3's "no CLI path exists" bound was unearned because `cmux rpc` is a CLI path to arbitrary RPC params. The sweep is what actually carries the primary-path conclusion |
+| 10 | Added a **sweep of the documented top-level CLI verbs** (axis 4 — 127 unique names from the `Commands:` block, alternation siblings probed separately) | quality-review-directed | The quality review showed axis 3's "no CLI path exists" bound was unearned because `cmux rpc` is a CLI path to arbitrary RPC params. The sweep is what actually carries the primary-path conclusion |
 
 ## BACKLOG rows
 
