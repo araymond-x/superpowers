@@ -31,14 +31,14 @@ Captured the installed binary's per-verb shapes as fixtures and measured true co
 
 Review tier **upgraded minimum → standard** by controller decision (shared file with three writers this module; the deliverable is a factual claim about the CLI surface, and this repo has already filed two BACKLOG rows on false premises). Four review rounds; the adversarial quality review found a real defect on a green upstream **three consecutive times** across Tasks 0–1.
 
-**Disposition (settled, do not reopen):** `--env`/`--env-file` work exactly as documented but cannot subtract the spawn script's quoting machinery. The primary `new-surface` topology has **no env channel any documented CLI verb reaches** (127-verb sweep, exactly one `--env` hit: `new-workspace`). Adopting `--env` on the fallback alone would fork the shared wrapper Decision 2 exists to unify. → BACKLOG **N76** filed; **N67** upgraded a-help → a-run and partially closed as a topology-conditioned watch item.
+**Disposition (settled, do not reopen):** `--env`/`--env-file` work exactly as documented but cannot subtract the spawn script's quoting machinery. The primary `new-surface` topology has **no env channel any documented CLI verb reaches** (127-verb sweep, exactly one `--env` hit: `new-workspace`). Adopting `--env` on the fallback alone would fork the shared wrapper Decision 2 exists to unify. → BACKLOG **N79** filed (renumbered from N76 after the Task 2 partner review found that `main` already claims N76 for the sibling SP1 row); **N67** upgraded a-help → a-run and partially closed as a topology-conditioned watch item.
 
 **Method lessons worth carrying:**
 
 - **A negative control reversed an apparent find.** `cmux new-surface --env FOO=bar` returns exit 0 / `OK surface:N` — but so does `--sp2-not-a-real-flag`, because `new-surface` **silently ignores unknown flags** while `workspace create` strictly validates. Without the control this would have been the repo's third false-premise row. **Never infer capability from an exit code.**
 - **`cmux workspace env` is not ground truth.** It reports the workspace-level *configured* set only — it is blind to per-surface layout env and misreports protected `CMUX_*` keys (which are silently stored and only overridden at spawn).
 - **`cmux rpc <method> [json-params]` is a CLI path to arbitrary v2 methods.** It invalidated an earlier "no CLI path exists" bound, which was withdrawn from five locations. It also **silently ignores unrecognized param names** — `{"workspace": …}` is ignored, `{"workspace_id": "<uuid>"}` is honored — so settling whether `rpc surface.create` takes an env param needs a correctly-guessed param name *plus* a create *plus* a read-back.
-- **Sweep per finding, not per severity.** Round 3 swept exhaustively for the BLOCKING finding (five sites found where the review named three) but fixed the lesser findings only at named sites, leaving one gap in N76 — closed in round 4.
+- **Sweep per finding, not per severity.** Round 3 swept exhaustively for the BLOCKING finding (five sites found where the review named three) but fixed the lesser findings only at named sites, leaving one gap in the BACKLOG row — closed in round 4.
 
 ## Standing process constraints (carry into every remaining dispatch)
 
@@ -62,3 +62,5 @@ Review tier **upgraded minimum → standard** by controller decision (shared fil
 | Pre-existing N54/N57 BACKLOG pipe corruption (9 and 11 vs header's 8) | Unowned — do NOT fix, do NOT propagate |
 | OP-1 Task 9 compression pass | Module 3, before its first amendment |
 | Deferred audit orders B1, A3b/c+B2, B3, B4, B7, B8a | Their owning tasks — see Deferred Work table |
+| **N67 will conflict on merge** — `main` edited it since the merge-base and so did this branch. The resolution MUST preserve both sides: main's edits AND this branch's `UPDATE 2026-07-30 — DISPOSITIONED BY N79` clause. A "take theirs" drops the discharge instruction and sends a future reader to re-run a probe already run. Rows main touched since `fa2d482`: N55, N56, N57, N61, N63, N64, N66, N67, N68, N70, N73, plus new N76–N78 | Merge step |
+| **Task 3 must allocate ids against `main`, not this branch.** Free on both: **N80, N81**. Enumerate at execution time rather than trusting these | Task 3 |
