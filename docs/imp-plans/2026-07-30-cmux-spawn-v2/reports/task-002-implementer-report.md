@@ -27,7 +27,7 @@ files_changed:
   - path: "tests/unit/fixtures/context-probe/iterations-message-no-fields.jsonl"
     description: "New in the [task 2 fix] round — a `message` iteration carrying no token fields; pins the fallback-on-zero that closes the gate fail-open."
   - path: "tests/unit/fixtures/context-probe/iterations-message-triple.jsonl"
-    description: "New in the [task 2 fix] round — three `message` iterations (2.97x inflation); pins that the ratio is not structurally 2.0."
+    description: "New in the [task 2 fix] round — three `message` iterations (315406/107802 = 2.9258x inflation); pins that the ratio is not structurally 2.0."
   - path: "tests/unit/fixtures/context-probe/iterations-non-dict-entries.jsonl"
     description: "New in the [task 2 fix] round — non-dict entries surrounding the valid iteration; pins the isinstance-dict guard."
   - path: "tests/unit/fixtures/context-probe/iterations-string.jsonl"
@@ -97,7 +97,7 @@ Also: N76's "on the fix-marked path" is a **correlation, not a mechanism** — `
 
 `usage_total` reads the last `type:"message"` iteration, falling back to the top-level fields when no `iterations` key is present.
 
-**Provably a no-op on the majority path** — all 32,160 single-iteration turns in the corpus have top-level == `iterations[0]`, zero mismatches. The detector was positive-controlled with a planted mismatch before being trusted. Multi-iteration turns are ~4.5% of rows, inflate by **~2× (measured range 1.94×–2.00× across 822 turns; exactly 2.0 in none of them), scaling with the `message` iteration count** — a three-`message` turn measures ~2.97×, so the ratio is not a structural constant — and are **not advisor-specific** (`('message','message')` also occurs). *[CORRECTED 2026-07-31, `[task 2 fix]`: originally "inflate by **exactly 2.0×**", falsified by the report's own headline numbers (373139/189929 = 1.9646, 539691/270851 = 1.9926).]*
+**Provably a no-op on the majority path** — all 32,160 single-iteration turns in the corpus have top-level == `iterations[0]`, zero mismatches. The detector was positive-controlled with a planted mismatch before being trusted. Multi-iteration turns are ~4.5% of rows, inflate by **~2× (measured range 1.94×–2.00× across 822 turns; exactly 2.0 in none of them), scaling with the `message` iteration count** — a three-`message` turn measures ~2.9×, so the ratio is not a structural constant — and are **not advisor-specific** (`('message','message')` also occurs). *[CORRECTED 2026-07-31, `[task 2 fix]`: originally "inflate by **exactly 2.0×**", falsified by the report's own headline numbers (373139/189929 = 1.9646, 539691/270851 = 1.9926).]*
 
 Stdlib-only verified by executing under bare `/usr/bin/python3`; py39 preserved.
 

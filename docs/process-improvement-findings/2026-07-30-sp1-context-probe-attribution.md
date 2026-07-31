@@ -129,9 +129,15 @@ the re-read prompt is. Note the 18 `('message','message')` rows: **the bug is no
 advisor-specific**, so it is not confined to sessions that use that tool.
 
 **The ratio is not a structural constant — it scales with the `message` iteration count.** A
-three-`message` turn measures **2.97x** (built and measured against the shipped probe; pinned by
-`test_three_message_iterations_scale_beyond_2x`). Nothing in the data rules such a turn out; it
-is merely unobserved in this corpus.
+three-`message` turn measures **~2.9x** on two independently built fixtures (the quality
+review's measured 2.9679; the one committed here measures 2.9258 and is pinned by
+`test_three_message_iterations_scale_beyond_2x`). Recompute the committed one with:
+
+```bash
+python3 -c "print(315406/107802)"   # top-level / last-message-iteration
+```
+
+Nothing in the data rules such a turn out; it is merely unobserved in this corpus.
 
 Within the cmux-transport feature's own corpus (15 transcripts, 1,803 usage rows, 81
 multi-iteration turns), matching each of the **80** observation-log rows to a transcript block
@@ -255,7 +261,7 @@ preference:
    a rule keyed on "exactly 2.0" matches **none** of the real poisoned turns — it is inoperable,
    not merely imprecise. The range is still far tighter than ">50%". **It also assumes a
    two-`message` turn:** the ratio scales with the `message` iteration count (a three-`message`
-   turn measures ~2.97x), so this rule would miss a 3-iteration poisoned row. Widen the band, or
+   turn measures ~2.9x), so this rule would miss a 3-iteration poisoned row. Widen the band, or
    accept the miss, if such turns are possible in the corpus being cleaned.
 3. **Residual, stated rather than glossed:** zero compaction events were observed, so the ~2x
    discriminator has **never been tested against a real pre-compaction peak**. If compaction
@@ -300,7 +306,7 @@ row, marked `in flight (cmux-spawn-v2 SP1)`. At merge, **replace** N76's status 
 > falling back to the top-level fields; provably a no-op on all 32,160 single-iteration turns
 > in the retained corpus. Multi-iteration turns are ~4.5% of usage rows and inflate by **~2x —
 > measured range 1.94x–2.00x across 822 turns, exactly 2.0 in none of them**, and the ratio
-> scales with the `message` iteration count (a three-`message` turn measures ~2.97x), so it is
+> scales with the `message` iteration count (a three-`message` turn measures ~2.9x), so it is
 > not a structural constant; **not advisor-specific** (`('message','message')` also occurs). **No exclusion rule is
 > needed for post-fix rows;** pre-fix rows should be recomputed from the retained transcript
 > (exactly 1 of 80 rows in the cmux-transport log was poisoned). **`~/.claude/bin/claude-ctx-check`
