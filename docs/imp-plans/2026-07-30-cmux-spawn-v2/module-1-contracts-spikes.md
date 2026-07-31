@@ -270,9 +270,9 @@ git commit -m "test(cmux-spawn-v2): Task 0 — live verb-shape fixtures + cold-s
 - Create: `docs/process-improvement-findings/2026-07-30-sp2-workspace-env-probe.md`
 - Modify: `docs/process-improvement-findings/BACKLOG.md` (one disposition row)
 
-- [ ] **Step 1: Probe the help surfaces** — capture verbatim: `cmux workspace create --help` (does it list `--env`/`--env-file`? precedence notes? `export ` stripping? `--mask`?) and `cmux new-surface --help` (any surface-scoped env equivalent? Per the 2026-07-30 planning check there is none in the flag list — confirm and record).
+- [x] **Step 1: Probe the help surfaces** — capture verbatim: `cmux workspace create --help` (does it list `--env`/`--env-file`? precedence notes? `export ` stripping? `--mask`?) and `cmux new-surface --help` (any surface-scoped env equivalent? Per the 2026-07-30 planning check there is none in the flag list — confirm and record).
 
-- [ ] **Step 2: Exercise `--env` live** (throwaway workspace, deleted after):
+- [x] **Step 2: Exercise `--env` live** (throwaway workspace, deleted after):
 
 ```bash
 W=$(CMUX_QUIET=1 cmux workspace create --name "sp2-env" --cwd "$HOME" --focus false \
@@ -282,9 +282,9 @@ W=$(CMUX_QUIET=1 cmux workspace create --name "sp2-env" --cwd "$HOME" --focus fa
 cmux workspace env "$(echo "$W" | awk '{print $2}')"   # capture the configured-env view
 ```
 
-- [ ] **Step 3: Write the disposition doc** — transcript + answer to: can `--env` replace the inline-env command-string prefix on the FALLBACK path (scalars only; the append-prompt is content and stays on the rematerialization path)? Disposition options: (a) viable → BACKLOG row proposing the swap (this sprint still ships command-string per Decision 2's shared wrapper); (b) not viable → record why, close N67's premise accordingly.
+- [x] **Step 3: Write the disposition doc** — transcript + answer to: can `--env` replace the inline-env command-string prefix on the FALLBACK path (scalars only; the append-prompt is content and stays on the rematerialization path)? Disposition options: (a) viable → BACKLOG row proposing the swap (this sprint still ships command-string per Decision 2's shared wrapper); (b) not viable → record why, close N67's premise accordingly.
 
-- [ ] **Step 4: Append the BACKLOG row** (cite the doc), delete the `sp2-env` workspace, run `bash tests/ARaymond-installation/verify-symlink-install.sh` (docs-only change — expect PASS), commit:
+- [x] **Step 4: Append the BACKLOG row** (cite the doc), delete the `sp2-env` workspace, run `bash tests/ARaymond-installation/verify-symlink-install.sh` (docs-only change — expect PASS), commit:
 
 ```bash
 git add docs/process-improvement-findings/2026-07-30-sp2-workspace-env-probe.md docs/process-improvement-findings/BACKLOG.md
