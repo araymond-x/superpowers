@@ -25,16 +25,29 @@ PARTIAL mirror):
 
   2. Multi-iteration turns (SP1, 2026-07-30). A single assistant turn can
      contain several sequential model calls — Claude Code records them in
-     `usage.iterations` and the TOP-LEVEL `usage` fields are their SUM. Each
-     call re-reads the same cached prompt, so `cache_read_input_tokens` is
-     counted once per iteration and the naive top-level sum reports roughly
-     N x the true context. This probe therefore reads the LAST `type:
-     "message"` iteration — the turn's final model call, whose prompt is the
-     accumulated context — and falls back to the top-level fields only when
-     no such iteration exists. See
+     `usage.iterations`, and the TOP-LEVEL `usage` fields are the sum of the
+     `type: "message"` iterations ONLY; a non-`message` iteration (e.g.
+     `advisor_message`) is excluded from them. Each `message` call re-reads
+     the same cached prompt, so `cache_read_input_tokens` is counted once per
+     `message` iteration and the naive top-level sum reports roughly N x the
+     true context, where N is the number of `message` iterations (measured
+     range on two-`message` turns: ~2x; a three-`message` turn measures ~3x).
+     This probe therefore reads the LAST `type: "message"` iteration — the
+     turn's final model call, whose prompt is the accumulated context — and
+     falls back to the top-level fields when no such iteration exists or when
+     the one it finds yields no usable total. See
      docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md.
-     claude-ctx-check (and the statusline `ctx:` field it mirrors) still carry
-     the uncorrected behavior; fixing them is out of this script's scope.
+     claude-ctx-check still carries the uncorrected behavior; fixing it is out
+     of this script's scope. The statusline `ctx:` field does NOT carry it —
+     that claim was falsified by pre-registered experiment on 2026-07-31; the
+     statusline is harness-computed (see the same findings doc).
+
+     `usage.iterations` is an UNDOCUMENTED internal shape and is NOT
+     version-stable. Claude Code's own documentation states: "the transcript
+     entry format is internal to Claude Code and changes between versions, so
+     it's not a stable contract." The fallback in `usage_total` is what makes
+     a future shape change degrade to the legacy top-level reading rather
+     than to a silent zero.
 
 Divergence 2 is a no-op on single-iteration turns: their top-level fields equal
 `iterations[0]` exactly. Verified across the retained transcript corpus — the
@@ -104,12 +117,29 @@ def usage_total(usage) -> int:
     """Context-token total for one assistant `usage` block.
 
     Prefers the last `message` iteration (parity divergence 2 in the module
-    docstring — the top-level fields double-count `cache_read_input_tokens`
-    across a multi-iteration turn). Falls back to the top-level fields, which
-    is the legacy behavior and is exactly equal on single-iteration turns.
+    docstring — the top-level fields sum the `type: "message"` iterations, so
+    they double-count `cache_read_input_tokens` across a multi-iteration
+    turn). Falls back to the top-level fields, which is the legacy behavior
+    and is exactly equal on single-iteration turns.
+
+    The fallback ALSO fires when the preferred iteration sums to 0, and that
+    is a safety property rather than a tidy-up: this probe feeds a BLOCKING
+    pre-dispatch gate, where a total of 0 reads as `tier=below action=allow`.
+    A `0` from a preferred-but-unusable source must never be mistaken for a
+    measurement — it would present as a successful probe of an empty context
+    and silently disarm the gate (worse than a probe failure, which routes to
+    the byte-proxy and eventually to the fallback-streak block). `_coerce_int`
+    maps every non-int — including floats, which are valid JSON numbers — to
+    0, and `iterations` is an undocumented, version-unstable shape, so this
+    branch is the degradation path for a future shape change as much as for
+    corruption today.
     """
     iteration = _last_message_iteration(usage)
-    return _sum_fields(iteration if iteration is not None else usage)
+    if iteration is not None:
+        total = _sum_fields(iteration)
+        if total:
+            return total
+    return _sum_fields(usage)
 
 
 def find_latest_total(transcript_path: Path) -> Optional[int]:
@@ -188,8 +218,7 @@ def main() -> int:
     total = find_latest_total(transcript)
     if total is None:
         print(
-            "context-probe: no usage block found in transcript "
-            "(no completed turn)",
+            "context-probe: no usage block found in transcript (no completed turn)",
             file=sys.stderr,
         )
         return 1

@@ -5,9 +5,10 @@
 
 The anomalous row is not a misattribution, not a wrong transcript, and not a genuine spike.
 `context-probe.py` summed the **top-level** `usage` fields of an assistant turn that contained
-**three sequential model calls**. Claude Code records those calls in `usage.iterations` and the
-top-level fields are their *sum*, so the same cached prompt was counted once per call. The
-probe reported ~2x the context that existed.
+**three sequential model calls**. Claude Code records those calls in `usage.iterations`, and the
+top-level fields are the sum of the **`type: "message"`** iterations only — a non-`message`
+iteration such as `advisor_message` is *excluded* from them. So the same cached prompt was
+counted once per `message` call, and the probe reported ~2x the context that existed.
 
 The outcome is a code fix, not an exclusion rule. Measurements below were taken **2026-07-31**;
 each is paired with the command that recomputes it.
@@ -119,9 +120,18 @@ usage-bearing rows):
 | `iterations: []` | 15 |
 | no `iterations` key | 36 |
 
-Multi-iteration turns are **793**, and the inflation ratio is **exactly 2.0 in every one** —
-two `message` iterations, one prompt counted twice. Note the 18 `('message','message')` rows:
-**the bug is not advisor-specific**, so it is not confined to sessions that use that tool.
+Multi-iteration turns are **793**, every one of them carrying exactly two `message` iterations —
+one prompt counted twice. The inflation ratio is therefore **~2x, but never exactly 2.0**:
+re-measured across **822** multi-`message` turns the ratio (top-level ÷ last-`message`
+iteration) runs **min 1.9427, max 1.9979, and is exactly 2.0 in 0 of 822**. It falls short of 2
+because the last iteration's own `cache_creation` and `output` tokens are not duplicated — only
+the re-read prompt is. Note the 18 `('message','message')` rows: **the bug is not
+advisor-specific**, so it is not confined to sessions that use that tool.
+
+**The ratio is not a structural constant — it scales with the `message` iteration count.** A
+three-`message` turn measures **2.97x** (built and measured against the shipped probe; pinned by
+`test_three_message_iterations_scale_beyond_2x`). Nothing in the data rules such a turn out; it
+is merely unobserved in this corpus.
 
 Within the cmux-transport feature's own corpus (15 transcripts, 1,803 usage rows, 81
 multi-iteration turns), matching each of the **80** observation-log rows to a transcript block
@@ -156,10 +166,23 @@ EOF
 
 `skills/subagent-driven-development/scripts/context-probe.py` — `usage_total` now reads the
 **last `type: "message"` iteration** and falls back to the top-level fields when no such
-iteration exists (`iterations` absent, not a list, empty, or carrying none). Two branches, one
-fallback; every branch corresponds to a shape observed in the table above except
-`advisor_message`-last, which is unobserved and pinned by test so the behavior is chosen
-rather than accidental.
+iteration exists (`iterations` absent, not a list, empty, or carrying none) **or when the
+iteration it finds yields no usable total**. Every branch corresponds to a shape observed in the
+table above except `advisor_message`-last, which is unobserved and pinned by test so the
+behavior is chosen rather than accidental.
+
+**The fallback-on-zero is a safety property, not a tidy-up.** `_coerce_int` maps every non-int —
+including floats, which are valid JSON numbers — to 0, so a malformed `message` iteration would
+otherwise make the probe return **0 while exiting 0**: a *successful measurement* of an empty
+context. This probe feeds a **blocking** gate, where 0 reads as `tier=below action=allow`, and a
+poisoned `action=allow` row additionally **resets an in-progress fallback streak**, disarming
+the K-consecutive escalation. That is strictly worse than a probe failure, which routes to the
+byte-proxy and eventually blocks. Falling back to the top-level reading was measured to produce
+**zero differences across all 273 retained transcripts** — a pure safety net, not a behavior
+change. Because `iterations` is an **undocumented internal shape that is not version-stable**
+(Claude Code's own documentation: *"the transcript entry format is internal to Claude Code and
+changes between versions, so it's not a stable contract"*), this branch is also the degradation
+path for a future shape change, not merely for corruption today.
 
 The fallback is the legacy behavior, and the fix is **provably a no-op on the majority path**:
 across all **32,160** single-iteration turns in the sweep, the top-level fields equal
@@ -182,9 +205,19 @@ the venv — and Python 3.9-compatible (`Optional[int]`, no builtin generics).
 `main()` sums the top-level fields with no iteration awareness — so `claude-ctx-check` and the
 statusline `ctx:` field were both believed to over-report multi-iteration turns by ~2x. **The statusline claim was FALSIFIED by experiment on 2026-07-31 — see the correction note in this document's final section. Only `claude-ctx-check` over-reports.** It lives
 outside this worktree and was **read only**; fixing it is a separate change and the
-controller's call. The existing differential parity test (`test_context_probe_fixtures.py`)
-still passes untouched: its fixtures carry no `iterations` key, so both implementations take
-the fallback path.
+controller's call. The differential parity test is
+`test_differential_parity_with_ctx_check` in `tests/unit/test_context_probe_sessionid.py` — it
+is the only test that actually invokes both implementations. (`test_context_probe_fixtures.py`,
+cited here in an earlier draft, is *not* a differential test: it invokes neither binary and
+asserts a hand reimplementation against itself.) The parity test still passes untouched: its
+fixture carries no `iterations` key, so both implementations take the fallback path.
+
+**What parity now certifies, post-divergence.** The two implementations genuinely disagree on
+multi-iteration transcripts — that disagreement *is* the fix. So this test no longer certifies
+whole-behavior parity; it certifies only that **the fallback path still matches the source
+byte-for-byte**. Divergence on multi-iteration input is pinned separately, by
+`tests/unit/test_context_probe_iterations.py`, and nothing pins the two implementations against
+each other on that input.
 
 ## Severity — two registers, deliberately kept apart
 
@@ -216,10 +249,15 @@ preference:
    has more than one iteration, substitute the last `message` iteration's total. Retention is
    not guaranteed, so do this while the transcripts exist.
 2. **If transcripts have rotated**, use the sharper discriminator the data actually supports: a
-   poisoned row is **≈2.0x** its neighbors *and* the following row returns to the prior level.
-   The observed ratio was exactly 2.0 in all 793 multi-iteration turns, which is far tighter
-   than ">50%".
-3. **Residual, stated rather than glossed:** zero compaction events were observed, so the 2.0x
+   poisoned row sits in the **range 1.94x–2.00x** of its neighbors *and* the following row
+   returns to the prior level. **State the discriminator as a range, not a point.** Measured
+   across 822 multi-`message` turns the ratio never once equals 2.0 (min 1.9427, max 1.9979), so
+   a rule keyed on "exactly 2.0" matches **none** of the real poisoned turns — it is inoperable,
+   not merely imprecise. The range is still far tighter than ">50%". **It also assumes a
+   two-`message` turn:** the ratio scales with the `message` iteration count (a three-`message`
+   turn measures ~2.97x), so this rule would miss a 3-iteration poisoned row. Widen the band, or
+   accept the miss, if such turns are possible in the corpus being cleaned.
+3. **Residual, stated rather than glossed:** zero compaction events were observed, so the ~2x
    discriminator has **never been tested against a real pre-compaction peak**. If compaction
    can produce a similar shape, rule 2 could discard a true peak. Rule 1 has no such weakness —
    prefer it whenever the transcript survives.
@@ -228,9 +266,9 @@ preference:
 
 | Path | Change |
 |---|---|
-| `skills/subagent-driven-development/scripts/context-probe.py` | `usage_total` / `_last_message_iteration` / `_sum_fields`; docstring records divergence #2 |
-| `tests/unit/test_context_probe_iterations.py` | new — 8 tests, differential |
-| `tests/unit/fixtures/context-probe/iterations-*.jsonl` | new — 7 fixtures, one carrying the real archived block verbatim |
+| `skills/subagent-driven-development/scripts/context-probe.py` | `usage_total` (prefer last `message` iteration, fall back on absent-or-zero) / `_last_message_iteration` / `_sum_fields`; docstring records divergence #2 |
+| `tests/unit/test_context_probe_iterations.py` | new — differential tests; count: `.venv/bin/python3 -m pytest tests/unit/test_context_probe_iterations.py --collect-only -q \| tail -1` |
+| `tests/unit/fixtures/context-probe/iterations-*.jsonl` | new fixtures, one carrying the real archived block verbatim; count: `ls tests/unit/fixtures/context-probe/iterations-*.jsonl \| wc -l` |
 
 `context-probe.py` is **not** a baselined hook — `grep -c 'context-probe' tests/ARaymond-hook-baseline/baseline.txt`
 returns **0** (and a broader `grep -n 'probe'` over the same file returns no match), so no
@@ -245,8 +283,10 @@ row, marked `in flight (cmux-spawn-v2 SP1)`. At merge, **replace** N76's status 
 > **ROOT-CAUSED AND FIXED (cmux-spawn-v2 SP1, 2026-07-31).** Not misattribution and not a wrong
 > transcript — `context-probe.py` summed the TOP-LEVEL `usage` fields of an assistant turn
 > containing several sequential model calls. Claude Code records those in `usage.iterations`
-> and the top-level fields are their SUM, so the same cached prompt is counted once per
-> iteration: the archived `2026-07-30T00:56:54Z … tokens=373139` row's turn read
+> and the top-level fields are the sum of the **`type:"message"`** iterations ONLY (a
+> non-`message` iteration such as `advisor_message` is excluded), so the same cached prompt is
+> counted once per `message` iteration: the archived
+> `2026-07-30T00:56:54Z … tokens=373139` row's turn read
 > `cache_read` of `180524 + 181567 = 362091` against a true context of **189,929**. The
 > earlier "matches the predecessor's end-of-session total" reading is **withdrawn** — the value
 > is byte-exact present in the correct transcript at the correct time, `isSidechain: false`.
@@ -258,8 +298,10 @@ row, marked `in flight (cmux-spawn-v2 SP1)`. At merge, **replace** N76's status 
 > inflated read on the gated implementer new-task path could produce a spurious non-retryable
 > HARD block (not observed). **Fix:** `usage_total` reads the last `type:"message"` iteration,
 > falling back to the top-level fields; provably a no-op on all 32,160 single-iteration turns
-> in the retained corpus. Multi-iteration turns are ~4.5% of usage rows and inflate by exactly
-> 2.0x; **not advisor-specific** (`('message','message')` also occurs). **No exclusion rule is
+> in the retained corpus. Multi-iteration turns are ~4.5% of usage rows and inflate by **~2x —
+> measured range 1.94x–2.00x across 822 turns, exactly 2.0 in none of them**, and the ratio
+> scales with the `message` iteration count (a three-`message` turn measures ~2.97x), so it is
+> not a structural constant; **not advisor-specific** (`('message','message')` also occurs). **No exclusion rule is
 > needed for post-fix rows;** pre-fix rows should be recomputed from the retained transcript
 > (exactly 1 of 80 rows in the cmux-transport log was poisoned). **`~/.claude/bin/claude-ctx-check`
 > carries the uncorrected bug** (the statusline does NOT — falsified by experiment 2026-07-31, see below) — out of scope here,

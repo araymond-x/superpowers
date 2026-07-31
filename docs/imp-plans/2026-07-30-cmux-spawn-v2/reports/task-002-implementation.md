@@ -55,13 +55,24 @@ contract_compliance:
     detail: A probe-attribution spike touches none of these surfaces.
 ---
 
+> **NOT THE CANONICAL REPORT.** This file was written under a non-conventional name. The
+> conventional, hook-validated report for Task 2 is
+> [`task-002-implementer-report.md`](task-002-implementer-report.md) — read that one for the
+> authoritative `files_changed` / `tests` / `contract_compliance` record. This copy is retained
+> as a contemporaneous flight-recorder artifact; where the two differ, the canonical file wins.
+
 ## Implementation Summary
 
 SP1's anomaly is a **multi-iteration double-count**, not a misattribution. A single assistant
 turn can contain several sequential model calls; Claude Code records them in
-`message.usage.iterations` and the **top-level** `usage` fields are their **sum**. Each call
-re-reads the same cached prompt, so `cache_read_input_tokens` is counted once per iteration and
-the naive top-level sum — which `context-probe.py` used — reports ~2x the real context.
+`message.usage.iterations`, and the **top-level** `usage` fields are the sum of the
+**`type: "message"`** iterations only — a non-`message` iteration such as `advisor_message` is
+excluded from them. Each `message` call re-reads the same cached prompt, so
+`cache_read_input_tokens` is counted once per `message` iteration and the naive top-level sum —
+which `context-probe.py` used — reports ~2x the real context.
+*[CORRECTED 2026-07-31, `[task 2 fix]`: originally read "the top-level `usage` fields are their
+**sum** … counted once per iteration", which is false — summing all three iterations of the
+controller's peak block gives 811,442, not the observed top-level 539,691.]*
 
 The archived row's turn (cmux-transport session `d8a9d842`, `2026-07-30T00:55:22Z`,
 `isSidechain: false`, ending in the `[task 5 fix]` `Agent` tool-use) has iterations
@@ -159,9 +170,16 @@ green on revert; full unit suite 649 passed (641 baseline + 8 new).
    gated implementer path is a live consequence of the same defect, though not observed.
 
 3. **`~/.claude/bin/claude-ctx-check` has the identical bug and is un-owned.** It is outside
-   this worktree (read-only escalation), so it was not fixed. It alone carries this — the statusline `ctx:` does NOT (see the 2026-07-31 experiment note in `context-summary.md`; harness-computed, measured correct). Formerly-claimed statusline `ctx:`
-   field over-report multi-iteration turns by ~2x. It belongs to the telemetry-exp/global-bin
-   surface and needs its own BACKLOG row, which this task is forbidden to allocate.
+   this worktree (read-only escalation), so it was not fixed. **It alone over-reports
+   multi-iteration turns by ~2x — the statusline `ctx:` field does NOT** (see the 2026-07-31
+   experiment note in `context-summary.md`; the statusline is harness-computed and was measured
+   correct). It belongs to the telemetry-exp/global-bin surface and needs its own BACKLOG row,
+   which this task is forbidden to allocate.
+   *[CORRECTED 2026-07-31, `[task 2 fix]`: the `d6678ad` statusline correction left a trailing
+   fragment — "Formerly-claimed statusline `ctx:` field over-report multi-iteration turns by
+   ~2x." — which still read as asserting the statusline over-reports, the exact claim that
+   round existed to retract. The sentence is repaired above; the original wording is preserved
+   here.]*
 
 4. **Pre-fix observation rows are still poisoned on disk.** The fix changes future readings
    only. The one known bad row lives in another repo's committed log; recomputation there is a
