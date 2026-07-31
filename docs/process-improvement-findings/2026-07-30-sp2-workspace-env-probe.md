@@ -947,14 +947,17 @@ implementer report — the only path by which they reach the deviations register
 
 ## BACKLOG rows
 
-Filed as **N76** (next free id, confirmed by enumerating actual ids at execution time).
+Filed as **N79**. It was originally filed on this branch as **N76** — the next free id when the
+actual ids were enumerated at execution time — but that enumeration covered only this branch, and
+`main` had meanwhile claimed N76 for the sibling SP1 row (context-probe misattribution on
+fix-marked dispatches), plus N77 and N78. Renumbered to N79, the first id free on both branches.
 
 **N67 was also updated in place**, on the 2026-07-30 revision. It had been left reading *"not
-exercised — probe before building"* with status `open` and no pointer to N76 — telling a future
+exercised — probe before building"* with status `open` and no pointer to N79 — telling a future
 reader to run a probe that has already been run, and leaving the file carrying two rows about one
 item with contradictory guidance. The file's convention for a corrected premise is an in-place
 UPDATE (precedent: N56's title records that its original premise *"was disproven 2026-07-28"*), so
-N67 now carries an `UPDATE 2026-07-30` clause pointing at N76 and at this document.
+N67 now carries an `UPDATE 2026-07-30` clause pointing at N79 and at this document.
 
 **One item deliberately not done.** The Task 1 quality review's B1 asked that `cmux rpc` be routed to
 `2026-07-28-cmux-capability-usage-matrix.md` as *"the single highest-leverage entry it is currently
