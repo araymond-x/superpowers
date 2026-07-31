@@ -17,7 +17,8 @@
 >
 > **What this note got wrong, and why it is kept:** it reasoned from "both instruments agree, so the
 > reading is faithful" to "therefore the reading is true." Both instruments agreed because **both carry
-> the same bug** — `claude-ctx-check` and the statusline share it, an un-owned defect Task 2 surfaced.
+> the same bug** — `claude-ctx-check` shares it. (**Correction 2026-07-31:** the statusline was ALSO named here
+> and that was wrong — it is harness-computed and measured CORRECT. See the experiment note below.)
 > Agreement between two implementations of one formula is not corroboration. Left in place as the
 > contemporaneous record; see `docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md`.
 

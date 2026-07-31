@@ -159,7 +159,7 @@ green on revert; full unit suite 649 passed (641 baseline + 8 new).
    gated implementer path is a live consequence of the same defect, though not observed.
 
 3. **`~/.claude/bin/claude-ctx-check` has the identical bug and is un-owned.** It is outside
-   this worktree (read-only escalation), so it was not fixed. It and the statusline `ctx:`
+   this worktree (read-only escalation), so it was not fixed. It alone carries this — the statusline `ctx:` does NOT (see the 2026-07-31 experiment note in `context-summary.md`; harness-computed, measured correct). Formerly-claimed statusline `ctx:`
    field over-report multi-iteration turns by ~2x. It belongs to the telemetry-exp/global-bin
    surface and needs its own BACKLOG row, which this task is forbidden to allocate.
 

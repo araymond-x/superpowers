@@ -119,6 +119,6 @@ This is the controller-pre-authorized "explicitly state it cannot discriminate" 
 
 ## Concerns
 
-1. **An un-owned defect was surfaced and cannot be filed from here.** `~/.claude/bin/claude-ctx-check` and the statusline `ctx:` field carry the **identical bug** — they are the same measurement, computed the same way. Both are outside this worktree (read-only), so no fix and no BACKLOG id could be allocated. This needs its own row at merge.
+1. **An un-owned defect was surfaced and cannot be filed from here.** `~/.claude/bin/claude-ctx-check` carries the bug. **CONTROLLER CORRECTION 2026-07-31: this report also named the statusline, and that is FALSE — see the experiment recorded in `context-summary.md`; the statusline is harness-computed and measured correct.** For `claude-ctx-check` it is the same measurement, computed the same way. Both are outside this worktree (read-only), so no fix and no BACKLOG id could be allocated. This needs its own row at merge.
 2. **Two committed controller artifacts now assert a falsified claim** (`task-002-controller-observation.md`, `context-summary.md`). They are the controller's to correct, and `transition-module.py` archives them at the Module 1→2 boundary.
 3. **Zero compaction events were observed in either corpus**, so the "real peak" case the fallback discriminator is meant to handle remains hypothetical and untested.

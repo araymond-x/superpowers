@@ -180,7 +180,7 @@ the venv — and Python 3.9-compatible (`Optional[int]`, no builtin generics).
 **Parity.** This is documented divergence **#2** from `~/.claude/bin/claude-ctx-check`, whose
 `SOURCE_VERSION` is unchanged at `f83727ff80c0`. The source has the **identical bug** — its
 `main()` sums the top-level fields with no iteration awareness — so `claude-ctx-check` and the
-statusline `ctx:` field it mirrors both over-report multi-iteration turns by ~2x. It lives
+statusline `ctx:` field were both believed to over-report multi-iteration turns by ~2x. **The statusline claim was FALSIFIED by experiment on 2026-07-31 — see the correction note in this document's final section. Only `claude-ctx-check` over-reports.** It lives
 outside this worktree and was **read only**; fixing it is a separate change and the
 controller's call. The existing differential parity test (`test_context_probe_fixtures.py`)
 still passes untouched: its fixtures carry no `iterations` key, so both implementations take
@@ -262,11 +262,22 @@ row, marked `in flight (cmux-spawn-v2 SP1)`. At merge, **replace** N76's status 
 > 2.0x; **not advisor-specific** (`('message','message')` also occurs). **No exclusion rule is
 > needed for post-fix rows;** pre-fix rows should be recomputed from the retained transcript
 > (exactly 1 of 80 rows in the cmux-transport log was poisoned). **`~/.claude/bin/claude-ctx-check`
-> and the statusline `ctx:` field carry the identical uncorrected bug** — out of scope here,
+> carries the uncorrected bug** (the statusline does NOT — falsified by experiment 2026-07-31, see below) — out of scope here,
 > worth its own row. Full evidence:
 > `docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md`.
 
 Two consequences for other rows, for the merge step to route rather than for this task to act
 on: **N43 threshold tuning** may now consume `source=probe` rows without a poison filter once
-the pre-fix rows are recomputed; and the **`claude-ctx-check` / statusline defect** is
+the pre-fix rows are recomputed; and the **`claude-ctx-check` defect** (statusline excluded — measured correct) is
 un-owned by any existing row.
+
+
+## Correction 2026-07-31 — the statusline does NOT carry this bug (experiment)
+
+**Statusline EXONERATED by experiment, 2026-07-31 (N=1, pre-registered).** The statusline's `ctx:` is NOT computed by any script here: `~/.claude/statusline-command.sh` reads `.context_window.used_percentage` from the JSON payload Claude Code writes to its stdin, and contains zero references to `claude-ctx-check`, `context-probe`, `.jsonl` or `transcript_path` — it does no arithmetic. A pre-registered test on a deliberately induced `['message','advisor_message','message']` turn (validity-checked: the discriminating block was confirmed present before the reading was read) predicted ~40% correct / ~79% if it summed message-type iterations / ~118% if it summed all. **Observed: 40%, matching true context 395,645.** The harness computes true context. `claude-ctx-check` alone carries the double-count, and its error is TRANSIENT — it misreports only while the newest usage block is the multi-iteration one, which is exactly the window the pre-dispatch hook samples in.
+
+**Method, so it can be re-run.** Baseline taken on a single-iteration turn (all three sources agree there, so it cannot discriminate). Predictions pre-registered BEFORE the reading, with three branches rather than two — the two-branch version was too narrow, because the observed 1.99x came from summing the *message-type* iterations only, leaving a 3x all-iterations branch unbucketed and any mid-range reading ambiguous. An advisor call was then used to induce a multi-iteration turn. The transcript's newest multi-iteration block was confirmed to contain `advisor_message` BEFORE the statusline reading was interpreted — without that check the reading could have come from the turn before or after the discriminating one.
+
+**Strength of the claim.** One observation, one turn, one harness version. It decisively refutes 'the statusline shares the bug' (a 40% reading is incompatible with both buggy branches) but does not establish correctness as a general property across all multi-iteration shapes.
+
+**Provenance of the original error.** The claim was inferred from `claude-ctx-check`'s own docstring — *"the same underlying data the statusline's `ctx:` field"* — which asserts shared *data*, not shared *code*. It was propagated to six sites, including committed code, before being tested. Same infer-without-verifying class this document exists to document.
