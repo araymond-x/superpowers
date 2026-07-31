@@ -14,3 +14,5 @@
 2026-07-31T00:25:09Z task=1 type=other tokens=164879 source=probe tier=below action=allow
 2026-07-31T00:39:32Z task= type=other tokens=201378 source=probe tier=below action=allow
 2026-07-31T00:51:12Z task=1 type=other tokens=221610 source=probe tier=below action=allow
+2026-07-31T01:00:11Z task= type=partner-review tokens=255452 source=probe tier=below action=allow
+2026-07-31T01:08:20Z task=1 type=other tokens=539691 source=probe tier=hard action=allow
