@@ -1,5 +1,26 @@
 # SP1 — a live, first-hand probe observation from the controller's own session
 
+> **SUPERSEDED 2026-07-31 BY TASK 2 — THE CENTRAL CLAIM BELOW IS FALSE.** Task 2 root-caused this to a
+> **multi-iteration double-count** in `context-probe.py`: a single assistant turn can contain several
+> model calls recorded in `message.usage.iterations`, and the top-level fields aggregate over the
+> `type: "message"` iterations, counting the same cached prompt twice. The peak block's own numbers show
+> it — `268840 + 270851 = 539691` exactly, with the last `message` iteration reading **270,851**.
+> **The true context was ~270,851, never ~540,000.** So the probe total IS monotonic; nothing was
+> compacted; and the "auto-compaction" hypothesis this note proposed is refuted, not merely unconfirmed.
+> With the fix, every >15% drop across 209 turns in both sessions disappears (4 → 0).
+>
+> **What survives:** the ruling-out of sidechain contamination and cross-session entries (still correct,
+> and Task 2 re-derived the same conclusion independently against the archived corpus), the component
+> breakdown showing `cache_read` carried the entire delta (correct, and it was the diagnostic thread
+> Task 2 pulled), and the instruction to positively discriminate rather than infer from spike shape
+> (correct, and it is what kept Task 2 from inheriting hypothesis (a)).
+>
+> **What this note got wrong, and why it is kept:** it reasoned from "both instruments agree, so the
+> reading is faithful" to "therefore the reading is true." Both instruments agreed because **both carry
+> the same bug** — `claude-ctx-check` and the statusline share it, an un-owned defect Task 2 surfaced.
+> Agreement between two implementations of one formula is not corroboration. Left in place as the
+> contemporaneous record; see `docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md`.
+
 **Captured 2026-07-31 by the controller, unplanned.** Not a Task 2 deliverable and not a substitute for one. Task 2 owns the root cause; this is retained evidence the implementer should test its hypotheses against, because unlike the archived `373139` row **this transcript is live, local, and inspectable right now**.
 
 ## What happened

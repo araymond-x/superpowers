@@ -40,9 +40,16 @@ Review tier **upgraded minimum → standard** by controller decision (shared fil
 - **`cmux rpc <method> [json-params]` is a CLI path to arbitrary v2 methods.** It invalidated an earlier "no CLI path exists" bound, which was withdrawn from five locations. It also **silently ignores unrecognized param names** — `{"workspace": …}` is ignored, `{"workspace_id": "<uuid>"}` is honored — so settling whether `rpc surface.create` takes an env param needs a correctly-guessed param name *plus* a create *plus* a read-back.
 - **Sweep per finding, not per severity.** Round 3 swept exhaustively for the BLOCKING finding (five sites found where the review named three) but fixed the lesser findings only at named sites, leaving one gap in the BACKLOG row — closed in round 4.
 
-## Live SP1 evidence captured out-of-band (read before dispatching Task 2)
+## SP1 RESOLVED by Task 2 — and it falsified the controller's own note
 
-`reports/task-002-controller-observation.md` records a probe reading of **539,691** followed by **305,208** minutes later on the controller's own transcript, with both instruments agreeing on the re-run. Sidechain contamination and cross-session entries are **ruled out by evidence**; the residual hypothesis is auto-compaction, stated as a hypothesis and not established. Two consequences for Task 2: the probe total is **not monotonic**, so the plan's suggested *"drop rows that jump >50% against both neighbors"* exclusion rule would discard true pre-compaction peaks; and the archived `373139` row's spike shape is consistent with BOTH misattribution and a genuine pre-compaction peak, so the implementer must positively discriminate rather than infer from the shape.
+`reports/task-002-controller-observation.md` claimed the probe total is **not monotonic**, with auto-compaction as the residual hypothesis. **That is false.** Task 2 root-caused the anomaly to a **multi-iteration double-count**: a turn may contain several model calls in `message.usage.iterations`, and the top-level fields aggregate over the `type: "message"` ones, counting the same cached prompt twice (`268840 + 270851 = 539691` exactly; true value 270,851). Fixed in `context-probe.py` — read the last `message` iteration, fall back to top-level when absent. Proven a no-op on all 32,160 single-iteration turns, positive-controlled.
+
+**Carry these forward:**
+
+- **The probe total IS monotonic.** Do not build any exclusion rule on spike shape; no rule was adopted, deliberately.
+- **Agreement between `context-probe.py` and `claude-ctx-check` is NOT corroboration** — they share the formula and therefore shared the bug. This is what misled the controller.
+- **Un-owned defect, needs a BACKLOG row at merge:** `~/.claude/bin/claude-ctx-check` and the statusline `ctx:` field carry the identical bug. Outside this worktree, so Task 2 could neither fix nor file it.
+- **N76's severity is understated** — "harmless at runtime" is false; the controller handed off a session on a 2× inflated number. Its "on the fix-marked path" framing is a correlation, not a mechanism.
 
 ## Standing process constraints (carry into every remaining dispatch)
 
