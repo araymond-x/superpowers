@@ -82,7 +82,7 @@ def _log(lines):
 - Modify: `skills/scripts/models/plan.py`
 - Test: `tests/unit/test_models/test_plan_model.py`
 
-- [ ] **Step 1: Write the failing tests** (append a class, following the file's `test_entry_mode_*` style):
+- [x] **Step 1: Write the failing tests** (append a class, following the file's `test_entry_mode_*` style): _Note: shipped with a FIFTH test, `test_literal_is_closed_set`, added by the fix round — the four below never pinned the Literal as a closed set. Construction uses the file's real `MINIMAL_PLAN` idiom; `_minimal_plan()` below is hypothetical and does not exist._
 
 ```python
 class TestHandoffSpawn:
@@ -106,17 +106,17 @@ class TestHandoffSpawn:
 
 If the file has no reusable minimal-plan helper, construct inline exactly as its existing tests do (`Plan(schema_version=1, feature_archetype="greenfield", tasks=[...])`).
 
-- [ ] **Step 2: Run to verify failure** — `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -k HandoffSpawn -v` — expect FAIL: unexpected keyword / extra field forbidden.
+- [x] **Step 2: Run to verify failure** — `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -k HandoffSpawn -v` — expect FAIL: unexpected keyword / extra field forbidden.
 
-- [ ] **Step 3: Implement** — in `class Plan`, directly under `entry_mode`:
+- [x] **Step 3: Implement** — in `class Plan`, directly under `entry_mode`:
 
 ```python
     handoff_spawn: Literal["auto", "ask", "off"] = "auto"
 ```
 
-- [ ] **Step 4: Run tests** — the class passes; then the whole file: `.venv/bin/python3 -m pytest tests/unit/test_models/ -v` — all PASS.
+- [x] **Step 4: Run tests** — the class passes; then the whole file: `.venv/bin/python3 -m pytest tests/unit/test_models/ -v` — all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — landed as `ab1ffd2`; a `[task 4 fix]` round added `test_literal_is_closed_set` in `fe2437e` (see deviations)
 
 ```bash
 git add skills/scripts/models/plan.py tests/unit/test_models/test_plan_model.py
