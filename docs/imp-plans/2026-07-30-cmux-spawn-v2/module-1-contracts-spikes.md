@@ -299,7 +299,7 @@ git commit -m "docs(cmux-spawn-v2): SP2 — workspace --env probe transcript + d
 
 Gate note: this spike blocks threshold tuning only, NOT the sprint. If the root cause cannot be reproduced from retained artifacts, the deliverable degrades to a documented exclusion rule — never to silence.
 
-- [ ] **Step 1: Locate the poisoned row and its transcript**
+- [x] **Step 1: Locate the poisoned row and its transcript**
 
 ```bash
 grep -rn "tokens=373139" ~/projects/claude-custom/*/docs/imp-plans/*/reports/context-observations.log ~/projects/claude-custom/*/.worktrees/*/docs/imp-plans/*/reports/context-observations.log
@@ -308,11 +308,11 @@ grep -rn "tokens=373139" ~/projects/claude-custom/*/docs/imp-plans/*/reports/con
 
 Identify the session transcript that dispatch ran against — retained under `~/.claude/projects/-Users-araymond-projects-claude-custom-claude-codex-handoff--worktrees-cmux-transport/` (12 `.jsonl`, Jul 29–31; do NOT filter by mtime). The ORIGINAL pointer here named the cmux-integration feature dir — wrong feature AND wrong repo; superseded.
 
-- [ ] **Step 2: Reproduce the probe's answer against the retained transcript** — run `context-probe.py --transcript <file>` and bisect: which assistant `usage` block yields 373139? Compare `input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens` across the final assistant entries. Candidate hypotheses to test explicitly: (a) a sidechain/subagent entry's usage was the "most recent assistant block" at dispatch time; (b) a retry/error turn carried inflated `cache_creation`; (c) the row is genuine (a real transient spike) and the probe is correct.
+- [x] **Step 2: Reproduce the probe's answer against the retained transcript** — run `context-probe.py --transcript <file>` and bisect: which assistant `usage` block yields 373139? Compare `input_tokens + cache_creation_input_tokens + cache_read_input_tokens + output_tokens` across the final assistant entries. Candidate hypotheses to test explicitly: (a) a sidechain/subagent entry's usage was the "most recent assistant block" at dispatch time; (b) a retry/error turn carried inflated `cache_creation`; (c) the row is genuine (a real transient spike) and the probe is correct.
 
-- [ ] **Step 3: Fix or document.** If (a)/(b): patch `context-probe.py` (e.g. skip entries marked as sidechain when scanning from the end), keep the stdlib-only constraint, and add a regression test with a minimal transcript fixture reproducing the misattribution (differential: buggy value vs corrected value). Run the FULL probe test set: `.venv/bin/python3 -m pytest tests/unit/test_context_probe*.py tests/unit/test_context_gate*.py -v` — all PASS. If (c): no code change; the doc pins the exclusion rule for tuning consumers (e.g. "exclude rows where tokens jumps >50% against both neighbors").
+- [x] **Step 3: Fix or document.** If (a)/(b): patch `context-probe.py` (e.g. skip entries marked as sidechain when scanning from the end), keep the stdlib-only constraint, and add a regression test with a minimal transcript fixture reproducing the misattribution (differential: buggy value vs corrected value). Run the FULL probe test set: `.venv/bin/python3 -m pytest tests/unit/test_context_probe*.py tests/unit/test_context_gate*.py -v` — all PASS. If (c): no code change; the doc pins the exclusion rule for tuning consumers (e.g. "exclude rows where tokens jumps >50% against both neighbors").
 
-- [ ] **Step 4: Write the doc + commit** — root cause, evidence (the exact usage block), what changed (code or rule). If code changed, note that `context-probe.py` is NOT a baselined hook (no `check-hooks.sh --capture` needed — the baseline pins hook scripts; verify by grepping `tests/ARaymond-hook-baseline/baseline.txt` for `context-probe` and record the result in the doc).
+- [x] **Step 4: Write the doc + commit** — root cause, evidence (the exact usage block), what changed (code or rule). If code changed, note that `context-probe.py` is NOT a baselined hook (no `check-hooks.sh --capture` needed — the baseline pins hook scripts; verify by grepping `tests/ARaymond-hook-baseline/baseline.txt` for `context-probe` and record the result in the doc).
 
 ```bash
 git add docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md  # + code/tests if any
