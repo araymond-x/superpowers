@@ -42,6 +42,10 @@ class TestExpectedHops:
     def test_micro_is_one(self):
         assert expected_hops(19, "micro") == 1
 
+    def test_unknown_tier_behaves_as_standard(self):
+        # only "micro" short-circuits; a `tier != "standard"` test would give 1, not 8
+        assert expected_hops(19, "weird") == 8      # unknown tier behaves as standard
+
     def test_invalid_total_raises(self):
         import pytest
         for bad in (0, -3, "7", None):
@@ -72,6 +76,10 @@ class TestDeriveTotalTasks:
         assert derive_total_tasks({"total_tasks": True, "modules": [], "task_range": [1, 4]}) == 4
         assert derive_total_tasks({"total_tasks": 0, "modules": [{"task_ids": [True, 2]}]}) == 1
 
+    def test_bool_in_task_range_is_not_derivable(self):
+        # 4th bool guard: dropping it derives 4 - True + 1 == 4 instead of None
+        assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [True, 4]}) is None
+
     def test_wrong_length_task_range_is_not_derivable(self):
         assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [1, 2, 3]}) is None
 
@@ -85,6 +93,10 @@ class TestDeriveExpectedHops:
 
     def test_absent_block_derives(self):
         assert derive_expected_hops({"total_tasks": 5, "tier": "standard"}) == 2
+
+    def test_tier_propagates_from_manifest(self):
+        # tier reaches expected_hops from the manifest; hardcoding "standard" gives 8, not 1
+        assert derive_expected_hops({"total_tasks": 19, "tier": "micro"}) == 1
 
     def test_underivable_returns_none(self):
         assert derive_expected_hops({"total_tasks": 0}) is None
