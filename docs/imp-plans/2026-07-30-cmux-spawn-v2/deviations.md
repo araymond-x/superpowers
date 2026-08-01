@@ -137,3 +137,5 @@ task dispatches; see `reports/pre-execution-audit.md` for full findings and defi
 
 ## Scope Changes
 [Requirements that changed during execution]
+
+| 2026-08-01T03:30:54Z | Module transition: Contracts, cold-start measurement, spikes → Models + hop-budget support layer | FYI | Accepted |
