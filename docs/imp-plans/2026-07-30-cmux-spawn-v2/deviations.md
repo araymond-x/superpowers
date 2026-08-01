@@ -194,3 +194,5 @@ task dispatches; see `reports/pre-execution-audit.md` for full findings and defi
 [Requirements that changed during execution]
 
 | 2026-08-01T03:30:54Z | Module transition: Contracts, cold-start measurement, spikes → Models + hop-budget support layer | FYI | Accepted |
+
+| 2026-08-01T19:28:07Z | Module transition: Models + hop-budget support layer → Spawn script core rework | FYI | Accepted |
