@@ -48,8 +48,8 @@ _External contracts were frozen into fixtures by Module 1's Task 0 (repo convent
 
 | Task | Owned Files (write) | Read-Only Files | Depends On |
 |------|---------------------|-----------------|------------|
-| Task 8 | `spawn-handoff-session.sh`, `test_spawn_handoff_v2.py`, `test_spawn_handoff.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/*` | `_handoff_support.py` | Task 7 |
-| Task 9 | same set | Task 0 fixtures | Task 8 |
+| Task 8 | `spawn-handoff-session.sh`, `test_spawn_handoff_v2.py`, `test_spawn_handoff.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/*`, **`_handoff_support.py`**, **`tests/unit/test_handoff_support.py`** | — | Task 7 |
+| Task 9 | first five above (`_handoff_support.py` returns to read-only after Task 8) | `_handoff_support.py`, Task 0 fixtures | Task 8 |
 | Task 10 | same set | Task 0 fixtures | Task 9 |
 | Task 11 | same set | — | Task 10 |
 
@@ -58,8 +58,10 @@ All four tasks write the same files — strictly serialized, never parallel.
 ### Task 8: Policy gate, stall/ceiling rework, intent tasks_done
 
 **Files:**
-- Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`
-- Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`
+- Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`, and — **for the scheduled deferred rows only** — `skills/subagent-driven-development/scripts/_handoff_support.py`
+- Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`, `tests/unit/test_handoff_support.py`
+
+`_handoff_support.py` was read-only for Module 3 as first written, but seven scheduled rows (P7-1(ii), P7-3, P7-5, P7-6, P7-7, P7-8, P7-9) are production/test edits to it and its test file, and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
 
 - [ ] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
 
