@@ -433,21 +433,9 @@ fi
 
 Also: delete the old `spawn_claude_workspace` success/failure call-site stanza it replaces; keep `spawn_claude_workspace()` DELETED (its mechanics live on in `create_workspace_target` + shared wrapper — remove the dead function, its argv/notify behavior is superseded) and update the dry-run echo: `--dry-run: would spawn surface in $CMUX_WORKSPACE_ID (workspace fallback armed) — quota=$QUOTA_STATUS launch=$LAUNCH_MODE policy=$SPAWN_POLICY tasks_done=$TASKS_DONE`.
 
-- [ ] **Step 4: Add the import assertion** tying the script default to Task 0's measurement (in `test_spawn_handoff_v2.py`). Task 0 creates that file importing only `json`/`Path` and defining only `FIX` — this step must ADD `import re` and the `SCRIPT` constant (verify `parents[N]` actually resolves; a wrong path fails on `read_text()`, not on the assertion). `SPAWN_WAIT_TIMEOUT_DEFAULT=` must stay a **top-level, column-0** assignment — the regex is anchored, so indenting it into a function or `if` block silently breaks the match.
+- [ ] **Step 4: Run both unit files** — all PASS (old file fully migrated). **Step 5: Commit** — `"feat(cmux-spawn-v2): surface topology + shared launch wrapper + workspace-create fallback"`.
 
-```python
-SCRIPT = (Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development"
-          / "scripts" / "spawn-handoff-session.sh")
-
-def test_wait_timeout_default_matches_measured_fixture():
-    d = json.loads((FIX / "cold-start-timing.json").read_text())
-    m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)", SCRIPT.read_text(), re.M)
-    assert m, "SPAWN_WAIT_TIMEOUT_DEFAULT= must be a top-level, column-0 assignment (anchored regex)"
-    assert int(m.group(1)) == d["default_seconds"], (
-        f"script default {m.group(1)} != measured {d['default_seconds']} (cold-start-timing.json)")
-```
-
-- [ ] **Step 5: Run both unit files** — all PASS (old file fully migrated). **Step 6: Commit** — `"feat(cmux-spawn-v2): surface topology + shared launch wrapper + workspace-create fallback"`.
+(The import assertion pinning `SPAWN_WAIT_TIMEOUT_DEFAULT` to Task 0's measured fixture lives in **Task 10 Step 2** — it is wait-for work, and Task 10 owns the handshake. Task 9 still writes the constant, so it is unpinned for exactly one task; that gap is deliberate and recorded under OP-1.)
 
 ### Task 10: wait-for handshake, re-wait, read-screen diagnosis
 
@@ -477,6 +465,20 @@ class TestHandshake:
         # "nothing was spawned" (assert the string is absent)
     def test_token_success_exits_0_handshake_ok(self, tmp_path):
         # CMUX_WAITFOR_RC=0 -> exit 0, outcome handshake=ok
+```
+
+Also add the **import assertion** tying the script's wait default to Task 0's measurement (relocated here from Task 9 — it is wait-for work; see OP-1). Tasks 0/8/9 have all edited `test_spawn_handoff_v2.py` by now, so ADD `import re` and the `SCRIPT` constant **only if absent** (verify `parents[N]` actually resolves; a wrong path fails on `read_text()`, not on the assertion). `SPAWN_WAIT_TIMEOUT_DEFAULT=` must stay a **top-level, column-0** assignment in the script — the regex is anchored, so indenting it into a function or `if` block silently breaks the match.
+
+```python
+SCRIPT = (Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development"
+          / "scripts" / "spawn-handoff-session.sh")
+
+def test_wait_timeout_default_matches_measured_fixture():
+    d = json.loads((FIX / "cold-start-timing.json").read_text())
+    m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)", SCRIPT.read_text(), re.M)
+    assert m, "SPAWN_WAIT_TIMEOUT_DEFAULT= must be a top-level, column-0 assignment (anchored regex)"
+    assert int(m.group(1)) == d["default_seconds"], (
+        f"script default {m.group(1)} != measured {d['default_seconds']} (cold-start-timing.json)")
 ```
 
 - [ ] **Step 3: Implement.** Replace Task 9's placeholder timeout tail:
