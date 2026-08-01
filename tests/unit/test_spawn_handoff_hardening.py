@@ -65,14 +65,22 @@ def _did_not_spawn(tmp_path):
 def test_nonnumeric_max_hops_reverts_to_default_and_still_refuses(tmp_path):
     """A typo in the kill switch must not mean 'proceed'.
 
-    Positive control on the revert: the counter is seeded at 3, which is the
-    DEFAULT limit. If the revert did not happen, `-ge` errors on 'abc', the branch
-    is skipped, and the script spawns. Reaching the refusal proves MAX_HOPS was
-    restored to a usable integer rather than merely warned about.
+    Positive control on the revert: the counter is seeded AT the ceiling an
+    invalid knob reverts to. If the revert did not happen, `-ge` errors on 'abc',
+    the branch is skipped, and the script spawns. Reaching the refusal proves
+    MAX_HOPS was restored to a usable integer rather than merely warned about.
+
+    The seed is 6, not 3: the fixed `MAX_HOPS_DEFAULT=3` is gone, and an invalid
+    knob now reverts to the DERIVED ceiling — 6 for this fixture, which ships no
+    .sdd-session.json, so EXPECTED_HOPS is "unknown" and the floor applies. Left
+    at 3 this test would go fail-OPEN and only HALF-loudly: 3 < 6 means the gate
+    stops refusing and the script SPAWNS, while the `WARNING:` assertion below
+    still passes. The knob is NOT set explicitly here — the knob being invalid IS
+    the premise of this test.
     """
     ctx = setup_worktree(tmp_path)
     env = _reach_hop_gate(tmp_path, ctx)
-    (ctx["reports"] / ".handoff-hops").write_text("3\n")
+    (ctx["reports"] / ".handoff-hops").write_text("6\n")
     _commit_all(ctx, "seed hops")
     env["SUPERPOWERS_CMUX_MAX_HOPS"] = "abc"
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env)

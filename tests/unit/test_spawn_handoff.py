@@ -146,7 +146,9 @@ def test_hop_limit_exits_3(tmp_path):
     # tree) — mirrors the commit pattern in test_missing_active_feature_exits_1.
     subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)
     subprocess.run(["git", "commit", "-qm", "seed hops"], cwd=ctx["wt"], check=True)
-    r = run_spawn(ctx, tmp_path, "b1")
+    # The ceiling is DERIVED now (floor 6) — this test's premise was the old fixed
+    # MAX_HOPS_DEFAULT=3, so pin it explicitly or the seed of 3 no longer refuses.
+    r = run_spawn(ctx, tmp_path, "b1", env_extra={"SUPERPOWERS_CMUX_MAX_HOPS": "3"})
     assert r.returncode == 3 and "hop" in (r.stdout + r.stderr).lower()
 
 
@@ -251,7 +253,7 @@ def test_quota_tool_timeout_proceeds(tmp_path):
 
 # --- Task 4: launch composition A (decode / strip guard / label / telemetry) ---
 
-from spawn_handoff_helpers import encode_args, install_version
+from spawn_handoff_helpers import encode_args, install_version, NO_AMBIENT_HOP_KNOBS
 
 # The ambient picker-env scrub every test in this file depends on (absent must
 # mean absent) is the autouse `_hermetic_picker_env` fixture in tests/unit/
@@ -533,7 +535,12 @@ def _reach_spawn(tmp_path, ctx):
     """Env that reaches the spawn sequence in launch=auto mode."""
     _spawnable(tmp_path, ctx)
     install_version(tmp_path, "2.1.218")
-    return _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+    e = _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+    # run_spawn copies os.environ; empty string neutralizes both consumers
+    # (`${VAR:-default}` and the derivation's `[ -n "$VAR" ]`) so an ambient
+    # SUPERPOWERS_CMUX_MAX_HOPS cannot skew the derived-ceiling assertions.
+    e.update(NO_AMBIENT_HOP_KNOBS)
+    return e
 
 
 def _fallback_spawn_id(cmd):
@@ -689,7 +696,10 @@ def test_new_workspace_and_notify_argv_values_match_spec(tmp_path):
     for flag in CMUX_NOTIFY_FLAGS:
         assert flag in notify
     assert _flag_value(notify, "--title") == "SDD handoff"
-    assert _flag_value(notify, "--body").startswith("Hop 1/3 ")
+    # `Hop $SP_HOP/$MAX_HOPS`: 6, not 3 — no .sdd-session.json here, so the
+    # ceiling derivation falls to its floor. A RENDERED dependency on the
+    # moved default, invisible to any grep for the identifier.
+    assert _flag_value(notify, "--body").startswith("Hop 1/6 ")
 
 
 def test_spawn_log_record_fields_match_spec_log_format(tmp_path):
@@ -699,7 +709,9 @@ def test_spawn_log_record_fields_match_spec_log_format(tmp_path):
     ctx = setup_worktree(tmp_path)
     r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
     assert r.returncode == 0
-    assert _spawn_log_fields(ctx, "intent") == {"hop": "1"}
+    # Exact equality, so step (f)'s new tasks_done= field must be listed here.
+    # 0 done reports in this fixture => a real 0, not the degraded "unknown".
+    assert _spawn_log_fields(ctx, "intent") == {"hop": "1", "tasks_done": "0"}
     outcome = _spawn_log_fields(ctx, "outcome")
     assert outcome["hop"] == "1"
     assert outcome["workspace"] == "(spawned)"  # stub emits no `OK <ref>`

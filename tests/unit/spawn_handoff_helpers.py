@@ -26,6 +26,65 @@ PACE_MISSING_WINDOW = (
 PACE_NONZERO = "exit 7"
 
 
+# run_spawn copies os.environ, so a developer's ambient SUPERPOWERS_CMUX_* knobs
+# would skew every derived-ceiling / stall assertion. Empty string neutralizes
+# BOTH consumers: `${VAR:-default}` treats empty as unset, and the ceiling
+# derivation's `[ -n "$VAR" ]` is false on empty. Merge into env_extra.
+NO_AMBIENT_HOP_KNOBS = {
+    "SUPERPOWERS_CMUX_MAX_HOPS": "",
+    "SUPERPOWERS_CMUX_MAX_STALL_HOPS": "",
+}
+
+
+def write_manifest(
+    ctx,
+    expected_hops=2,
+    spawn_policy="auto",
+    total_tasks=5,
+    tier="standard",
+    task_range=(0, 4),
+    omit_handoff=False,
+):
+    """Minimal .sdd-session.json in the feature dir. omit_handoff=True builds a
+    pre-v2 manifest (no handoff block) for derivation-path tests. Defaults emit a
+    COMPLETE block: deferred order B4 pins handoff as all-or-nothing, so a partial
+    block is model-invalid — omit_handoff is the only sanctioned way to have none."""
+    import json as _json
+
+    m = {"tier": tier, "total_tasks": total_tasks, "task_range": list(task_range)}
+    if not omit_handoff:
+        m["handoff"] = {"expected_hops": expected_hops, "spawn_policy": spawn_policy}
+    (ctx["wt"] / ctx["feat"] / ".sdd-session.json").write_text(_json.dumps(m))
+
+
+def write_done_report(ctx, task_id, status="DONE"):
+    body = (
+        f"---\nschema_version: 1\ntask_id: {task_id}\nstatus: {status}\n"
+        "files_changed: [{path: x, description: y}]\n"
+        "tests: {written: 1, passing: 1, command: x, result: PASS}\n---\nbody\n"
+    )
+    (ctx["reports"] / f"task-{task_id:03d}-implementer-report.md").write_text(body)
+
+
+def append_outcome(ctx, hop, tasks_done, extra=""):
+    line = (
+        f"2026-07-30T00:00:0{hop}Z uuid-{hop} outcome hop={hop} workspace=w surface=s "
+        f"launch=auto bundle=b quota=ok tasks_done={tasks_done} handshake=ok{extra}\n"
+    )
+    with open(ctx["reports"] / "handoff-spawn.log", "a") as f:
+        f.write(line)
+
+
+def _commit(ctx, msg="fixture state"):
+    subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)  # fixture repo only
+    subprocess.run(["git", "commit", "-qm", msg], cwd=ctx["wt"], check=True)
+
+
+def _spawn_log_text_or_empty(ctx):
+    p = ctx["reports"] / "handoff-spawn.log"
+    return p.read_text() if p.exists() else ""
+
+
 def encode_args(argv):
     return "v1:" + base64.b64encode(json.dumps(argv).encode()).decode()
 

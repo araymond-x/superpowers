@@ -17,19 +17,11 @@ SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
 [ -x "$PYTHON" ] || PYTHON="python3"   # this script needs only json/base64 stdlib
 
-# Runaway-chain guard. Validated for the same reason the quota knobs below are,
-# and with the same warn-and-revert contract — but the motivation here is stronger:
-# this is the ONLY guard against an unbounded spawn chain, and an unvalidated value
-# made it fail OPEN. `[ "$HOPS" -ge "$MAX_HOPS" ]` with a non-numeric operand emits
-# "integer expression expected", the branch is NOT taken, and execution falls
-# through to spawn. A typo in a kill switch must never mean "proceed".
-# MAX_HOPS=0 remains a valid, deliberate refuse-everything setting.
-MAX_HOPS_DEFAULT=3
-MAX_HOPS="${SUPERPOWERS_CMUX_MAX_HOPS:-$MAX_HOPS_DEFAULT}"
-if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
-  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to default $MAX_HOPS_DEFAULT." >&2
-  MAX_HOPS="$MAX_HOPS_DEFAULT"
-fi
+# NOTE: the SUPERPOWERS_CMUX_MAX_HOPS block used to live here. Its validation
+# MOVED into the ceiling derivation (Precondition 4) because the ceiling is now
+# DERIVED from the manifest's expected_hops, which is not resolvable this early.
+# The knob keeps its validate-warn-revert contract; only the revert TARGET changed
+# (fixed default -> derived ceiling). See that block for the fail-open rationale.
 # Percent threshold; may legitimately be fractional (e.g. 12.5). Validated because
 # it is interpolated into an awk program below — an unvalidated value is code
 # injection. Invalid input warns and reverts to the default (never exits: the
@@ -40,6 +32,13 @@ if ! [[ "$QUOTA_MIN_PCT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "WARNING: invalid SUPERPOWERS_CMUX_QUOTA_MIN_PCT ($QUOTA_MIN_PCT) — reverting to default $QUOTA_MIN_PCT_DEFAULT." >&2
   QUOTA_MIN_PCT="$QUOTA_MIN_PCT_DEFAULT"
 fi
+MAX_STALL_HOPS_DEFAULT=1
+MAX_STALL_HOPS="${SUPERPOWERS_CMUX_MAX_STALL_HOPS:-$MAX_STALL_HOPS_DEFAULT}"
+if ! [[ "$MAX_STALL_HOPS" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_STALL_HOPS ($MAX_STALL_HOPS) — reverting to default $MAX_STALL_HOPS_DEFAULT." >&2
+  MAX_STALL_HOPS="$MAX_STALL_HOPS_DEFAULT"
+fi
+SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
 BUNDLES_DIR="$HOME/.claude-codex-handoff/bundles"
 QUOTA_TOOL_DEFAULT="$HOME/.claude/bin/claude-usage-pace"
 EXPECTED_BUNDLE_TYPE="work"
@@ -47,10 +46,11 @@ EXPECTED_ENTRY_SKILL="superpowers:subagent-driven-development"
 PICKER_CONTRACT="1"
 
 # --- Arg parse -------------------------------------------------------------
-BUNDLE_ID=""; DRY_RUN=0
+BUNDLE_ID=""; DRY_RUN=0; USER_APPROVED=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY_RUN=1 ;;
+    --user-approved) USER_APPROVED=1 ;;
     -*) echo "spawn-handoff-session.sh: unknown flag: $a" >&2; exit 1 ;;
     *) if [ -z "$BUNDLE_ID" ]; then BUNDLE_ID="$a"; else
          echo "spawn-handoff-session.sh: unexpected extra arg: $a" >&2; exit 1; fi ;;
@@ -99,6 +99,7 @@ if [ -d "$WORKTREE_ROOT/$FEATURE_DIR" ]; then
   esac
 fi
 REPORTS_DIR="$WORKTREE_ROOT/$FEATURE_DIR/reports"
+MANIFEST_FILE="$WORKTREE_ROOT/$FEATURE_DIR/.sdd-session.json"
 FEATURE_NAME="$(basename "$FEATURE_DIR")"
 HOPS_FILE="$REPORTS_DIR/.handoff-hops"
 SPAWN_LOG="$REPORTS_DIR/handoff-spawn.log"
@@ -160,6 +161,30 @@ PY
 if ! validate_bundle "$BUNDLE_ID" "$EXPECTED_BUNDLE_TYPE" "$EXPECTED_ENTRY_SKILL" "$WORKTREE_ROOT"; then
   exit 1; fi
 
+# --- Precondition 2b: consent policy (nothing reserved yet) -----------------
+# Absent manifest FILE stays `auto` DELIBERATELY: every pre-v2 handoff ships without
+# .sdd-session.json and must still spawn. The CLI fails closed to `ask` on a nonexistent
+# manifest PATH (omitting the flag is argparse exit 2 — different thing), but this
+# `[ -f ]` short-circuit makes that branch unreachable from here.
+# The two layers differ ON PURPOSE on this one input — do not "harmonize" them.
+SPAWN_POLICY="auto"
+if [ -f "$MANIFEST_FILE" ]; then
+  # stderr NOT discarded: a CLI failure must be visible, not silently coerced.
+  SPAWN_POLICY="$("$PYTHON" "$SUPPORT_CLI" spawn-policy --manifest "$MANIFEST_FILE")"
+  # Fail CLOSED: empty stdout (CLI crashed) and every unrecognized value mean
+  # NON-consent. `auto` here would make every failure mode of the SOLE consent
+  # gate resolve to "spawn without asking"; `ask` is retryable and pre-reservation.
+  case "$SPAWN_POLICY" in auto|ask|off) : ;; *) SPAWN_POLICY="ask" ;; esac
+fi
+if [ "$SPAWN_POLICY" = "off" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=off (reason=policy-off). Auto-spawn is disabled for this plan — resume manually." >&2
+  print_manual_instructions; exit 3
+fi
+if [ "$SPAWN_POLICY" = "ask" ] && [ "$USER_APPROVED" != "1" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=ask without --user-approved (reason=policy-ask). ASK THE USER, then re-run with --user-approved. No hop was consumed — this refusal is retryable." >&2
+  exit 3
+fi
+
 # --- Precondition 3: cmux reachable ----------------------------------------
 if [ -z "$CMUX_WORKSPACE_ID" ] || [ "$(cmux ping 2>/dev/null)" != "PONG" ]; then
   echo "[spawn-handoff] not in a reachable cmux workspace — manual fallback." >&2
@@ -167,7 +192,13 @@ if [ -z "$CMUX_WORKSPACE_ID" ] || [ "$(cmux ping 2>/dev/null)" != "PONG" ]; then
   exit 3
 fi
 
-# --- Precondition 4: hop limit ---------------------------------------------
+# --- Precondition 4: progress accounting + hop ceiling + stall --------------
+# Ceiling fail-open rationale, preserved from the deleted Layer-0 MAX_HOPS block:
+# this is the ONLY guard against an unbounded spawn chain, and an unvalidated
+# value made it fail OPEN — `[ "$HOPS" -ge "$MAX_HOPS" ]` with a non-numeric
+# operand emits "integer expression expected", the branch is NOT taken, and
+# execution falls through to spawn. A typo in a kill switch must never mean
+# "proceed". MAX_HOPS=0 remains a valid, deliberate refuse-everything setting.
 HOPS="$(cat "$HOPS_FILE" 2>/dev/null)"; [ -n "$HOPS" ] || HOPS=0
 # Absent/empty is the legitimate first-hop case and stays 0 (handled above).
 # Present-but-non-numeric is NOT: it defeats the comparison below exactly as an
@@ -184,14 +215,58 @@ if ! [[ "$HOPS" =~ ^[0-9]+$ ]]; then
   print_manual_instructions
   exit 3
 fi
+# Progress accounting (Decision 8). tasks_done failure degrades to "unknown":
+# the stall check SKIPs (stall=indeterminate) — never fake 0, which would
+# manufacture stalls. The runaway fail-closed guard remains .handoff-hops's own.
+TASKS_DONE="$("$PYTHON" "$SUPPORT_CLI" tasks-done --reports-dir "$REPORTS_DIR" 2>/dev/null)"
+[[ "$TASKS_DONE" =~ ^[0-9]+$ ]] || TASKS_DONE="unknown"
+EXPECTED_HOPS="unknown"
+if [ -f "$MANIFEST_FILE" ]; then
+  EXPECTED_HOPS="$("$PYTHON" "$SUPPORT_CLI" expected-hops --manifest "$MANIFEST_FILE" 2>/dev/null)"
+  [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
+fi
+# Ceiling: explicit env wins absolutely; else derived max(6, 2 x expected).
+# SSOT: the literals 6 and 2 below MIRROR CEILING_FLOOR / CEILING_FACTOR in
+# _handoff_support.py — shell cannot import them, so this is a deliberate,
+# NAMED duplication. Change both or neither; a silent divergence is invisible.
+if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
+  MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
+  if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
+    DERIVED=6; [ "$EXPECTED_HOPS" != "unknown" ] && { DERIVED=$((EXPECTED_HOPS * 2)); [ "$DERIVED" -lt 6 ] && DERIVED=6; }
+    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to derived default $DERIVED." >&2
+    MAX_HOPS="$DERIVED"
+  fi
+else
+  MAX_HOPS=6
+  [ "$EXPECTED_HOPS" != "unknown" ] && { MAX_HOPS=$((EXPECTED_HOPS * 2)); [ "$MAX_HOPS" -lt 6 ] && MAX_HOPS=6; }
+fi
 # SP_HOP is the successor's hop number; defined early because the Task-5 launch
 # composition references it in the runtime fallback chain.
 SP_HOP=$((HOPS + 1))
 if [ "$HOPS" -ge "$MAX_HOPS" ]; then
-  cmux notify --title "SDD handoff" --body "Hop limit $MAX_HOPS reached — manual resume needed" 2>/dev/null || true
-  echo "[spawn-handoff] hop limit reached ($HOPS/$MAX_HOPS) — manual fallback." >&2
+  cmux notify --title "SDD handoff" --body "Hop ceiling $MAX_HOPS reached — manual resume needed" 2>/dev/null || true
+  echo "[spawn-handoff] hop ceiling reached ($HOPS/$MAX_HOPS) — manual fallback." >&2
   print_manual_instructions
   exit 3
+fi
+BUDGET_FLAG=""
+if [ "$TASKS_DONE" = "unknown" ]; then
+  echo "[spawn-handoff] stall=indeterminate — tasks_done could not be counted; stall check skipped." >&2
+else
+  STREAK="$("$PYTHON" "$SUPPORT_CLI" stall-streak --spawn-log "$SPAWN_LOG" --tasks-done "$TASKS_DONE" 2>/dev/null)"
+  if [ "$STREAK" = "indeterminate" ]; then
+    echo "[spawn-handoff] stall=indeterminate — previous outcome record missing/malformed; stall check skipped." >&2
+  elif [[ "$STREAK" =~ ^[0-9]+$ ]] && [ "$STREAK" -gt "$MAX_STALL_HOPS" ]; then
+    TOTAL_DISP="?"; [ -f "$MANIFEST_FILE" ] && TOTAL_DISP="$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("total_tasks","?"))' "$MANIFEST_FILE" 2>/dev/null)"
+    cmux notify --title "SDD handoff" --body "Chain spawning without progress (tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS) — manual resume" 2>/dev/null || true
+    echo "[spawn-handoff] refused: $STREAK consecutive zero-progress hops (> SUPERPOWERS_CMUX_MAX_STALL_HOPS=$MAX_STALL_HOPS) at tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS (reason=stall). If this chain is legitimately slow, raise SUPERPOWERS_CMUX_MAX_STALL_HOPS via inline env on the spawn invocation — settings.local.json is NOT read by a running session." >&2
+    print_manual_instructions; exit 3
+  fi
+fi
+if [ "$EXPECTED_HOPS" != "unknown" ] && [ "$SP_HOP" -gt "$EXPECTED_HOPS" ]; then
+  BUDGET_FLAG=" budget=over-expected"
+  cmux notify --title "SDD handoff" --body "Hop $SP_HOP exceeds expected_hops=$EXPECTED_HOPS (advisory — spawning anyway)" 2>/dev/null || true
+  echo "[spawn-handoff] budget=over-expected (hop $SP_HOP > expected $EXPECTED_HOPS) — advisory only." >&2
 fi
 # --- Precondition 5: quota (fail-open; parameters pinned in spec §5.3) ------
 # Tool resolution: an explicit SUPERPOWERS_CMUX_QUOTA_TOOL override is
@@ -520,7 +595,7 @@ if ! printf '%s\n' "$SP_HOP" > "$HOPS_FILE"; then
   print_manual_instructions
   exit 3
 fi
-if ! printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"; then
+if ! printf '%s %s intent hop=%s tasks_done=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$TASKS_DONE" >> "$SPAWN_LOG"; then
   echo "[spawn-handoff] reservation write failed: cannot append intent record to $SPAWN_LOG (hop $SP_HOP consumed, no spawn attempted) — manual fallback." >&2
   print_manual_instructions
   exit 3
