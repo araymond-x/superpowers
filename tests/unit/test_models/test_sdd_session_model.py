@@ -226,3 +226,19 @@ class TestHandoffBlock:
         with pytest.raises(ValidationError):
             SddSession.model_validate({**MINIMAL_SESSION,
                                        "handoff": {"expected_hops": 5, "typo": 1}})
+
+    def test_expected_hops_accepts_one(self):   # micro-tier value; pins the valid boundary
+        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 1}})
+        assert s.handoff.expected_hops == 1
+
+    def test_rejects_invalid_spawn_policy(self):   # symmetric to Task 4's test_rejects_invalid_value
+        with pytest.raises(ValidationError) as exc:
+            SddSession.model_validate({**MINIMAL_SESSION,
+                                       "handoff": {"expected_hops": 1, "spawn_policy": "prompt"}})
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+    def test_expected_hops_must_be_an_integer(self):
+        with pytest.raises(ValidationError):
+            SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 2.5}})
+        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 3}})
+        assert type(s.handoff.expected_hops) is int
