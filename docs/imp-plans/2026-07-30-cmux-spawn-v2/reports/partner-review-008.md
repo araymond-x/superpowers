@@ -1,0 +1,78 @@
+# Partner Review — Task 8 dispatch (round 1)
+
+**Status:** BLOCKED
+
+**Context Completeness:** FAIL — no `Shared Constants` section and no `Pattern References` section (not even "None"). Both are declared in the parent plan (`plan.md:191`, `plan.md:193`) and the first `shared_constants` frontmatter entry names "Tasks 6, **8**" by number.
+**Context Accuracy:** PASS — Contract Constraints diff **IDENTICAL** to `module-3-spawn-script.md:35` (verified by `diff`, with a positive control confirming `diff` reports a deliberate change). Task description complete and untruncated. Write-scope statement matches `ca70612`. No misstatement of plan or register found.
+**Prior Task Awareness:** PASS — Task 7's three concerns are logged (`deviations.md` row 184); the two live ones ride as P7-3 and the R3-2 token correction. The pre-commit-format-hook trap, the B7 directory inversion, the `.venv` symlink, and the shared-stash hazard are all carried.
+**Escalation Check:** PASS — no unlogged DONE_WITH_CONCERNS from any prior task.
+**Architectural Alignment:** FAIL — see F5 (SSOT duplication of `CEILING_FLOOR`/`CEILING_FACTOR` into shell literals, unnamed) and F1 (consumer-update sweep incomplete: a global default moves and one consumer file was missed).
+**Pattern Completeness:** FAIL — `spawn-script-layer-style` and `import-only-helper-ssot` are declared plan-level patterns whose `reason` text is literally this task's house style and this task's file; neither is cited.
+**Consent / Fail-Open Audit:** FAIL — see F4. (P7-1's core claims hold; the gap is an unstated third path.)
+**Vacuousness Audit:** FAIL — see F3.
+**Row-by-Row Reality Check:** below.
+
+---
+
+## Row-by-row (each verified against the code, not the register)
+
+- **P7-1(i) — claim holds, dispatch summary accurate.** `module-3-spawn-script.md:184-185` are exactly as quoted. `*) SPAWN_POLICY="ask"` is the right non-consent value and **is** honored downstream: plan step (d) refuses `ask` with `exit 3 reason=policy-ask`, pre-reservation, retryable, no hop consumed (`spec-distilled.md:71` Decision 14 pins the same).
+- **P7-1(ii) — claim holds, and the "neither subsumes the other" reason is CORRECT.** `_handoff_support.py:169-171`: `pol if pol in ("auto","ask","off") else ("auto" if manifest is not None else "ask")`. A readable manifest with `"OFF"`/`false`/`null`/non-dict `handoff` prints `auto`. The shell fix cannot reach it — `auto` is a recognized value matching its own `case` arm. Verified first-hand, not accepted.
+- **P7-3 — claim holds.** `import yaml` sits at `_handoff_support.py:77` inside `_frontmatter`, which `count_tasks_done` calls only inside the glob loop (`:97-99`). Zero matches ⇒ loop never runs ⇒ `ImportError` never fires ⇒ `_cli`'s handler (`:153-154`) unreachable ⇒ `0`.
+- **P7-4 — claim holds AND the dispatch's "verify first" instruction is correct.** `s3.add_argument("--tasks-done", required=True, type=int)` (`:147`). Plan step (e) coerces any non-numeric `tasks-done` output to `unknown` at line 204 and branches on it at line 228 *before* the `stall-streak` call at line 231, so no sentinel ever reaches argparse. The branch **does** fully cover it; "already-satisfied at the shell" is the right answer, and the dispatch is right to make the implementer measure rather than assume.
+- **P7-5 — claim holds.** `:163-164` returns `None` for non-dict ⇒ `ask`. `TestCli` (2 tests only) asserts nothing for `5`/`null`/`[1,2]`.
+- **P7-6 — claim holds.** `open(path, encoding="utf-8").read()` at `:99` guarded by `except OSError` at `:100`; `UnicodeDecodeError` is a `ValueError`, so it propagates.
+- **P7-7 — claim holds.** `TestCli` contains exactly `test_tasks_done_cli` and `test_expected_hops_and_policy_cli_on_legacy_and_garbage`; nothing exercises the `ImportError` branch. *(The premise that `/usr/bin/python3` ships PyYAML I accepted from the register — see the last section.)*
+- **P7-8 — claim holds; dispatch summary accurate but the PRESCRIPTION is under-specified.** See F3.
+- **P7-9 — (A) holds:** `TestCli` only ever passes readable manifests to `expected-hops`; missing/unreadable is unpinned. **(B) holds:** `grep` for `import yaml`/`lazy`/`module scope` in `test_handoff_support.py` returns nothing — no placement pin. **(D) holds on inspection** (`isinstance(h, dict)` at `:56`, no test names it); I did not run the mutation, so treat (D) as plausible-not-measured.
+- **STANDING RULE — measured, not accepted.** `{1,2}.add(True)` → len **2**; `{1,2}.add(False)` → len **3**. The rule's arithmetic is correct as stated.
+
+---
+
+## Findings
+
+**[F1 — BLOCKING] Deferred order B1's gate says "before Task 8 dispatches" and it has not cleared. Task 8 will break a currently-green test file it is forbidden to edit, in the fail-open direction, invisibly to its own acceptance command.**
+
+Verified by `find tests -name '*.py' -print0 | xargs -0 /usr/bin/grep` (never the shell `grep`), with a positive control:
+- `tests/unit/test_spawn_handoff_hardening.py` exists and is **10 passed** right now — this is a regression Task 8 causes, not a pre-existing failure.
+- `test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` (`:65`) seeds `.handoff-hops="3"` against `MAX_HOPS_DEFAULT=3` (`spawn-handoff-session.sh:27`), sets the env knob to `"abc"`, and asserts `rc == 3` **and** `_did_not_spawn`. Task 8 step (b) deletes that block; step (e) reverts an invalid env value to `DERIVED`, which is `6` here (the fixture ships no `.sdd-session.json`, so `EXPECTED_HOPS="unknown"`). 3 < 6 ⇒ the gate stops refusing ⇒ **the script spawns**. Exactly what B1 predicted.
+- **The failure is half-silent.** Of that test's three assertions only two flip; the `WARNING:` assertion still passes. Its docstring's claimed positive control ("reaching the refusal proves MAX_HOPS was restored") degrades to half-checked rather than going cleanly red.
+- **Nothing is in scope and nothing runs it.** `grep -rn "hardening" docs/imp-plans/2026-07-30-cmux-spawn-v2/*.md` matches the B1 row and nothing else — not module-3's Write-Scope table (`:49-54`), not `plan.md`'s Module-3 row (`:221`). The dispatch's write scope (line 29) omits it, and its acceptance command (line 72) runs three other files, so the implementer's green run cannot see this.
+
+**I ran the sweep the plan author undercounted, and it is now closed.** `MAX_HOPS`/`.handoff-hops` appear in exactly **two** test files: `test_spawn_handoff.py` (`test_hop_limit_exits_3:138`, seeds `3`, already migrated by plan line 159) and `test_spawn_handoff_hardening.py` (missed). Both seed a counter in `[3,6)` — the interval that silently inverts when the default moves. No third file. Positive control: the same instrument found `run_spawn` in four files, so it reaches the whole harness.
+
+*Fix (all three, or the gate is still open):* (a) add `test_spawn_handoff_hardening.py` to module-3's Write-Scope row for Tasks 8 and 9 **and** to `plan.md`'s Module-3 row — B1 names both; (b) add it to the dispatch's write scope **and** its acceptance command — given that Task 8 moves a global default, the honest acceptance here is the full suite, not a file list; (c) state the pin Task 8 must apply (seed above the new derived ceiling, or set `SUPERPOWERS_CMUX_MAX_HOPS` explicitly, whichever preserves each test's stated intent). This amendment is **free against the 200-line norm** — `deviations.md` row 186 establishes that the module header sits outside any task span, so `validate-plan.py`'s per-task count is unaffected.
+
+**[F2 — BLOCKING] P7-2 is dropped, and Task 8 is its only possible home.** The register schedules **ten** items onto Module 3's `_handoff_support` surface; the dispatch carries nine. Missing: **P7-2** — "`stall-streak` has ZERO CLI coverage… scheduled into Module 3's write scope." Verified: `TestCli` has exactly two tests, neither invoking `stall-streak`. Module 3's Write-Scope table gives `test_handoff_support.py` to **Task 8 only** ("it reverts to read-only for Tasks 9–11"), so a row omitted here is not deferred — it is lost, and `transition-module.py` archives the reports at the boundary. It is also the *same subcommand two other scheduled rows change*: P7-8 rewrites its `OSError` branch and P7-4 is a claim about its argparse contract, and P7-4's "verify empirically" has no regression test to land in without it. *Fix:* add P7-2 as a tenth row, and require the `stall-streak` CLI case to cover the new degraded return from P7-8.
+
+**[F3 — BLOCKING, vacuousness] P7-8's prescription cannot discriminate its own fix.** `stall_streak`'s single `except OSError: return 0` (`:119-120`) serves **two** cases: `FileNotFoundError` = "no log yet, first hop" (a legitimate `0`, so documented in the docstring) and unreadable/corrupt (the defect, measured on an is-a-directory log). The dispatch says only "return `indeterminate`." Applied literally that also converts the genuine first-hop case, contradicting the function's own docstring, plan Step 2's `test_first_hop_baseline_not_stall`, and the existing `TestStallStreak::test_first_hop_and_progress_are_zero` (`:157`). More to the point: **a blanket `indeterminate` passes any test that only pins "unreadable ⇒ indeterminate."** The pin cannot tell a correct fix from a wrong one — the sprint's signature failure. To be explicit about severity: this is **not** over-permissive; both values proceed. *Fix:* instruct splitting `FileNotFoundError` (→ `0`) from other `OSError` (→ `indeterminate`), and require the paired assertion that a **missing** log still returns `0`. That is the positive control that makes the new pin discriminate.
+
+**[F4 — BLOCKING, consent] A third consent path exists that the dispatch never names, and the dispatch actively invites the implementer to change it blind.** Plan step (d) is `SPAWN_POLICY="auto"` guarded by `if [ -f "$MANIFEST_FILE" ]`. So an **absent manifest file** never consults the CLI at all and resolves to `auto` — the exact input for which the Task 7 consent amendment made the Python fail closed (`test_expected_hops_and_policy_cli_on_legacy_and_garbage` asserts `spawn-policy --manifest <missing> == "ask"  # fails CLOSED`). The spec pins only "**Absent block** → `auto`" (`spec-distilled.md:31`) and is silent on an absent manifest *file*, so the two layers disagree on the same input with no contract adjudicating it, and P7-1(ii)'s narrative reads as though the fail-open is closed end-to-end when for this input the Python branch is unreachable.
+
+**I am not claiming the shell is wrong** — `auto` on absent-file is defensible, since every existing `test_spawn_handoff*.py` fixture ships without `.sdd-session.json` and expects a spawn; flipping it would refuse every legacy handoff. The defect is in the dispatch: it hands the implementer "the `2>/dev/null` swallows a CLI failure into consent" and "fail closed to `ask`" with no statement that the `[ -f ]` short-circuit is deliberate and out of scope. Either direction chosen silently is a consent decision made by accident. Also: the plan's `test_absent_manifest_or_block_is_auto` is a **conjunction test** — "no manifest file" (shell short-circuit) and "manifest present, no `handoff` block" (Python `auto` return) are two different code paths, and one test named "or" pins whichever the fixture happens to build. *Fix:* state the absent-FILE contract explicitly, say it stays `auto` and why, and split that test into its two halves.
+
+**[F5 — BLOCKING as written, cheap to fix] Missing Shared Constants / Pattern References, and the consequence is live in step (e).** Step (e) hardcodes `6` and `* 2` into bash (plan lines 214, 219-220), duplicating `CEILING_FLOOR` and `CEILING_FACTOR` from `_handoff_support.py:16-17` — **the very file this task edits in the same commit**. Shell cannot import them and the plan's approach is the only practical one, so I am **not** asking for re-architecture: name the constants in a Shared Constants section, and require a comment at the shell site citing the Python as SSOT so a future divergence is visible rather than silent. Add the Pattern References section citing `spawn-script-layer-style` (its `reason` text is this task's house style verbatim) and `import-only-helper-ssot` (that is `_handoff_support.py`).
+
+---
+
+## Answer to the controller's direct question: is widening Task 8's scope right?
+
+**Yes, and it creates no collision with Tasks 9–11.** `_handoff_support.py` and `test_handoff_support.py` are written by no other Module 3 task, so the widening adds no new sharing; the other five files were already shared across Tasks 8–11 under "strictly serialized, never parallel." The alternatives are worse: a new task renumbers Tasks 9–18 into the manifest `task_range` and the hook's Check 4c (the OP-1 row spells out that cascade), and Module 2 is transitioned and archived, so "route back to a Module 2 follow-up" is not available. Keep `ca70612`. The scope note's "reverts to read-only for Tasks 9–11" is correctly stated in both plan and dispatch.
+
+---
+
+## Premises verified first-hand vs. accepted
+
+**Verified first-hand (ran the probe, always with `/usr/bin/grep` or `find | xargs`, never the shell wrapper):** Contract Constraints byte-identical to plan line 35 (with a diff positive control); the parent plan declares Shared Constants and Pattern References and names Task 8; `test_spawn_handoff_hardening.py` exists, is currently 10/10 green, and is absent from every plan file; `MAX_HOPS_DEFAULT=3` in the live script; the two-file closure of the `MAX_HOPS`/`.handoff-hops` sweep (with a `run_spawn` positive control proving the instrument reached the whole harness); `TestCli`'s exact two-test contents and the absence of any `stall-streak` CLI case; the missing-manifest → `ask` assertion; `_handoff_support.py`'s `except OSError`, lazy `import yaml` placement, `type=int` on `--tasks-done`, and the `auto if manifest is not None` fallback; plan step (e)'s `unknown` coercion and branch ordering; `{1,2}.add(True)` → 2 vs `.add(False)` → 3.
+
+**Accepted from the register / controller without re-measuring:** that `/usr/bin/python3` on this machine ships PyYAML (the P7-7 positive-control premise — I did not run it); that P7-8's `OSError` was measured on an is-a-directory log; that the suite was 707 green at Module 3 entry; that Task 7's three concerns were verified by the controller on `83a9ccf`; P7-9(D)'s mutation-survival (inspected the code and the test list, did not run the mutation). Commits `f06ae2b`/`da5bf58`/`e020e59` I confirmed exist in `git log` but did not audit their diffs — OP-1's disposition was outside this review's scope.
+
+---
+
+## Controller disposition (round 1)
+
+All five findings ACCEPTED. F1 and F2 independently re-verified by the controller before acting:
+- F1: `test_spawn_handoff_hardening.py` confirmed present and **10 passed**; `/usr/bin/grep -rn "hardening"` across all feature `.md` files matches ONLY the B1 register row (positive control: `spawn_handoff_helpers` matches 3 files, so the instrument reaches). B1's gate "before Task 8 dispatches" had NOT cleared.
+- F2: a programmatic enumeration of every register row whose gate names Task 8 or Module 3 returns **eleven** rows (B1, P7-1…P7-9, OP-1). The dispatch carried nine. B1 and P7-2 were both missed by the controller.
+
+**Controller error acknowledged:** the controller read the P7-* block and treated "the nine scheduled rows" from the inherited handoff as the complete set, rather than enumerating the register itself. The handoff's own figure was wrong, and the controller propagated it instead of measuring — the sprint's standing rule ("re-measure before acting on any inherited claim, including a prior review's own bookkeeping") applied and was not followed.

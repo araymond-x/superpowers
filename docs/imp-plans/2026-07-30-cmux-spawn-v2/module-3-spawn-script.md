@@ -48,8 +48,8 @@ _External contracts were frozen into fixtures by Module 1's Task 0 (repo convent
 
 | Task | Owned Files (write) | Read-Only Files | Depends On |
 |------|---------------------|-----------------|------------|
-| Task 8 | `spawn-handoff-session.sh`, `test_spawn_handoff_v2.py`, `test_spawn_handoff.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/*`, **`_handoff_support.py`**, **`tests/unit/test_handoff_support.py`** | — | Task 7 |
-| Task 9 | first five above (`_handoff_support.py` returns to read-only after Task 8) | `_handoff_support.py`, Task 0 fixtures | Task 8 |
+| Task 8 | `spawn-handoff-session.sh`, `test_spawn_handoff_v2.py`, `test_spawn_handoff.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/*`, **`_handoff_support.py`**, **`tests/unit/test_handoff_support.py`**, **`tests/unit/test_spawn_handoff_hardening.py`** (B1) | — | Task 7 |
+| Task 9 | first five above + **`test_spawn_handoff_hardening.py`** (B1); `_handoff_support.py` returns to read-only after Task 8 | `_handoff_support.py`, Task 0 fixtures | Task 8 |
 | Task 10 | same set | Task 0 fixtures | Task 9 |
 | Task 11 | same set | — | Task 10 |
 
@@ -59,7 +59,9 @@ All four tasks write the same files — strictly serialized, never parallel.
 
 **Files:**
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`, and — **for the scheduled deferred rows only** — `skills/subagent-driven-development/scripts/_handoff_support.py`
-- Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`, `tests/unit/test_handoff_support.py`
+- Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`, `tests/unit/test_handoff_support.py`, `tests/unit/test_spawn_handoff_hardening.py` (B1)
+
+**B1 — `test_spawn_handoff_hardening.py` is a THIRD consumer of the moving default, and it is currently 10/10 green.** `test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` seeds `.handoff-hops="3"` against today's `MAX_HOPS_DEFAULT=3` and asserts refusal; step (e) reverts an invalid knob to the DERIVED ceiling, which is `6` for that fixture (no `.sdd-session.json`, so `EXPECTED_HOPS="unknown"`), and 3 < 6 means **the gate stops refusing and the script spawns** — a fail-open regression. It fails only HALF-loudly (its `WARNING:` assertion still passes), so pin it deliberately: seed above the new derived ceiling or set `SUPERPOWERS_CMUX_MAX_HOPS` explicitly, whichever preserves each test's stated intent. **Because Task 8 moves a global default, the acceptance run for this task is the FULL suite, not a file list.** The `MAX_HOPS`/`.handoff-hops` sweep is closed at exactly two test files (this one and `test_spawn_handoff.py::test_hop_limit_exits_3`, already migrated by Step 2).
 
 `_handoff_support.py` was read-only for Module 3 as first written, but seven scheduled rows (P7-1(ii), P7-3, P7-5, P7-6, P7-7, P7-8, P7-9) are production/test edits to it and its test file, and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
 
@@ -128,8 +130,16 @@ class TestPolicyDial:
         r = run_spawn(ctx, tmp_path, "b1", "--user-approved", ...)
         assert "reason=policy-ask" not in r.stderr                  # gate passed (later gates may still act)
 
-    def test_absent_manifest_or_block_is_auto(self, tmp_path):
-        # no .sdd-session.json at all -> policy auto, proceeds past the gate
+    # SPLIT deliberately: "absent file" and "present file, absent handoff block" are
+    # two DIFFERENT code paths (shell `[ -f ]` short-circuit vs Python `auto` return).
+    # One test named "or" pins only whichever the fixture happens to build.
+    def test_absent_manifest_file_is_auto(self, tmp_path):
+        # no .sdd-session.json at all -> shell never calls the CLI -> auto, proceeds
+    def test_present_manifest_without_handoff_block_is_auto(self, tmp_path):
+        # write_manifest(omit_handoff=True) -> CLI returns auto -> proceeds
+    def test_cli_failure_is_non_consent(self, tmp_path):
+        # SUPPORT_CLI pointed at a nonexistent path -> empty stdout -> `ask`, NOT auto
+        # (the *) arm must be non-consent; assert exit 3 + "reason=policy-ask")
 ```
 
 ```python
@@ -179,10 +189,18 @@ SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
 (d) **Precondition 2b — policy** (immediately after `validate_bundle`, BEFORE the cmux-reachable check; nothing reserved yet):
 
 ```bash
+# Absent manifest FILE stays `auto` DELIBERATELY: every pre-v2 handoff ships without
+# .sdd-session.json and must still spawn. The CLI fails closed to `ask` on a missing
+# --manifest, but this `[ -f ]` short-circuit makes that branch unreachable from here.
+# The two layers differ ON PURPOSE on this one input — do not "harmonize" them.
 SPAWN_POLICY="auto"
 if [ -f "$MANIFEST_FILE" ]; then
-  SPAWN_POLICY="$("$PYTHON" "$SUPPORT_CLI" spawn-policy --manifest "$MANIFEST_FILE" 2>/dev/null)"
-  case "$SPAWN_POLICY" in auto|ask|off) : ;; *) SPAWN_POLICY="auto" ;; esac
+  # stderr NOT discarded: a CLI failure must be visible, not silently coerced.
+  SPAWN_POLICY="$("$PYTHON" "$SUPPORT_CLI" spawn-policy --manifest "$MANIFEST_FILE")"
+  # Fail CLOSED: empty stdout (CLI crashed) and every unrecognized value mean
+  # NON-consent. `auto` here would make every failure mode of the SOLE consent
+  # gate resolve to "spawn without asking"; `ask` is retryable and pre-reservation.
+  case "$SPAWN_POLICY" in auto|ask|off) : ;; *) SPAWN_POLICY="ask" ;; esac
 fi
 if [ "$SPAWN_POLICY" = "off" ]; then
   echo "[spawn-handoff] refused: manifest spawn_policy=off (reason=policy-off). Auto-spawn is disabled for this plan — resume manually." >&2
@@ -208,6 +226,9 @@ if [ -f "$MANIFEST_FILE" ]; then
   [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
 fi
 # Ceiling: explicit env wins absolutely; else derived max(6, 2 x expected).
+# SSOT: the literals 6 and 2 below MIRROR CEILING_FLOOR / CEILING_FACTOR in
+# _handoff_support.py — shell cannot import them, so this is a deliberate,
+# NAMED duplication. Change both or neither; a silent divergence is invisible.
 if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
   MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
   if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then

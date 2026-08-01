@@ -218,7 +218,7 @@ _Coordination document — Source Contracts is "None" at the parent level so the
 |--------|------|------|
 | 1 | `module-1-contracts-spikes.md` | Ground truth: live cmux verb-shape fixtures, cold-start handshake timing (pins `SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT` default), SP1/SP2 probes, SP3/SP4 design docs |
 | 2 | `module-2-models-budget.md` | `handoff_spawn` plan field, manifest `handoff` block, `_handoff_support.py` (formula, precedence, tasks_done, stall streak), materialize-manifest wiring |
-| 3 | `module-3-spawn-script.md` | Spawn script rework: policy gate, stall/ceiling, surface topology + shared launch wrapper + workspace fallback, handshake + diagnosis, post-spawn setup |
+| 3 | `module-3-spawn-script.md` | Spawn script rework: policy gate, stall/ceiling, surface topology + shared launch wrapper + workspace fallback, handshake + diagnosis, post-spawn setup. **Also owns `tests/unit/test_spawn_handoff_hardening.py` in Tasks 8–9 (deferred order B1)** — it is a third consumer of the moving `MAX_HOPS` default and of `_did_not_spawn`'s spawn-verb assertion |
 | 4 | `module-4-card-hooks-docs.md` | Mechanics card, N63 checked writes + bookkeeping commit, hooks trio + one baseline capture, Check 9 pathspec, protocol rewrite, e2e Step 14, final verification |
 
 ## Module Dependency Graph
