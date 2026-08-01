@@ -12,7 +12,9 @@ SCRIPTS = (
 sys.path.insert(0, str(SCRIPTS))
 
 from _handoff_support import (  # noqa: E402
+    HOP_DIVISOR,
     CEILING_FLOOR,
+    CEILING_FACTOR,
     expected_hops,
     derive_total_tasks,
     derive_expected_hops,
@@ -196,6 +198,21 @@ class TestDeriveExpectedHops:
             derive_expected_hops({"handoff": {"expected_hops": True}, "total_tasks": 5})
             == 2
         )
+
+
+def test_shared_constants_are_the_ssot_the_shell_mirrors():
+    """The three constants are a PINNED SEAM, not decoration.
+
+    spawn-handoff-session.sh cannot import Python, so its ceiling derivation
+    hardcodes the literals 6 and `* 2` with a comment naming this module as SSOT.
+    An unused-import remover has stripped HOP_DIVISOR/CEILING_FACTOR from this
+    file three times (see deviations.md, Task 7 EnvironmentChange); asserting on
+    them here makes the imports load-bearing so the strip cannot recur silently,
+    and makes a divergence between the two sides fail rather than drift.
+    """
+    assert HOP_DIVISOR == 2.5
+    assert CEILING_FLOOR == 6
+    assert CEILING_FACTOR == 2
 
 
 class TestHopCeiling:
