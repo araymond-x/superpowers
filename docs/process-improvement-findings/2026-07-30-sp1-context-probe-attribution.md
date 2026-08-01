@@ -22,9 +22,10 @@ and only some are:
   the monotonicity table, the 80-row observation-log match and its positive control, and the
   live-replay pair — each recorded with the session id or transcript path it came from, so it
   can be redone by hand. Corpus-wide but unpaired: the 1.9427/1.9979 ratio band, and the figures
-  under "Completeness, not truthiness" — the 98.2% median, 46-of-47 and the 24,234 live-hook
-  reading are the Task 2 quality review's; the 1,010-of-49,222 legitimate-zero count is this
-  fix round's. Reproducing any of these means redoing the measurement against transcripts that are retained
+  under "Completeness, not truthiness" — the 98.2% median and 46-of-47 are the Task 2 quality
+  review's; the 24,234 live-hook reading is the quality review's and was independently re-measured
+  before the guard shipped (both rows are in the table there); the 1,010-of-49,222 legitimate-zero
+  count is the fix round's. Reproducing any of these means redoing the measurement against transcripts that are retained
   but not permanent; none is guaranteed to reproduce once they rotate.
 
 ## The evidence
@@ -248,6 +249,20 @@ the iteration, the live hook read **`tokens=24234 source=probe tier=below action
 loss. `usage_total` therefore requires **all four fields present on the iteration as genuine
 ints** (`bool` excluded — `True` is an `int` subclass that `_coerce_int` maps to 0) before
 trusting it.
+
+Both sides were driven through the live `sdd-pre-dispatch-hook.sh` on the implementer new-task
+path — first by the quality review, then independently re-measured before the guard shipped:
+
+| probe | input | rc | observation row |
+|---|---|---|---|
+| pre-guard | control, unmodified | 2 | `tokens=493759 source=probe tier=hard action=block` |
+| pre-guard | iteration `cache_read` renamed | **0** | **`tokens=24234 source=probe tier=below action=allow`** |
+| guarded | iteration `cache_read` renamed | **2** | `tokens=493759 source=probe tier=hard action=block` |
+
+**Note what that block's shape implies.** Its `iterations` carries a *single* `message` iteration
+— the majority path. The partial-corruption fail-open was therefore never confined to the
+multi-iteration turns this document is about; it reached every turn the probe reads. The guard's
+scope is correspondingly wider than the divergence that motivated it.
 
 **What the guard trades, stated because it is deliberate.** An `iterations` shape that changes in
 a way the guard does not recognize now degrades to the **legacy top-level reading — the known
