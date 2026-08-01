@@ -316,3 +316,25 @@ class TestTaskType:
     def test_schema_version_unchanged(self):
         """Adding task_type is non-breaking — schema version must NOT change."""
         assert CURRENT_SCHEMA_VERSION == 1
+
+
+class TestHandoffSpawn:
+    def test_defaults_to_auto(self):
+        plan = Plan.model_validate(MINIMAL_PLAN)
+        assert plan.handoff_spawn == "auto"
+
+    def test_accepts_ask_and_off(self):
+        for v in ("ask", "off"):
+            data = {**MINIMAL_PLAN, "handoff_spawn": v}
+            plan = Plan.model_validate(data)
+            assert plan.handoff_spawn == v
+
+    def test_rejects_invalid_value(self):
+        data = {**MINIMAL_PLAN, "handoff_spawn": "prompt"}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert exc.value.errors()[0]["type"] == "literal_error"
+
+    def test_schema_version_not_bumped(self):
+        """Adding handoff_spawn is non-breaking — schema version must NOT change."""
+        assert CURRENT_SCHEMA_VERSION == 1
