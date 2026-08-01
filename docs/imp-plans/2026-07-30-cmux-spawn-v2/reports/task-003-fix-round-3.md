@@ -199,9 +199,9 @@ regression battery pins. Recorded as a decision rather than performed.
    the `--ignore-files` sweep gotcha belonging in `CLAUDE.md`. Both untouched.
 
 2. **An error in an immutable report, reported rather than edited.** The round-3 review's
-   IMPORTANT-2 body asserts the doc "names Checks 5c and 5d" and that N81 "mirrors it" — both
-   correct — but its §Closure-table framing of the fix as "four one-clause edits" undercounts
-   by the two paired last-in-range bullets and the fifth N81 site (Deviations 1 and 2). The
+   **IMPORTANT-1 `**Fix.**` line** frames the work as "Four one-clause edits; regenerate N81 from
+   the fence so byte-identity survives." That undercounts by the two paired last-in-range bullets
+   and the fifth N81 site (Deviations 1 and 2). The
    review is a contemporaneous record and I did not modify it; noting it so the count is not
    inherited a fourth time. The pattern is now three rounds deep and consistent: **every
    enumeration of propagation sites in this task has undercounted, including the ones written
