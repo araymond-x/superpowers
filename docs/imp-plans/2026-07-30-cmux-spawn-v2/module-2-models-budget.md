@@ -129,7 +129,7 @@ git commit -m "feat(cmux-spawn-v2): plan.py handoff_spawn consent field (no sche
 - Modify: `skills/scripts/models/sdd_session.py`
 - Test: `tests/unit/test_models/test_sdd_session_model.py`
 
-- [ ] **Step 1: Write the failing tests.** `_minimal_session()` **DOES NOT EXIST** — verified, see the note below. Use the file's real idiom: the module-level `MINIMAL_SESSION` dict spread into `SddSession.model_validate({**MINIMAL_SESSION, ...})`, exactly as `TestSddSessionGoldenInput` does. Add `Handoff` to the existing `from sdd_session import (...)` block.
+- [x] **Step 1: Write the failing tests.** `_minimal_session()` **DOES NOT EXIST** — verified, see the note below. Use the file's real idiom: the module-level `MINIMAL_SESSION` dict spread into `SddSession.model_validate({**MINIMAL_SESSION, ...})`, exactly as `TestSddSessionGoldenInput` does. Add `Handoff` to the existing `from sdd_session import (...)` block.
 
 ```python
 class TestHandoffBlock:
@@ -213,9 +213,9 @@ is the symmetric guard to Task 4's `test_literal_is_closed_set`. `SpawnPolicy` h
 (deliberately not shared — the `implementer_report.TaskType` precedent), which is exactly the
 shape where one-sided drift goes unnoticed. Task 4's guard watches only `plan.py`'s copy.
 
-- [ ] **Step 2: Run to verify failure** — expect FAIL (extra field forbidden).
+- [x] **Step 2: Run to verify failure** — expect FAIL (extra field forbidden).
 
-- [ ] **Step 3: Implement** — in `sdd_session.py`, after `RequirementLevel`:
+- [x] **Step 3: Implement** — in `sdd_session.py`, after `RequirementLevel`:
 
 ```python
 SpawnPolicy = Literal["auto", "ask", "off"]
@@ -235,7 +235,7 @@ and in `SddSession` (after `dispatch_log_sentinel`):
     handoff: Handoff | None = None
 ```
 
-- [ ] **Step 4: Run** — the class, then the whole model dir, then the session CLI on a real manifest to prove backward compat:
+- [x] **Step 4: Run** — the class, then the whole model dir, then the session CLI on a real manifest to prove backward compat:
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_models/ -v
@@ -244,7 +244,7 @@ and in `SddSession` (after `dispatch_log_sentinel`):
 
 (The old manifest may not exist in this worktree; if absent, construct one via `materialize-manifest.py` against the prior feature's plan in a temp dir, or rely on `test_absent_handoff_still_validates` — do not skip the backward-compat assertion in tests.)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — landed as `f91b94f`; a `[task 5 fix]` round added three mutation-killing tests in `d1741e0` (`test_expected_hops_accepts_one`, `test_rejects_invalid_spawn_policy`, `test_expected_hops_must_be_an_integer` — see deviations). Suite 671 → 674.
 
 ```bash
 git add skills/scripts/models/sdd_session.py tests/unit/test_models/test_sdd_session_model.py
