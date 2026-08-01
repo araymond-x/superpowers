@@ -258,7 +258,7 @@ git commit -m "feat(cmux-spawn-v2): sdd_session.py optional handoff block (expec
 - Modify: `skills/subagent-driven-development/scripts/materialize-manifest.py`
 - Test: `tests/unit/test_handoff_support.py` (new), `tests/unit/test_materialize_manifest.py`
 
-- [ ] **Step 1: Write the failing tests** (new file `tests/unit/test_handoff_support.py`):
+- [x] **Step 1: Write the failing tests** (new file `tests/unit/test_handoff_support.py`):
 
 ```python
 """_handoff_support.py — formula, precedence, degradation."""
@@ -320,9 +320,9 @@ class TestHopCeiling:
         assert hop_ceiling(None) == CEILING_FLOOR
 ```
 
-- [ ] **Step 2: Run to verify failure** — `ModuleNotFoundError: _handoff_support`.
+- [x] **Step 2: Run to verify failure** — `ModuleNotFoundError: _handoff_support`.
 
-- [ ] **Step 3: Implement `_handoff_support.py`** (import-only in this task; CLI arrives in Task 7):
+- [x] **Step 3: Implement `_handoff_support.py`** (import-only in this task; CLI arrives in Task 7):
 
 ```python
 """Hop-budget support for the SDD auto-spawn handoff (cmux-spawn-v2).
@@ -391,9 +391,9 @@ def hop_ceiling(exp):
     return max(CEILING_FLOOR, CEILING_FACTOR * exp)
 ```
 
-- [ ] **Step 4: Run** — the new test file passes.
+- [x] **Step 4: Run** — the new test file passes.
 
-- [ ] **Step 5: Write the failing materialize tests** (append to `tests/unit/test_materialize_manifest.py`). **`_materialize()` DOES NOT EXIST** — verified; third instance of this plan-wide phantom-helper defect after `_minimal_plan()` and `_minimal_session()`, pre-resolved here rather than handed to an implementer. Real idiom: module-level `make_plan(tier=, tasks=, modules=, omit_tier=)` returns plan TEXT, then `run_materialize(plan, tmp_dir=)` returns a dict whose `["manifest"]` is the parsed JSON; wrap in `tempfile.mkdtemp()` + `try/finally shutil.rmtree` (both already imported). Two signature traps: `tasks` is a **list of dicts** (`[{"id": i}]`), NOT a count; and there is **no `extra_frontmatter` param** — add one to `make_plan` (you own the file) so frontmatter can carry `handoff_spawn`. There is no `tmp_path` fixture in this file.
+- [x] **Step 5: Write the failing materialize tests** (append to `tests/unit/test_materialize_manifest.py`). **`_materialize()` DOES NOT EXIST** — verified; third instance of this plan-wide phantom-helper defect after `_minimal_plan()` and `_minimal_session()`, pre-resolved here rather than handed to an implementer. Real idiom: module-level `make_plan(tier=, tasks=, modules=, omit_tier=)` returns plan TEXT, then `run_materialize(plan, tmp_dir=)` returns a dict whose `["manifest"]` is the parsed JSON; wrap in `tempfile.mkdtemp()` + `try/finally shutil.rmtree` (both already imported). Two signature traps: `tasks` is a **list of dicts** (`[{"id": i}]`), NOT a count; and there is **no `extra_frontmatter` param** — add one to `make_plan` (you own the file) so frontmatter can carry `handoff_spawn`. There is no `tmp_path` fixture in this file.
 
 ```python
 class TestHandoffBlockMaterialization:
@@ -416,7 +416,7 @@ class TestHandoffBlockMaterialization:
         assert self._mf(extra_frontmatter="handoff_spawn: off", ok=False)["exit_code"] != 0
 ```
 
-- [ ] **Step 6: Implement the materialize wiring** — import beside the existing `_midpoint` import (mid-file, ~line 59 — NOT the file top), then in `materialize()` between `total_tasks` and the `SddSession(...)` call:
+- [x] **Step 6: Implement the materialize wiring** — import beside the existing `_midpoint` import (mid-file, ~line 59 — NOT the file top), then in `materialize()` between `total_tasks` and the `SddSession(...)` call:
 
 ```python
 from _handoff_support import expected_hops   # beside the _midpoint import
@@ -430,7 +430,7 @@ from _handoff_support import expected_hops   # beside the _midpoint import
 
 Pass `handoff=handoff` into `SddSession(...)`. The model then validates the literal, so a non-`None` bad value (incl. `False` from bare `off`) fails materialization **loudly** — correct: the plan gate should have caught it.
 
-- [ ] **Step 7: Run everything this touches**
+- [x] **Step 7: Run everything this touches**
 
 ```bash
 .venv/bin/python3 -m pytest tests/unit/test_handoff_support.py tests/unit/test_materialize_manifest.py tests/unit/test_models/ -v
@@ -439,7 +439,7 @@ bash tests/integration/sdd-e2e-test.sh   # Steps 1-13 exercise materialize + che
 
 All PASS. The e2e run here is load-bearing: it proves old consumers (hook, checkpoint, transition) tolerate the new manifest key.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/_handoff_support.py \
