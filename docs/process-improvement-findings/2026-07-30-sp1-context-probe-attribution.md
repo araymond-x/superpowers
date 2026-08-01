@@ -15,14 +15,17 @@ unless a later date is given, and they come in two kinds — the distinction is 
 promised away, because an earlier draft of this sentence claimed all of them were re-runnable
 and only some are:
 
-- **Corpus-wide figures are paired with the command that recomputes them**: the prevalence sweep,
-  the single-iteration no-op proof, the multi-iteration population count, the committed fixture's
-  ratio, and the baseline-grep claims under "Files changed".
-- **Session-specific figures are dated observations, not re-runnable one-liners**: the
-  monotonicity table, the 80-row observation-log match and its positive control, the live-replay
-  pair, and the 1.9427/1.9979 ratio band. Each is recorded with the session id or transcript path
-  it was taken from, so it can be redone by hand for as long as those transcripts are retained —
-  retention is not guaranteed, and none of them is guaranteed to reproduce once they rotate.
+- **Paired with the command that recomputes them**: the prevalence sweep, the single-iteration
+  no-op proof, the multi-iteration population count, the corpus differential for the fix, the
+  committed fixture's ratio, and the baseline-grep claims under "Files changed".
+- **Everything else is a dated observation, not a re-runnable command.** Session-specific:
+  the monotonicity table, the 80-row observation-log match and its positive control, and the
+  live-replay pair — each recorded with the session id or transcript path it came from, so it
+  can be redone by hand. Corpus-wide but unpaired: the 1.9427/1.9979 ratio band, and the figures
+  under "Completeness, not truthiness" — the 98.2% median, 46-of-47 and the 24,234 live-hook
+  reading are the Task 2 quality review's; the 1,010-of-49,222 legitimate-zero count is this
+  fix round's. Reproducing any of these means redoing the measurement against transcripts that are retained
+  but not permanent; none is guaranteed to reproduce once they rotate.
 
 ## The evidence
 
