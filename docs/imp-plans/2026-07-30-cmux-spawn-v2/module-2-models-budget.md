@@ -156,7 +156,36 @@ class TestHandoffBlock:
         import json
         s2 = SddSession.model_validate(json.loads(s.model_dump_json()))
         assert s2.handoff == s.handoff
+
+    def test_partial_block_rejected(self):        # deferred order B4 — see note below
+        for partial in ({}, {"spawn_policy": "ask"}):
+            with pytest.raises(ValidationError):
+                _minimal_session(handoff=partial)
+
+    def test_spawn_policy_literal_is_closed_set(self):   # carry-forward from Task 4 quality r2
+        from typing import get_args
+        assert get_args(Handoff.model_fields["spawn_policy"].annotation) == ("auto", "ask", "off")
 ```
+
+**Deferred order B4 — the pinned reading, applied here and in Module 3.** `Handoff.expected_hops`
+stays **required** (`int = Field(ge=1)`), i.e. the block is **all-or-nothing**: absent entirely is
+legal (pre-v2 manifests, `handoff: None`), present-but-partial is not. Rationale: at
+materialization `total_tasks` has already passed the plan gate, so `expected_hops` is always
+derivable and Task 6 always emits both keys — the "invalid/zero → absent-with-warning"
+degradation in Contract Constraints belongs to the *spawn-time* reader
+(`derive_expected_hops`, which parses raw JSON and never goes through this model), not to
+materialization. The model therefore enforces well-formedness for everything **we** write while
+the CLI stays tolerant of anything we didn't. `test_partial_block_rejected` is the test B4
+requires. **Consumer half:** Module 3 Task 8's `write_manifest` helper defaulted to
+`expected_hops=None, spawn_policy=None`, which emits `"handoff": {}` — invalid under this
+reading; it is amended there to emit a complete block by default (`omit_handoff=True` remains
+the way to build a pre-v2 manifest).
+
+**Carry-forward from Task 4's round-2 quality review.** `test_spawn_policy_literal_is_closed_set`
+is the symmetric guard to Task 4's `test_literal_is_closed_set`. `SpawnPolicy` here and
+`Plan.handoff_spawn` in `plan.py` are two **independent** declarations of the same three values
+(deliberately not shared — the `implementer_report.TaskType` precedent), which is exactly the
+shape where one-sided drift goes unnoticed. Task 4's guard watches only `plan.py`'s copy.
 
 - [ ] **Step 2: Run to verify failure** — expect FAIL (extra field forbidden).
 

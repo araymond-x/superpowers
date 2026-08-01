@@ -64,17 +64,16 @@ All four tasks write the same files — strictly serialized, never parallel.
 - [ ] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
 
 ```python
-def write_manifest(ctx, expected_hops=None, spawn_policy=None, total_tasks=5,
+def write_manifest(ctx, expected_hops=2, spawn_policy="auto", total_tasks=5,
                    tier="standard", task_range=(0, 4), omit_handoff=False):
     """Minimal .sdd-session.json in the feature dir. omit_handoff=True builds a
-    pre-v2 manifest (no handoff block) for derivation-path tests."""
+    pre-v2 manifest (no handoff block) for derivation-path tests. Defaults emit a
+    COMPLETE block: deferred order B4 pins handoff as all-or-nothing, so a partial
+    block is model-invalid — omit_handoff is the only sanctioned way to have none."""
     import json as _json
     m = {"tier": tier, "total_tasks": total_tasks, "task_range": list(task_range)}
     if not omit_handoff:
-        h = {}
-        if expected_hops is not None: h["expected_hops"] = expected_hops
-        if spawn_policy is not None: h["spawn_policy"] = spawn_policy
-        m["handoff"] = h
+        m["handoff"] = {"expected_hops": expected_hops, "spawn_policy": spawn_policy}
     (ctx["wt"] / ctx["feat"] / ".sdd-session.json").write_text(_json.dumps(m))
 
 
