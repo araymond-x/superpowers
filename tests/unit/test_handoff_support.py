@@ -48,7 +48,7 @@ class TestExpectedHops:
 
     def test_invalid_total_raises(self):
         import pytest
-        for bad in (0, -3, "7", None):
+        for bad in (0, -3, "7", None, True):
             with pytest.raises(ValueError):
                 expected_hops(bad, "standard")
 
@@ -111,3 +111,67 @@ class TestHopCeiling:
         assert hop_ceiling(2) == 6                    # max(6, 4)
         assert hop_ceiling(8) == 16
         assert hop_ceiling(None) == CEILING_FLOOR
+
+
+class TestTasksDone:
+    def test_done_and_concerns_count_blocked_and_malformed_do_not(self, tmp_path):
+        from _handoff_support import count_tasks_done
+        r = tmp_path / "reports"
+        _write_report(r, 1, "DONE", task_type="verification", files_changed="[]")
+        _write_report(r, 2, "DONE_WITH_CONCERNS")
+        _write_report(r, 3, "BLOCKED")
+        (r / "task-005-implementer-report.md").write_text("no frontmatter at all")
+        assert count_tasks_done(str(r)) == 2                    # filename alone never counts
+
+    def test_archives_counted_and_duplicates_deduped(self, tmp_path):
+        from _handoff_support import count_tasks_done
+        r = tmp_path / "reports"
+        _write_report(r, 4, "DONE")
+        _write_report(r / "archive-module-1", 1, "DONE")
+        _write_report(r / "archive-module-1", 4, "DONE")        # dupe of live task 4
+        assert count_tasks_done(str(r)) == 2                    # {1, 4}
+
+
+class TestStallStreak:
+    OUT = "2026-07-30T00:00:0{i}Z u{i} outcome hop={i} workspace=w surface=s launch=auto bundle=b quota=ok tasks_done={td} handshake=ok"
+
+    def _streak(self, tmp_path, rows, current):
+        f = tmp_path / "handoff-spawn.log"
+        f.write_text(_log(rows))
+        from _handoff_support import stall_streak
+        return stall_streak(str(f), current)
+
+    def test_first_hop_and_progress_are_zero(self, tmp_path):
+        assert self._streak(tmp_path, [], 0) == 0
+        rows = [self.OUT.format(i=1, td=2), self.OUT.format(i=2, td=4)]
+        assert self._streak(tmp_path, rows, 5) == 0
+
+    def test_one_stall_then_two_consecutive(self, tmp_path):
+        rows = [self.OUT.format(i=1, td=2), self.OUT.format(i=2, td=4)]
+        assert self._streak(tmp_path, rows, 4) == 1
+        rows = [self.OUT.format(i=1, td=4), self.OUT.format(i=2, td=4)]
+        assert self._streak(tmp_path, rows, 4) == 2
+
+    def test_malformed_last_outcome_is_indeterminate(self, tmp_path):
+        rows = ["2026-07-30T00:00:01Z u1 outcome hop=1 workspace=w launch=auto"]  # no tasks_done=
+        assert self._streak(tmp_path, rows, 3) == "indeterminate"
+
+
+class TestCli:
+    def _run(self, *args):
+        return subprocess.run([VENV_PY, SUPPORT, *args], capture_output=True, text=True)
+
+    def test_tasks_done_cli(self, tmp_path):
+        r = tmp_path / "reports"
+        _write_report(r, 1, "DONE")
+        out = self._run("tasks-done", "--reports-dir", str(r))
+        assert out.returncode == 0 and out.stdout.strip() == "1"
+
+    def test_expected_hops_and_policy_cli_on_legacy_and_garbage(self, tmp_path):
+        m = tmp_path / "m.json"
+        m.write_text('{"total_tasks": 5, "tier": "standard"}')   # pre-v2: no handoff block
+        assert self._run("expected-hops", "--manifest", str(m)).stdout.strip() == "2"
+        assert self._run("spawn-policy", "--manifest", str(m)).stdout.strip() == "auto"
+        m.write_text('{"total_tasks": 0}')
+        assert self._run("expected-hops", "--manifest", str(m)).stdout.strip() == "unknown"
+        assert self._run("spawn-policy", "--manifest", str(tmp_path / "no.json")).stdout.strip() == "ask"   # fails CLOSED
