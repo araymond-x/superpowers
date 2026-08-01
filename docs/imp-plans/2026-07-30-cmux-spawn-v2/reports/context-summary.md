@@ -1,17 +1,36 @@
-# Context Summary — cmux-spawn-v2, Module 1 midpoint (after Tasks 0 and 1)
+# Context Summary — cmux-spawn-v2, **MODULE 1 COMPLETE and transitioned**
 
-Written at the manifest's `context_summary_at: 2` boundary, before the Task 2 dispatch. Compresses the completed tasks' reports so a fresh controller can resume without re-reading ~180KB of flight recorder. Source reports remain in `reports/` and are authoritative where this summary is terse.
+Updated 2026-08-01 at the Module 1→2 boundary (superseding the Module-1-midpoint version, whose Task 0/1/2 detail is retained below). Compresses Module 1 so a fresh controller can resume at Module 2 without re-reading ~400KB of flight recorder. **The source reports now live under `reports/archive-Contracts, cold-start measurement, spikes/`** and remain authoritative where this summary is terse.
+
+> **Why this file was hand-updated, not regenerated.** `context-summary.py` returns `{"error": "No implementer report files found"}` after a transition — **it is not archive-aware**, so it cannot see the reports `transition-module.py` just moved. This is the sibling of the N4/N27 archive-awareness fixes already applied to `controller-checkpoint.py`. Logged in `deviations.md`; file a BACKLOG row at merge. **Consequence: after every module transition the context summary must be written by hand, or the script taught to glob `archive-*/`.**
 
 ## Where the sprint stands
 
 | | |
 |---|---|
 | Feature | `docs/imp-plans/2026-07-30-cmux-spawn-v2/` — parent + 4 modules, 19 tasks (0–18) |
-| Module | 1 of 4 — "Contracts, cold-start measurement, spikes", tasks 0–3 |
-| Complete | **Task 0** (11/11 boxes, commit `474c1bb`), **Task 1** (4/4 boxes, commit `9669b09`) |
-| Next | **Task 2** (SP1 — `context-probe.py` `[task N fix]` attribution root cause), then Task 3, then the Module 1→2 transition |
+| Module | **2 of 4** — "Models + hop-budget support layer", tasks **4–7** |
+| Complete | **Module 1 in full** — Task 0 (11/11), Task 1 (4/4), Task 2 (4/4), Task 3 (3/3) **+ all 8 acceptance criteria** = 30/30 checkboxes. Commits `474c1bb`, `9669b09`, `43bdcee`, `783973b`, transition `dafc119` |
+| Next | **Task 4** — `plan.py: handoff_spawn` field. The sprint's **first code task** |
+| Manifest | `active_module_id: 2`, `task_range: [4,7]`, `midpoint: 6`, `context_summary_at: 6` (recomputed by the transition — the N11 fix working) |
 | Tier | `standard`. Dispatch, spec review, quality review, partner review all **dispatched**, not self-written |
-| Baseline | unit suite 641; `verify-symlink-install.sh` 104/0/0; plan gate PASS / 0 blockers / 0 warnings on all 5 files; tree clean; zero residual cmux probe workspaces |
+| Baseline at transition | unit **658 passed**; `verify-symlink-install.sh` **104/0/0**; plan gate **PASS / 0 / 0** on all 5 files; tree clean; zero residual cmux probe workspaces (verified live twice) |
+
+## Post-transition state — read before your first dispatch
+
+- **The live `.dispatch-log` is truncated to 0 lines.** Correct and expected. The archived copy keeps its `# sdd-hook-sentinel …` header; the live one gets a **fresh sentinel written lazily** by the hook on the next reviewer dispatch (its integrity check is WARN-only, never blocks). **Do not try to restore it.**
+- **Check 4c will SKIP for Task 4** — `PREV=3 < MANIFEST_TASK_START=4` (the N3a boundary guard). Boundary provenance was already re-verified by `transition-module.py:validate_module_completion`. Not a gap.
+- **Still owed before the Task 4 implementer dispatch:** `reports/checkpoint-pre-dispatch-004.json` and `reports/partner-review-004.md`.
+- `checkpoint-pre-dispatch-00{0..3}.json`, `partner-review-00{1,2,3}.md`, `pre-execution-audit*.md` and the two live logs stayed in `reports/` — the archive glob is `task-NNN-*` only.
+- **Module 2 gates two deferred audit orders**: **B4** (before Task 5 — pin ONE reading of `Handoff.expected_hops`: either `int | None = None` with a test, or `write_manifest` always emits it with a test that a partial block is rejected) and **B7** (new `.py` under `subagent-driven-development/scripts/` is scanned by `check_python39_compat` → **no PEP-604 unions, no builtin generics in annotations** — while `X | None` IS correct in `skills/scripts/models/`, which is not scanned).
+
+## Task 3 — SP3 + SP4 design docs + BACKLOG rows (COMPLETE)
+
+Review tier **upgraded minimum → standard** (third writer of the shared `BACKLOG.md`; the deliverable is an id allocation against `main`, the operation that produced the earlier N76 collision). Partner APPROVED → spec PASS → quality **CHANGES_REQUESTED ×3** → APPROVED. **The adversarial quality review is now 7-for-7 on green upstreams** — and round 4 approved with only cosmetics, which is the convergence signal.
+
+- **SP3 → BACKLOG N80**: a context guard for non-SDD sessions. The SDD gate cannot simply extend — it is manifest-gated and fires on the implementer **new-task** path only (`IS_IMPLEMENTER && ! MARKED_FIX`). Recommendation is an **advisory observer**, sequenced behind a contract-verification spike. **Its `$127`/569k motivating evidence has NO primary artifact** — a full 7-log sweep found no such row — so it is used as motivation only and **no threshold may rest on it**.
+- **SP4 → BACKLOG N81**: a sanctioned carry-forward fix lane. Recommendation **defers rather than enables** and says so; the residual (a module-N defect blocking module N+1 *immediately*) is explicitly unsolved. Three axes deliberately left open: always-used vs may-be-unused, **interior vs last-in-range placement**, and **headered vs manifest-only plan shape** — these determine whether an unused reserved slot is caught by 1, 2 or 3 gates.
+- Useful facts established while writing it: **Check 9 (`_check_verification_git_reality`) opens `if not verification_ids: return []` and iterates only `task_type: verification` tasks**, so it never polices ordinary implementation or fix dispatches. The hook writes its dispatch-log row **before** the task-range guard, so a refused dispatch still leaves a row claiming it happened (**Module 4 to evaluate**).
 
 ## Task 0 — contract verification + cold-start measurement (COMPLETE)
 
@@ -75,4 +94,16 @@ Review tier **upgraded minimum → standard** by controller decision (shared fil
 | Deferred audit orders B1, A3b/c+B2, B3, B4, B7, B8a | Their owning tasks — see Deferred Work table |
 | **N67 will conflict on merge** — `main` edited it since the merge-base and so did this branch. The resolution MUST preserve both sides: main's edits AND this branch's `UPDATE 2026-07-30 — DISPOSITIONED BY N79` clause. A "take theirs" drops the discharge instruction and sends a future reader to re-run a probe already run. Rows main touched since `fa2d482`: N55, N56, N57, N61, N63, N64, N66, N67, N68, N70, N73, plus new N76–N78 | Merge step |
 | **Main's N76 (the SP1 row) must be UPDATED at merge**, not duplicated. Its replacement text is the final section of `docs/process-improvement-findings/2026-07-30-sp1-context-probe-attribution.md` (Task 2's deliverable), which states the merge action verbatim. Task 2 appends no BACKLOG row by design | Merge step |
-| **Task 3 must allocate ids against `main`, not this branch.** Free on both: **N80, N81**. Enumerate at execution time rather than trusting these | Task 3 |
+| ~~Task 3 must allocate ids against `main`~~ — **DONE**: N80 (SP3) and N81 (SP4) filed, both byte-identical to their doc fences. Next free id on both branches is now **N82** — re-enumerate at execution time rather than trusting this | ~~Task 3~~ closed |
+| **Module 4 to evaluate**: the hook writes its `type=fix` / `type=implementer` dispatch-log row BEFORE the task-range guard, so a refused dispatch leaves a row claiming it happened. Benign for Check 9 today (it reads only `type=implementer` and only for verification tasks), but it is a real property of an append-only tamper-evidence log | Module 4 (hooks trio, Task 14) |
+| **`context-summary.py` is not archive-aware** — after a transition it reports "No implementer report files found" and cannot regenerate. Hand-write the summary at each boundary, or teach it to glob `archive-*/` (the N4/N27 treatment) | Merge-time BACKLOG row |
+
+## Instrument lessons — these changed how this sprint verifies anything
+
+- **`grep` in this shell is a FUNCTION wrapping `ugrep … --ignore-files`**, which honors `.gitignore` and therefore **silently skips `.worktrees/`** — where all SDD work happens. Measured: `find`=7 observation logs, wrapped `grep -rl`=**4**, `/usr/bin/grep -rl`=7. It produced a **false BLOCKING review finding AND a false corroboration of it** (a spec review "re-verified" the same sweep through the same truncated instrument). **Independence of reviewer is not independence of instrument. Use `/usr/bin/grep` or `find -print0 | xargs -0` for every recursive sweep.**
+- **A name-anchored regex cannot falsify its own expectation** — a check anchored on `IMPL_GLOB|SPEC_GLOB|QUAL_GLOB` "proved exactly three" call sites; a bare grep returns **four**. Pair every name-anchored check with a bare one.
+- **A review can be measurably WRONG.** One BLOCKING finding inverted its own measurement; executing it as written would have replaced correct numbers with wrong ones. **Re-measure before dispatching a fix**, and tell fix rounds to report contradictions rather than edit against their own measurement. The measuring party was right against a written premise **four times**, once against the controller's own dispatch.
+- **Give the command, never the number.** A live `type=fix` count went 7→8→9→10 across the rounds *including the rounds editing the sentence*; a bare `grep -c '0→'` drifted 4→7 while an anchored `grep -cE '^\| 0→'` held at 4.
+- **Every propagation sweep undercounted**, including one written to correct an undercount. Treat any enumerated site list as a lower bound and require the sweep as a deliverable.
+- **Walk module acceptance criteria by hand** — `validate_module_completion` polices per-task reports and provenance, **not** the AC list. One AC here was a live `cmux list-workspaces` check nobody had run in four sessions.
+- **Dispatch-description trap**: the hook matches `(spec.compliance|spec.review)` and `(code.quality|quality.review)`. The SDD skill's own `[task N re-review:quality]` marker matches **neither** → `type=unknown` → hard-blocks the next task. Include a classifiable phrase alongside the marker; check `.dispatch-log` after every review dispatch.
