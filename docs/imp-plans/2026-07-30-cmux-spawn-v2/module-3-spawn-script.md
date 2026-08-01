@@ -341,31 +341,39 @@ SENT_CMD="$INLINE_ENV; $SUCCESSOR_CMD"
 # All three publish refs via globals; return non-zero on failure BEFORE the
 # launch command is accepted. After launch_into_target returns 0 the command
 # is accepted: no caller may create another target (double-spawn guard).
-SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""; SPAWN_TOPOLOGY="surface"
-create_surface_target() {
+SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""; SPAWN_TOPOLOGY="surface"; CAPTURED_REF=""
+# ONE capture path for every ref-returning verb (SSOT). Publishes field 2 of the first
+# `OK ` line as CAPTURED_REF ALWAYS — even on failure, so a spawn-failed record can name
+# a partially-created target — relays stdout to stderr, then returns non-zero on mktemp
+# failure, non-zero verb rc, or a ref failing the expected `<prefix>:` shape.
+capture_cmux_ref() {
+  local prefix="$1"; shift
   local out_f rc
+  CAPTURED_REF=""
   out_f="$(mktemp 2>/dev/null)" || return 1
-  CMUX_QUIET=1 cmux new-surface --workspace "$CMUX_WORKSPACE_ID" --type terminal \
-    --working-directory "$WORKTREE_ROOT" --focus false >"$out_f"
+  CMUX_QUIET=1 "$@" >"$out_f"
   rc=$?
-  SPAWN_SURFACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
+  CAPTURED_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
   cat "$out_f" >&2; rm -f "$out_f"
   [ $rc -eq 0 ] || return 1
-  case "$SPAWN_SURFACE_REF" in surface:*) : ;; *) return 1 ;; esac   # per-verb shape, field 2
+  case "$CAPTURED_REF" in "$prefix":*) return 0 ;; *) return 1 ;; esac
+}
+create_surface_target() {
+  capture_cmux_ref surface cmux new-surface --workspace "$CMUX_WORKSPACE_ID" \
+    --type terminal --working-directory "$WORKTREE_ROOT" --focus false
+  local rc=$?
+  SPAWN_SURFACE_REF="$CAPTURED_REF"
+  [ $rc -eq 0 ] || return 1
   SPAWN_WORKSPACE_REF="$CMUX_WORKSPACE_ID"
   return 0
 }
 create_workspace_target() {   # one-shot fallback — canonical verb (Decision 19)
-  local out_f rc
   SPAWN_TOPOLOGY="workspace-fallback"
-  out_f="$(mktemp 2>/dev/null)" || return 1
-  CMUX_QUIET=1 cmux workspace create --name "SDD resume: $FEATURE_NAME" \
-    --cwd "$WORKTREE_ROOT" --focus false >"$out_f"
-  rc=$?
-  SPAWN_WORKSPACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
-  cat "$out_f" >&2; rm -f "$out_f"
+  capture_cmux_ref workspace cmux workspace create --name "SDD resume: $FEATURE_NAME" \
+    --cwd "$WORKTREE_ROOT" --focus false
+  local rc=$?
+  SPAWN_WORKSPACE_REF="$CAPTURED_REF"
   [ $rc -eq 0 ] || return 1
-  case "$SPAWN_WORKSPACE_REF" in workspace:*) : ;; *) return 1 ;; esac
   # Resolve the selected surface. Task 0 MEASURED `* ` prefixing the selected row, so awk's
   # $1 there is `*`, NOT the ref — and this fallback's fresh workspace has exactly ONE
   # always-selected surface: a $1 parser fails 100% in production yet passes a marker-less
