@@ -104,3 +104,84 @@ does not propagate into Module 3.
 - `derive_expected_hops` still raises `TypeError` if `manifest["modules"]` is a non-iterable scalar
   (R3-2 closed only the non-dict *manifest* case). Reachable only by hand-edit; exits non-zero
   rather than fail-open.
+
+---
+
+# Task 7 — Controller Partner Review (round 2)
+
+**Verdict: APPROVED**, contingent on one precondition (a `deviations.md` address fix, outside
+Task 7's write scope), now discharged.
+
+## Finding 1 — CLOSED, measured by EXECUTION not by reading
+
+The partner materialized the plan's Step 3 block onto a copy of the real `_handoff_support.py`
+and ran the CLI across a 15-case matrix:
+
+| Manifest | `spawn-policy` | `expected-hops` |
+|---|---|---|
+| `{"handoff":{"spawn_policy":"off"}}` | `off` | unknown |
+| `{"handoff":{"spawn_policy":"ask"}}` | `ask` | unknown |
+| `{"handoff":{"spawn_policy":"auto"}}` | `auto` | unknown |
+| **`{"total_tasks":5,"tier":"standard"}` (legacy pin)** | **`auto`** | **`2`** |
+| corrupt JSON | **`ask`** | unknown |
+| non-object (`[1,2,3]` / `null` / `"hello"`) | **`ask`** | unknown |
+| **missing file** | **`ask`** | unknown |
+
+The legacy pinned case still yields `auto` AND `2` — both halves hold. `expected-hops` is
+unchanged: `manifest or {}` reproduces the old `{}` in every degraded case.
+
+**`ask` is genuinely non-permissive, verified through the shell layer:** the `ask` arm sits
+immediately after `validate_bundle` and BEFORE the cmux-reachable check, exits 3 without
+reserving, and module 3's test asserts `.handoff-hops` does not exist. The CLI exits **0** while
+printing `ask`, so the shell's `$( … 2>/dev/null)` capture receives it and the `case` matches a
+recognized arm — the fix survives the shell rather than dying in it.
+
+## Finding 2 — CLOSED, measured
+
+Symbol counts in Task 7 Step 1 vs the landed test file: `subprocess` 1 occurrence (`TestCli._run`)
+— claim accurate; `HOP_DIVISOR` / `CEILING_FACTOR` **zero** — correctly described as preserved by
+Task 6's record rather than by Step 1; `CEILING_FLOOR` used at line 113 — correctly described as
+already in use. The `deviations.md` row carries the correction, so it will not reach Module 3.
+
+## Precondition raised and DISCHARGED — P7-1 was misaddressed
+
+P7-1 targeted "Module 3, Task 12". The `SPAWN_POLICY` block is at module-3 lines 180/183, inside
+**Task 8** (58–251); **Task 12 is in module 4 entirely** (`write-mechanics-card.py`). Controller
+verified both facts and corrected the address.
+
+> "The address resolves to a wrong-but-existing target, which is the worst shape — it reads as
+> valid. Since `transition-module.py` consumes this register at the boundary, a misaddressed order
+> is functionally a dropped one, and what would be dropped is the shell half of a consent
+> fail-open."
+
+The error originated in the partner's round-1 text and the controller transcribed it faithfully —
+a reminder that a faithful transcription of a wrong premise is still a wrong premise.
+
+## Residual over-permissive case — folded into P7-1, not filed separately
+
+A **readable** manifest with a **present but invalid** `spawn_policy` still yields `auto`: `"OFF"`,
+`"Off"`, JSON `false`, `null`, or a non-dict `handoff`. Graded non-blocking on **measured**
+reachability: both manifest writers reject invalid values (`materialize-manifest.py` fails loudly
+on bare `off`; `transition-module.py` routes through `SddSession.model_validate`; `spawn_policy` is
+a closed `Literal`), so it needs an out-of-band hand-edit — materially weaker than round 1's, which
+needed only a missing file. **Recorded with the reason it is not redundant with P7-1's shell fix:
+changing `*) → ask` cannot help, because `auto` is a recognized value matching its own arm.**
+
+## Budget, validation, baseline
+
+All 5 plan files PASS / 0 blockers / 0 warnings. Tasks 4/5/6/7 = 47/128/197/**200** (at cap).
+`git diff --stat 64ba56a..441d3a4 -- '*.py' '*.sh'` is **empty**, so the 697 baseline holds by
+construction and needed no re-run.
+
+**One controller claim corrected:** the docstring compression did lose a clause — `stall_streak`
+dropped `(fail-closed stays with .handoff-hops)`. No behavioral contract was lost (0 = progress/
+first hop, `indeterminate` = newest malformed, caller SKIPs all survive) and the clause is
+recoverable from module-3's Contract Constraints, but "content unchanged" was not exactly right.
+
+## Examined and cleared
+
+`_REPORT_GLOB = "task-*-implementer-report*.md"` — the trailing `*` is repo convention
+(`context-summary.py`, `controller-checkpoint.py`) and this version is tighter, requiring `.md`. It
+matches the real fix-round filenames on disk via the leading `*`. A superseded report could let a
+task count as done when its latest round is BLOCKED, but that is the pinned contract, not a
+deviation from it. Observation only.
