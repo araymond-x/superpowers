@@ -458,7 +458,7 @@ git commit -m "feat(cmux-spawn-v2): _handoff_support formula/precedence SSOT + m
 - Modify: `skills/subagent-driven-development/scripts/_handoff_support.py`
 - Test: `tests/unit/test_handoff_support.py`
 
-- [ ] **Step 1: Write the failing tests** (append; the module-level helpers from the "Shared test helpers" section above must already be in the file):
+- [x] **Step 1: Write the failing tests** (append; the module-level helpers from the "Shared test helpers" section above must already be in the file):
 
 ```python
 class TestTasksDone:
@@ -525,9 +525,9 @@ class TestCli:
         assert self._run("spawn-policy", "--manifest", str(tmp_path / "no.json")).stdout.strip() == "ask"   # fails CLOSED
 ```
 
-- [ ] **Step 2: Run to verify failure** — ImportError on `count_tasks_done` / `stall_streak`; CLI exits 2.
+- [x] **Step 2: Run to verify failure** — ImportError on `count_tasks_done` / `stall_streak`; CLI exits 2.
 
-- [ ] **Step 3: Implement** (append to `_handoff_support.py`):
+- [x] **Step 3: Implement** (append to `_handoff_support.py`):
 
 ```python
 import glob, json, os, re, sys   # noqa: E401 — split one-per-line in the real file (house style)
@@ -635,9 +635,9 @@ if __name__ == "__main__":
     sys.exit(_cli(sys.argv[1:]))
 ```
 
-- [ ] **Step 4: Run** — `.venv/bin/python3 -m pytest tests/unit/test_handoff_support.py -v` — all PASS. Then the module-wide check: `.venv/bin/python3 -m pytest tests/unit/ -q` — no regressions.
+- [x] **Step 4: Run** — `.venv/bin/python3 -m pytest tests/unit/test_handoff_support.py -v` — all PASS. Then the module-wide check: `.venv/bin/python3 -m pytest tests/unit/ -q` — no regressions.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/_handoff_support.py tests/unit/test_handoff_support.py
@@ -646,9 +646,9 @@ git commit -m "feat(cmux-spawn-v2): tasks_done counting + stall streak + _handof
 
 ## Module 2 Acceptance Criteria
 
-- [ ] `Plan` accepts `handoff_spawn` (default `auto`); every pre-existing plan still validates; schema version still 1.
-- [ ] `SddSession` accepts an optional `handoff` block; pre-v2 manifests (no block) still validate.
-- [ ] `materialize-manifest.py` writes `handoff` with the Decision 9 `expected_hops` and the plan's `spawn_policy`.
-- [ ] `_handoff_support.py` is the ONLY place the formula constants (2.5 / 6 / 2), precedence, tasks_done rules, and stall streak live.
-- [ ] CLI prints `unknown` / `indeterminate` as values (exit 0) — degradation is observable, never an exception.
-- [ ] Full unit suite + e2e Steps 1-13 green.
+- [x] `Plan` accepts `handoff_spawn` (default `auto`); every pre-existing plan still validates; schema version still 1.
+- [x] `SddSession` accepts an optional `handoff` block; pre-v2 manifests (no block) still validate.
+- [x] `materialize-manifest.py` writes `handoff` with the Decision 9 `expected_hops` and the plan's `spawn_policy`.
+- [x] `_handoff_support.py` is the ONLY place the formula constants (2.5 / 6 / 2), precedence, tasks_done rules, and stall streak live.
+- [~] CLI prints `unknown` / `indeterminate` as values (exit 0) — degradation is observable. **PARTIAL, deliberately not green.** Every path the plan's Step 3 text specifies is met, but three measured paths violate it and are scheduled to Module 3: P7-3 (empty `reports/` + no PyYAML prints a fake `0`), P7-6 (a non-UTF-8 report byte raises `UnicodeDecodeError`, escaping the `except OSError` → exit 1, empty stdout), P7-8 (`stall_streak` returns `0` = proceed on any `OSError`). All three need a production edit to a plan-verbatim body, which Task 7 was not permitted to make. Quality review round 2 required this annotation before the module transition, because the reports carrying these findings get archived at the boundary while this register survives it.
+- [x] Full unit suite + e2e Steps 1-13 green.

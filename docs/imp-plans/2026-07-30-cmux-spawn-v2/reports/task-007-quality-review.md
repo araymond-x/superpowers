@@ -211,3 +211,283 @@ Scheduled to Module 3, not required here: **Minor 1** (with P7-3 — same functi
 **Fix-round mechanics:** the pre-commit format hook has attacked this file twice (it deleted the `HOP_DIVISOR` / `CEILING_FACTOR` seams and churned Task 6's lines). A test-only commit still touches a `.py` file — use the proven `git commit --no-verify` workaround and verify the two pinned imports survive at HEAD.
 
 **CHANGES_REQUESTED**
+
+---
+
+# Round 2 — Adversarial Code Quality Review
+
+**Fix commit:** `cf5de3b` (test-only) · **Implementation:** `83a9ccf` (unchanged) · **Docs:** `b7bc19f`
+**Round-1 verdict:** CHANGES_REQUESTED (2 Major, 4 Minor, 2 Nit).
+
+**Verdict: APPROVED (Task 7 code + tests) — TRANSITION BLOCKED until the three record-integrity conditions land.** Every required round-1 finding closes by mutation as the sole failure, and the fix is provably test-only. But one **Major** is filed against the *record*, not the code: `deviations.md` has no row for the measured AC-5 violation, and the transition is about to archive the only file that does. Four new Minors and two new Nits besides; none of those blocks.
+
+**Read the closing line, not this one, for what gates the transition.**
+
+**One correction to the dispatch brief:** round 1 ran 14 mutations of which **11** survived, not 12 (14 rows minus PC, M9, M10). All 11 were re-run.
+
+---
+
+## Harness
+
+| Control | Result |
+|---|---|
+| **Positive control** — `_DONE_STATUSES` → `("DONE",)` | **CAUGHT** (1 failed, 28 passed), sole failure. The battery can still detect a break. |
+| **Anchor uniqueness** | Every edit asserts `txt.count(old) == 1` and **aborts without running** otherwise. Load-bearing here: `isinstance(tid, int) and not isinstance(tid, bool)` appears **twice** (`derive_total_tasks`'s `task_ids` loop and `count_tasks_done`), and `manifest or {}` appears twice. Both were disambiguated with multi-line context anchors; zero ABORTs fired, so every mutation applied to exactly one site. |
+| **`__pycache__`** | Cleared before *and* after every run (`find . -path ./.venv -prune -o -name __pycache__ -print0 \| xargs -0 rm -rf`); every pytest invocation used `-p no:cacheprovider`. |
+| **Sole-failure discipline** | The harness captures the `FAILED …::test_name` lines, not just the tail. Every CAUGHT below names exactly one test (the sole intentional exception is control N9, which correctly breaks two). |
+| **Recursive sweeps** | `/usr/bin/grep` only. |
+| **Restore** | Two-file in-memory restore + sha256 assertion after *every* mutation; battery ends `RESTORE-OK`. Final: `git status --porcelain -- skills tests` **empty**; worktree sha256 of `_handoff_support.py` `7b62714a…c550ef` == `git show HEAD:` == `git show 83a9ccf:`. No `git stash`. Nothing committed. |
+
+**Instrument failure caught mid-run (the sprint's ninth).** An ad-hoc restore using `ORIG=$(cat $S)` / `printf '%s' "$ORIG"` **silently dropped the file's trailing newline** — sha256 came back `107014ed…`, not `7b62714a…`, and `git status` showed the file dirty. Caught only because restore is *verified* rather than assumed. Repaired with `git checkout --` (never `git stash`). Anyone reusing a shell-variable restore on this feature will hit it: command substitution strips trailing newlines. The Python harness (in-memory string, not `$(cat)`) is unaffected.
+
+**Baselines re-measured, not assumed:** scoped `test_handoff_support.py` **29 passed**; `tests/unit/` ****707 passed** (157s)**; `validate-all-skills.py` ****PASS 160 / FAIL 0 / WARNING 2****. All match the stated baselines.
+
+### Test-only verification, done independently
+
+- `git diff --stat 83a9ccf HEAD -- skills/` → **empty**.
+- `shasum -a 256` of the working-tree `_handoff_support.py` == `git show 83a9ccf:…` == `git show HEAD:…` == `7b62714a80d182b52a255f541ef5cea1f356ec0959ec23ba472977114ac550ef`.
+- The whole `83a9ccf..HEAD` diff outside `docs/` is `tests/unit/test_handoff_support.py` (+28). The implementer's claim holds; not inherited.
+- Both pinned seams `HOP_DIVISOR` and `CEILING_FACTOR` survive on the import line at HEAD (the format hook did not eat them this time).
+
+### Round-2 mutation battery (27 mutations)
+
+| # | Mutation | R1 | R2 | Sole failure |
+|---|---|---|---|---|
+| PC | `_DONE_STATUSES` drops `DONE_WITH_CONCERNS` | CAUGHT | **CAUGHT** | `test_done_and_concerns…` |
+| M1 | consent: `pol = None` | SURVIVED | **CAUGHT** | `test_expected_hops_and_policy_cli…` |
+| M2 | consent: `"off"` dropped | SURVIVED | **CAUGHT** | same |
+| M2b | consent: `"ask"` dropped | SURVIVED | **CAUGHT** | same |
+| M3 | always `"indeterminate"` | SURVIVED | **CAUGHT** | `test_malformed_older_outcome_truncates…` |
+| M4 | `_OUTCOME_RE` → `r""` | SURVIVED | **CAUGHT** | `test_intent_rows_between_outcomes…` |
+| M5 | `task_id` bool guard removed | SURVIVED | **CAUGHT** | `test_done_and_concerns…` |
+| M6 | `task_id` int+bool guards removed | SURVIVED | **CAUGHT** | same |
+| M7 | `isinstance(fm, dict)` removed | SURVIVED | **CAUGHT** | `test_non_mapping_and_invalid_yaml…` |
+| M8 | `yaml.safe_load` try/except removed | SURVIVED | **CAUGHT** | same |
+| M9 | archive glob neutered | CAUGHT | **CAUGHT** | `test_archives_counted…` |
+| M10 | dedup broken | CAUGHT | **CAUGHT** | same |
+| M11 | non-dict JSON not nulled | SURVIVED | SURVIVED | — (dispositioned **P7-5**) |
+| M12 | `except ImportError` → `print(0)` | SURVIVED | SURVIVED | — (round-1 **Minor 4**, scheduled) |
+| **N1** | lazy `import yaml` hoisted to module top | — | **SURVIVED** | → Minor B |
+| **N2** | `derive_expected_hops(manifest or {})` → `(manifest)` | — | **SURVIVED** | → Minor A |
+| **N3** | `_cli` consent `isinstance(h, dict)` removed | — | **CAUGHT** | `test_expected_hops_and_policy_cli…` |
+| **N4** | `derive_expected_hops` `isinstance(h, dict)` removed | — | **SURVIVED** | → Minor D |
+| **N5** | `stall_streak` `except OSError: return 0` → `"indeterminate"` | — | **SURVIVED** | → Minor C |
+| **N6** | `_frontmatter` `startswith("---")` check removed | — | SURVIVED | verified-clean (redundant guard) |
+| **N7** | `_REPORT_GLOB` trailing `*` removed | — | SURVIVED | verified-clean (unused, harmless) |
+| **N8** | stall compare `==` → `>=` | — | SURVIVED | verified-clean (over-blocking = conservative) |
+| **N9** | `reversed()` dropped (control) | — | **CAUGHT** (2) | correctly breaks two |
+| **N10** | `derive_total_tasks` `task_ids` bool guard removed | — | **CAUGHT** | `test_bool_never_counts…` |
+| **D1** | M5 **+ fixture reverted to `task_id: yes`** | — | **SURVIVED** | the deviation, confirmed |
+| **D2** | M5 + landed `task_id: no` fixture | — | **CAUGHT** | the deviation, confirmed |
+| **D3** | N10 **+ sibling `[True, 2]` → `[True, 1]`** | — | **SURVIVED** | → Nit 2 |
+
+---
+
+## The deviation: the implementer was right and round 1 was wrong
+
+**Verified by mutation, both directions**, as instructed:
+
+| Fixture | Mutation | Suite | Count | Verdict |
+|---|---|---|---|---|
+| `task_id: yes` (**my round-1 prescription**) | M5 (bool guard removed) | **29 passed** | stays **2** | **SURVIVED — vacuous** |
+| `task_id: no` (**landed**) | M5 | **1 failed, 28 passed** | moves to **3** | **CAUGHT** |
+
+The mechanism is exactly as reported: PyYAML resolves YAML 1.1 `yes` → `True`; `hash(True) == hash(1)` and `True == 1`, so `done.add(True)` collapses into the already-counted task 1 and the count never moves. `no` → `False` → `0`, which is not in `{1, 2}`, so the mutant reaches 3 and the assertion fires. **My round-1 Minor 2 fix was itself vacuous; the implementer's substitution is correct and its comment states the reason accurately.**
+
+### The generalization — I checked whether the same assumption is load-bearing anywhere else
+
+It is, in one more place, and it is one character from failing. See **Nit 2**.
+
+---
+
+## Anchor integrity of the two extended tests
+
+Both extended tests remain the **sole** failing test for every mutation they anchor — measured, not read:
+
+- `test_expected_hops_and_policy_cli_on_legacy_and_garbage` is the sole failure for M1, M2, M2b **and** N3.
+- `test_done_and_concerns_count_blocked_and_malformed_do_not` is the sole failure for PC, M5 **and** M6.
+
+No mutation produced a multi-test failure except control N9, which is expected to. **Uniqueness is preserved; descriptiveness is not** — see Nit 1.
+
+---
+
+## Blocker
+
+None.
+
+## Major
+
+### Major 3 — RECORD INTEGRITY: the measured AC-5 violation is absent from `deviations.md`, and the transition archives the only file that holds it
+
+**This is the one finding that exists because of *when* this review runs, and it is the only one that cannot be recovered after the transition.**
+
+**Measured, with `/usr/bin/grep` over `docs/imp-plans/2026-07-30-cmux-spawn-v2/deviations.md`:**
+
+| Query | Matches |
+|---|---|
+| `P7-1` / `P7-3` / `P7-4` / `P7-5` | present (rows 166–169) |
+| `UnicodeDecodeError` (round-1 **Minor 1**) | **0** |
+| round-1 **Minor 4** (the `except ImportError` mitigation is untested) | **0** |
+| `AC-5` / `AC5` | **0 — the string does not occur in the file** |
+
+Round-1 Minor 1 is not a coverage gap; it is a **measured** `UnicodeDecodeError` → exit 1 → empty stdout, against an AC whose text is *"never an exception."* It, Minor 4, and round-2 **Minor C** live **only** in `task-007-quality-review.md`.
+
+**Failure direction — over-permissive, which is why this is Major and not a Nit.** `transition-module.py` archives `reports/` into `archive-<module>/` and truncates the dispatch log; the pre-completion aggregate gates then lose cross-module visibility (the known limitation already recorded in this fork's `CLAUDE.md`). `deviations.md` is the register that *does* survive the boundary — `transition-module.py` appends its transition row to it. A defect recorded only in an archived report, against a checkbox rendered green, is indistinguishable at Module 3 from a defect that never existed. **The record would assert an acceptance criterion is satisfied when this review measured it failing.**
+
+**Reachability: certain, and imminent.** The controller stated it is about to check the box and transition.
+
+**Why it is in scope *here* rather than scheduled:** unlike Minor C and round-1 Minor 1, the fix touches **no production code, no fenced plan body, and no test** — it is three appends. Round 1's calibration puts over-permissive-and-fixable-here in the Major bucket, and this is the only round-2 finding that lands in it.
+
+**Fix — the three conditions on the transition:**
+
+1. Append a `deviations.md` row for round-1 **Minor 1** (`UnicodeDecodeError` escapes `except OSError` in `count_tasks_done`; measured exit 1 + empty stdout) → Module 3, beside P7-3.
+2. Append rows for round-1 **Minor 4** and round-2 **Minor C** (`stall_streak` fails open on an unreadable log) → Module 3.
+3. Mark Module 2's AC-5 checkbox in `module-2-models-budget.md` as **partial**, pointing at those rows, instead of checking it green.
+
+---
+
+**No other Major.** Applying round 1's own calibration — *Major = untested behavior whose failure direction is over-permissive and reachable on a machine-generated path, and fixable here* — nothing new qualifies. Minors A, B and D fail in the **crash** direction. Minor C is genuinely over-permissive but its fix is a production edit to a plan-verbatim body, identical in kind to round-1 Minor 1 and P7-3, both of which stand scheduled; filing it Major would mean blocking on a row I would immediately schedule. I am not manufacturing a Major to look thorough.
+
+## Minor
+
+### Minor A — `expected-hops` on an unreadable manifest is untested: the missing mirror of the one fail-closed case that *is* tested
+
+**Mutation N2:** `derive_expected_hops(manifest or {})` → `derive_expected_hops(manifest)`. **SURVIVED**, 29 passed.
+
+| Input | Guarded (HEAD) | Mutated (N2) |
+|---|---|---|
+| `expected-hops --manifest /nonexistent/m.json` | `unknown`, **exit 0** | `AttributeError: 'NoneType' object has no attribute 'get'`, traceback, **no value on stdout** |
+| positive control, readable manifest | `2`, exit 0 | `2`, exit 0 |
+
+The CLI test already pins the *consent* half of the unreadable-manifest contract (`spawn-policy` on `no.json` → `ask`, "fails CLOSED") but never the *budget* half on the same input. **This is a Module 2 AC-5 path that is already correct and closable for free — one assertion, no production edit, no deviation.** Given AC-5 is the contested checkbox, closing a third of its open surface for one line is worth doing.
+
+**Reachability — CORRECTED after checking the consumer, and it is LOW.** My first draft claimed Module 3 calls `expected-hops` on an unproven path. That is wrong, and I am stating it rather than quietly dropping the Minor. `module-3-spawn-script.md` guards the call three ways: `if [ -f "$MANIFEST_FILE" ]`, then `2>/dev/null`, then `[[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"`. **A crash here would be absorbed by the shell and degrade to `unknown` anyway.** The residual live gap is narrow: `-f` proves existence, not readability, so a present-but-unreadable manifest still reaches the branch.
+
+This Minor therefore stands on **contract-pinning, not live risk** — AC-5 is a statement about the CLI's own behavior, and this is the one AC-5 path that is already correct and costs one line to pin. Weight it accordingly.
+
+**Fix** (one line, in `TestCli.test_expected_hops_and_policy_cli_on_legacy_and_garbage`, beside the existing `ask` assertion):
+
+```python
+eh = self._run("expected-hops", "--manifest", str(tmp_path / "no.json"))
+assert eh.returncode == 0 and eh.stdout.strip() == "unknown"   # AC-5: degrades, never raises
+```
+
+### Minor B — the lazy `import yaml` invariant is stated in the docstring, load-bearing, and unpinned
+
+**Mutation N1:** hoist `import yaml` to module top, delete the lazy import in `_frontmatter`. **SURVIVED**, 29 passed.
+
+| Probe | Guarded (HEAD) | Mutated (N1) |
+|---|---|---|
+| `import _handoff_support; 'yaml' in sys.modules` | **False** | **True** |
+| positive control (`import yaml`) | True | True |
+
+**Why it matters more than coverage.** If the import moves to module scope, the `except ImportError: print("unknown")` mitigation in `_cli` becomes **dead code** — the import fails before `_cli` is ever entered, so *all four* subcommands die on a venv-less `python3`, not just `tasks-done`. That mitigation is the accepted remedy for dispositioned **P7-3**. **Module 3 is scheduled to edit `count_tasks_done` for P7-3 — precisely the edit that could hoist the import** — and no test would notice.
+
+**Reachability of the regression:** a single scheduled Module 3 edit, by an implementer with no reason to know the invariant exists outside a docstring line.
+
+**And its downstream direction is over-permissive, not merely a crash — via an already-dispositioned row.** A module-scope `import yaml` on a venv-less `python3` is a CLI that *fails to run at all*. That is verbatim the case **P7-1(i)** names: the planned shell reads `SPAWN_POLICY="$(… 2>/dev/null)"` then `case … *) SPAWN_POLICY="auto"`, so empty stdout coerces to **`auto`** — spawn-without-asking. **I am NOT re-filing P7-1(i); it is correctly scheduled to Module 3 Task 8 and already prescribes `*) SPAWN_POLICY="ask"`.** I record the linkage because it changes this Minor's weight: until P7-1(i) lands, hoisting this import silently converts the consent gate from fail-closed to fail-open. Pinning the invariant is cheap insurance on a gate two separate reviews have already found fail-open.
+
+**Fix** (one test; needs **no** `PYTHONPATH` harness and no PyYAML-absent interpreter — round 1 ran this probe by hand but did not pin it):
+
+```python
+def test_module_import_is_stdlib_only(self):
+    code = "import sys; sys.path.insert(0, %r); import _handoff_support; print('yaml' in sys.modules)" % str(SCRIPTS)
+    assert subprocess.run([VENV_PY, "-c", code], capture_output=True, text=True).stdout.strip() == "False"
+```
+
+### Minor C — `stall_streak` fails OPEN on an *unreadable* log, not just a missing one — the last over-permissive site in the module
+
+`except OSError: return 0  # no log yet: first hop` conflates two cases. **Proven by direct invocation, not by mutation** (the shipped code *is* the permissive branch, so no mutation can expose it):
+
+| Input | Result |
+|---|---|
+| `--spawn-log /nonexistent/h.log` (genuinely first hop) | `0`, exit 0 — **correct** |
+| `--spawn-log <a directory>` (`IsADirectoryError`, an `OSError`) | `0`, exit 0 — **"no stall, proceed"** |
+
+Any `OSError` — permission denied, a path clobbered into a directory, an I/O error — reports *no stall* and the runaway-hop guard silently stops guarding. Contrast the consent gate on the very same class of failure, which the plan deliberately made fail **closed**. Note also that **no test exercises a nonexistent log at all**: `TestStallStreak._streak` always writes the file, so even the intended first-hop path is unpinned in either direction.
+
+**Disposition: SCHEDULE to Module 3, do NOT fix in Task 7.** Distinguishing the two cases is a production edit to a body that is verbatim from the plan's fenced block — the identical constraint that kept round-1 Minor 1 and P7-3 out of this task. All three are degradation-contract defects in the same two functions and Module 3 should fix them in one pass under one reviewer's attention. **The first-hop-vs-unreadable test is test-only and could land here** if the controller wants partial credit; I am not requiring it.
+
+**Fix (Module 3):** `except FileNotFoundError: return 0` / `except OSError: return "indeterminate"`, and add both fixtures.
+
+### Minor D — `derive_expected_hops`'s `isinstance(h, dict)` guard is unpinned, while its `_cli` twin is pinned
+
+**Mutation N4:** `eh = h.get("expected_hops") if isinstance(h, dict) else None` → `eh = h.get("expected_hops")`. **SURVIVED**.
+**Contrast N3**, the same guard in `_cli`: **CAUGHT** (sole failure). Two sibling guards, one observed, one not.
+
+| `{"total_tasks": 5, "handoff": "auto"}` | Guarded (HEAD) | Mutated (N4) |
+|---|---|---|
+| `expected-hops` | `2`, exit 0 | `AttributeError: 'str' object has no attribute 'get'` |
+| `spawn-policy` | `auto`, exit 0 | (N3) `AttributeError` |
+
+`manifest.get("handoff") or {}` does **not** save it: a truthy non-dict (`"auto"`, `[1]`) passes straight through the `or`. Reachability is hand-edit-only, like dispositioned P7-1(ii) — but unlike P7-1(ii) this costs one fixture line and no production edit.
+
+**Fix:** one assertion in `TestDeriveExpectedHops` — `assert derive_expected_hops({"handoff": "auto", "total_tasks": 5}) == 2`.
+
+## Nit
+
+### Nit 1 — anchor-name erosion on the two extended tests
+
+Uniqueness holds (measured above), but the names no longer describe what breaks. `test_expected_hops_and_policy_cli_on_legacy_and_garbage` now anchors six properties including the **honored-policy** path — which is neither "legacy" nor "garbage" and is the single most safety-relevant assertion in the file. `test_done_and_concerns_count_blocked_and_malformed_do_not` now also anchors both `task_id` **type guards**. Packing properties behind one name is what degrades a mutation anchor over time: the next reviewer sees one red test and three plausible causes. Recommend splitting out `test_declared_spawn_policy_is_honored` and `test_task_id_type_guards` when Module 3 next touches this file. Not required — the implementer added accurate inline comments, which mitigates it.
+
+### Nit 2 — the `hash(True) == hash(1)` trap is live in one more fixture, one character from vacuous
+
+`test_bool_never_counts_as_a_total_or_a_task_id` asserts `derive_total_tasks({"total_tasks": 0, "modules": [{"task_ids": [True, 2]}]}) == 1`. It discriminates **only because the sibling is `2`**:
+
+| Fixture | Bool-guard mutation (N10) | Result |
+|---|---|---|
+| `[True, 2]` (**landed**) | guard removed | **CAUGHT** — `{True, 2}` → 2 ≠ 1 |
+| `[True, 1]` (**D3**, one character changed) | guard removed | **SURVIVED** — `{True}` collapses to `{1}` → 1 == 1 |
+
+This is the *identical* set-collapse that made my round-1 `task_id: yes` prescription vacuous, in a different fixture, currently passing for a reason nobody wrote down. **The standing rule this family needs — six sites over four rounds, and now a seventh near-miss: a bool-guard fixture whose value lands in a `set` must use `False`/`0` or keep a sibling that is not `1`.** Recommend a one-line comment on that fixture stating it, so the next edit cannot silently disarm it.
+
+### Nit 3 — verified-clean, reported as measured
+
+- **N6** `startswith("---")` is redundant with the `find("---", 3) == -1` check for every fixture shape; both paths return `None`. Not a defect.
+- **N7** `_REPORT_GLOB`'s trailing `*` is currently unused — `task-*-implementer-report.md` matches everything the full pattern does, *including* this feature's live `task-007-fix-implementer-report.md`, which the wider pattern also matches and which dedupes correctly on `task_id`. Harmless either way.
+- **N8** `==` → `>=` on the stall comparison survives, but overstates the streak → blocks **earlier**. Conservative direction. Not filed.
+- **N9/N10** re-confirm `reversed()` and `derive_total_tasks`'s `task_ids` bool guard are properly pinned.
+
+---
+
+## Module 2 AC-5 — my view, stated plainly, and the condition on the transition
+
+**The AC-5 box must NOT be checked green. It may be checked only as an explicitly-annotated PARTIAL, and only if the annotation lands somewhere the transition does not archive.**
+
+The reason is literal, not stylistic. AC-5 reads *"CLI prints `unknown` / `indeterminate` as values (exit 0) — degradation is observable, never an exception."* Round 1 **measured** a `UnicodeDecodeError` → exit 1, empty stdout (Minor 1). That is the AC's own text failing, not a coverage gap. It is now carried by **four** open rows, not two — round-1 Minor 1 and P7-3, plus round-2 **Minor A** (untested, correct today) and **Minor C** (an unreadable spawn log reporting "no stall").
+
+The **defects** should not block the module: round 1 dispositioned the production-edit rows as SCHEDULE-to-Module-3 on the plan-verbatim-body constraint, and blocking on rows I scheduled would be incoherent. What blocks is **where the record lives** — filed above as **Major 3**:
+
+> **`docs/imp-plans/2026-07-30-cmux-spawn-v2/deviations.md` contains rows for P7-1, P7-3, P7-4 and P7-5 — but ZERO rows for round-1 Minor 1 (the measured `UnicodeDecodeError`) or round-1 Minor 4, and the string `AC-5` does not appear in the file at all.** Verified with `/usr/bin/grep`: `UnicodeDecodeError` → 0 matches; `AC-5|AC5` → 0 matches.
+
+Those two findings exist **only** in `task-007-quality-review.md` — the file the transition is about to archive, at the same moment the aggregate gates (Check 7 min-tier ratio, Check 9 git-reality) lose cross-module visibility. A measured acceptance-criterion violation would become invisible to every durable artifact.
+
+**Condition on the transition (controller action, no code, no re-review):**
+
+1. Append a `deviations.md` row for round-1 **Minor 1** (`UnicodeDecodeError` escapes `except OSError` in `count_tasks_done` — a measured AC-5 violation) → Module 3, alongside P7-3.
+2. Append a row for round-1 **Minor 4** (the `except ImportError → "unknown"` mitigation is untested) and for round-2 **Minor C** (`stall_streak` fails open on an unreadable log) → Module 3.
+3. Mark the AC-5 checkbox **partial** in `module-2-models-budget.md` with an inline pointer to those rows, rather than checking it green.
+
+If those three land, checking AC-5 as an annotated partial is honest and I have no objection. **If they do not, the box must stay open** — an unchecked box is recoverable; a green box over an archived, measured violation is not.
+
+Minors A, B and D are test-only, need no deviation from any fenced body, and are recommended for the fix round or for Module 3's first touch of this file. They are **not** required to close Task 7.
+
+---
+
+## Stopping rule — called as measured, on both conjuncts separately
+
+- **Findings are cosmetic — for the CODE: YES.** The four Minors are (A) a free one-line assertion, contract-pinning only, (B) a one-test invariant pin, (C) explicitly scheduled under the constraint the controller already accepted, (D) a one-line fixture. No Blocker. No Major against the implementation.
+- **Findings are cosmetic — for the RECORD: NO.** Major 3 is not cosmetic and is not schedulable: after the transition it is unfixable, because the artifact that carries the finding is archived and the checkbox that contradicts it is green.
+- **Reviewer approves — the code: YES.**
+
+Task 7's code and tests are done. Every required round-1 finding closes by mutation as the sole failure, the fix is provably test-only, both pinned seams survive, and the one deviation from my own prescription was correct and is now confirmed in both directions — my `task_id: yes` was vacuous and the implementer's `no` is not.
+
+I am not manufacturing a Major to look thorough, and I am not downgrading one to close the module. Major 3 costs three appends and no code.
+
+---
+
+**APPROVED (Task 7 — code and tests).**
+
+**TRANSITION BLOCKED until Major 3's conditions 1–3 land.** Module 2's **AC-5 must not be checked green.** If the two deviations rows and the partial annotation are not in `deviations.md` and `module-2-models-budget.md`, **the box stays open.** An open box is recoverable; a green box over an archived, measured violation is not.
+
+Once conditions 1–3 land, no re-review is required — they are appends, and I have already approved everything they describe.
