@@ -461,7 +461,7 @@ class TestTasksDone:
     def test_done_and_concerns_count_blocked_and_malformed_do_not(self, tmp_path):
         from _handoff_support import count_tasks_done
         r = tmp_path / "reports"
-        _write_report(r, 1, "DONE", task_type="verification")   # empty files_changed OK
+        _write_report(r, 1, "DONE", task_type="verification", files_changed="[]")
         _write_report(r, 2, "DONE_WITH_CONCERNS")
         _write_report(r, 3, "BLOCKED")
         (r / "task-005-implementer-report.md").write_text("no frontmatter at all")
@@ -546,9 +546,8 @@ def _frontmatter(text):
 
 
 def count_tasks_done(reports_dir):
-    """Unique task IDs across reports/ + archive-*/ with parsing frontmatter
-    AND completed status. Filenames alone never count; BLOCKED/malformed/
-    duplicates never inflate progress."""
+    """Unique task IDs across reports/ + archive-*/ with parsing frontmatter AND
+    completed status. Filenames/BLOCKED/malformed/dupes never inflate progress."""
     done = set()
     patterns = [os.path.join(reports_dir, _REPORT_GLOB),
                 os.path.join(reports_dir, "archive-*", _REPORT_GLOB)]
@@ -618,6 +617,7 @@ def _cli(argv):
         manifest = json.load(open(a.manifest, encoding="utf-8"))
     except Exception:
         manifest = {}
+    if not isinstance(manifest, dict): manifest = {}   # valid JSON that isn't an object
     if a.cmd == "expected-hops":
         eh = derive_expected_hops(manifest)
         print("unknown" if eh is None else eh); return 0
