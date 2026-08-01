@@ -36,8 +36,10 @@ Three findings drive it, all **a-run** or **a-file**:
    "carry-forward fix lane" is not a matter of relaxing a review gate — it is a matter of the
    manifest's active range, which is the module boundary itself.
 2. **The fix cycle is already excellent — within a module.** `type=fix` is logged, attributed, and
-   deliberately excluded from Check 9's window. Seven live `type=fix` rows exist in this feature's
-   own dispatch log. Nothing about the in-module lane needs work.
+   deliberately excluded from Check 9's window. This feature's own dispatch log carries a run of
+   live `type=fix` rows — **count them with the command in §The observed friction rather than
+   reading a number here**; the log is append-only and every fix round appends to it. Nothing about
+   the in-module lane needs work.
 3. **The cross-module case has a working answer that costs nothing and touches no baselined hook:**
    amend the *owning module's plan text* and record the routing in `deviations.md`. This sprint did
    exactly that, twice, and wrote down why (§The observed friction). Design B is the act of making
@@ -209,10 +211,16 @@ honored.
 
 **4. The contrast — the in-module lane works.** A `deviations.md` DeferredWork row routes three
 corrections with *"No new dispatch — it rides the fix round that already owes the other two"*
-(grep that phrase), and the feature's live
-dispatch log carries **seven** `type=fix` rows (`grep -c 'type=fix' <feature>/reports/.dispatch-log`).
-Within a module, a review-driven fix is cheap, attributed and reviewable. The gap is precisely and
-only at the boundary.
+(grep that phrase), and the feature's live dispatch log carries one `type=fix` row per review-driven
+fix round. **Count them; do not read a count here:**
+
+    /usr/bin/grep -c 'type=fix' <feature-dir>/reports/.dispatch-log
+
+That log is live and append-only, and **every fix round appends to it — including the rounds that
+edited this very sentence** — so any number written down here is stale before it is committed. The
+one figure safe to record is revision-anchored: **7 at commit `0e4b420`**, and it has grown at each
+fix round since. Within a module, a review-driven fix is cheap, attributed and reviewable. The gap
+is precisely and only at the boundary.
 
 ---
 
@@ -235,28 +243,75 @@ WARNING`. It is not a weak validator; a negative control on the same fixture
 (`enforcement_tier: bogus`) produces 2 blockers. It simply does not gate this. **Do not use it to
 sanity-check the variant** — it will report PASS and tell you nothing.
 
-**The two gates that do bite, both measured against an isolated fixture:**
+**Three gates bite, and the earliest one is not terminal.** All three measured against an isolated
+fixture (`task_range` [4,8], slot 6 reserved, module 2 = tasks 4–8), each with a passing control:
 
-- **`transition-module.py:validate_module_completion`** iterates `for task_id in module.task_ids:`
-  and appends `"Task {task_id}: missing or empty implementer report"`. An **unused** reserved slot
-  therefore **hard-blocks the module transition** — the module cannot close.
-- **`controller-checkpoint.py:all_tasks_have_reports`** is a pre-completion blocker (its failure
-  appends `all_tasks_have_reports` to `blockers`). Measured on a fixture whose reserved task 5 went
-  unused: `{'pass': False, 'missing': [5]}`, against a positive control that returns
-  `{'pass': True, 'missing': []}` once a task-005 report exists. Note it keys on the plan's
+- **The hook's Checks 4b/4c, on the *following* task.** The earliest and bluntest of the three, and
+  the one a reader is least likely to predict — an unused slot is the *previous* task for the next
+  in-module dispatch, and the N3a boundary skip-guard, `elif [ "$PREV" -lt "$MANIFEST_TASK_START" ]`,
+  does **not** arm for it, because the slot sits inside the active range. So both the N-1
+  file-existence sub-block and the dispatch-provenance sub-block run against an empty slot.
+  Measured with tasks 4–5 complete and every one of task 7's own artifacts pre-satisfied, so 4b/4c
+  were the only variable: dispatching task 7 returns `exit 2` carrying five simultaneous errors — no
+  implementer report, no spec review and no quality review found for Task 6, plus no spec-review and
+  no quality-review dispatch recorded for Task 6. **Positive control:** restoring slot 6's three
+  reports and its two Check-4c provenance rows returns `rc=0` on the same fixture, so the five
+  errors are a delta attributable to the empty slot and nothing else. (Two, not three, because
+  Check 5d's `type=partner-review` row is owed by the *dispatched* task, not by the previous one —
+  see the always-used cost below.) **This gate is placement-dependent** — see below.
+- **`transition-module.py:validate_module_completion`** — terminal (module close). It iterates
+  `for task_id in module.task_ids:` and appends `"Task {task_id}: missing or empty implementer
+  report"`. An **unused** reserved slot therefore **hard-blocks the module transition** — the module
+  cannot close. Because it keys on the *manifest*, it fires at any placement and in any plan shape:
+  measured identically with and without a `### Task N` section for the slot.
+- **`controller-checkpoint.py:all_tasks_have_reports`** — terminal (pre-completion), a blocker (its
+  failure appends `all_tasks_have_reports` to `blockers`). Measured on a fixture whose reserved slot
+  went unused: `{'pass': False, 'missing': [6]}`, against a positive control returning
+  `{'pass': True, 'missing': []}` once the slot's report exists, and a negative control that also
+  removes task 5's report and returns `{'pass': False, 'missing': [5, 6]}`. **It keys on the plan's
   `### Task N` headers, while `validate_module_completion` keys on the manifest's `module.task_ids`
-  — two different keys, both catching the same unused slot.
+  — two different keys, and the difference is not cosmetic.** A slot declared *only* as a widened
+  manifest `task_ids` range, with **no `### Task N` section**, is invisible to this gate: measured on
+  the same fixture with the header removed, `{'pass': True, 'missing': []}`. The two keys catch the
+  same unused slot only in the shape where both are populated.
 
-**So the variant forks, and neither branch is free:**
+**Placement is a design variable, and this doc deliberately does not settle it.** Where the reserved
+slot sits in the module's range changes which gates can see it at all:
 
-- **Slot left unused** (the whole point of reserving it) — blocks *both* gates. Not a no-op.
+- **Interior** (any position but the last id in `task_range`) — caught **three** ways. The next
+  in-module dispatch hits Checks 4b/4c, and both terminal gates fire later. The failure surfaces
+  early and loudly, mid-module.
+- **Last-in-range** — caught only by the **two terminal** gates. The dispatch that *would* test the
+  slot is the one for the next task id, and that id is outside `task_range`, so the range guard
+  refuses it first. Measured on the same fixture: dispatching task 9 against `task_range` [4,8]
+  returns `BLOCKED: Task 9 is outside the manifest's task_range [4, 8]` and says nothing about task
+  8. The failure surfaces late, at module close.
+
+Neither placement is recommended here. They trade *when you find out* against *how much of the
+module you have already built*, and that trade belongs to whoever costs the variant. Placement also
+interacts with the plan-shape axis above: a manifest-only, last-in-range unused slot is caught by
+`validate_module_completion` alone.
+
+**So the variant forks, and no branch is free:**
+
+- **Slot left unused** (the whole point of reserving it) — blocked, but by *which* gates depends on
+  placement and plan shape: all three for an interior slot carrying a `### Task N` section, down to
+  `validate_module_completion` alone for a manifest-only last-in-range slot. In every combination at
+  least one gate blocks, so it is never a no-op.
 - **Slot always used** — every module now owes an extra implementer report, spec review, quality
-  review, partner review, checkpoint file and two provenance rows, on every module, whether or not
-  a carry-forward defect exists. That is a recurring per-module tax.
+  review, partner review, checkpoint file and **three** provenance rows: `type=spec-review` and
+  `type=quality-review` for Check 4c, plus `type=partner-review` for Check 5d, which greps
+  `task=$TASK_NUMBER type=partner-review` in the dispatch log itself. (Check 5d's minimum-tier
+  branch — keyed on a `partner-review-NNN-minimum-tier.md` file rather than on any plan declaration
+  — satisfies the check with **no** provenance row at all, a cheaper shape that itself needs
+  costing.) That is a recurring per-module tax, incurred whether or not a carry-forward defect
+  exists.
 
 **Conclusion: "cheapest variant" is an unsupported cost claim as written.** A future task costing
-this must first decide whether the slot is always-used or may-be-unused, then price the branch it
-picks — and must exercise `validate_module_completion` and `all_tasks_have_reports`, not
+this must first decide **three** things — always-used vs may-be-unused, interior vs last-in-range,
+and headered vs manifest-only — then price the combination it picks. Its test checklist must include
+a **live-hook dispatch of the successor task** (the earliest-firing gate, and the one the terminal
+gates hide), alongside `validate_module_completion` and `all_tasks_have_reports`. Not
 `validate-plan.py`.
 
 - **For:** the marker vocabulary and the log format already exist (N26); the fix cycle is a proven
@@ -267,8 +322,9 @@ picks — and must exercise `validate_module_completion` and `all_tasks_have_rep
   standing obligation this repo enforces. It must also settle the `_merged_dispatch_times` exclusion
   question on both sides of that SSOT, and it weakens the one guard that currently makes module
   boundaries mean something. The reserved-slot variant avoids the hook edit and the baseline
-  re-capture — but not the cost, which lands instead on `validate_module_completion` and
-  `all_tasks_have_reports` as shown above. Cost it first, but cost it honestly.
+  re-capture — but not the cost, which lands instead on the hook's Checks 4b/4c at the next
+  in-module dispatch, `validate_module_completion`, and `all_tasks_have_reports` as shown above.
+  Cost it first, but cost it honestly.
 
 ### B — a deviations-ledger lane (formalize what already happens)
 
@@ -320,17 +376,23 @@ variant is the mistake this section exists to prevent.
 ### Reserved-slot variant (in-range id, may go unused)
 
 The range guard **passes**, so every gate it short-circuits in case A is now genuinely reached — and
-the two gates that decide this variant are ones the first table never lists.
+the **three** gates that decide this variant are ones the first table never lists.
 
-| gate | where | interaction with a reserved in-range slot |
-|---|---|---|
-| task-range validation | hook | **Passes** — that is the entire point of the variant |
-| Check 4c — dispatch provenance | hook | **Reached.** Ordinary in-module provenance applies; no boundary skip involved |
-| Check 5c — checkpoint file | hook | **Reached and satisfiable** — the reserved task belongs to the *current* module, so nothing was archived and the flat lookup is correct |
-| Check 5d — partner review | hook | **Reached and satisfiable** for the same reason — but it means a real partner review plus a real `type=partner-review` provenance row, every time the slot is used |
-| `validate_module_completion` | `transition-module.py` | **BLOCKS when the slot is unused.** `for task_id in module.task_ids:` → `"Task {task_id}: missing or empty implementer report"`. The module cannot transition |
-| `all_tasks_have_reports` | `controller-checkpoint.py` | **BLOCKS when the slot is unused** (pre-completion). Measured `{'pass': False, 'missing': [5]}`; positive control `{'pass': True}` once the report exists. Keys on `### Task N` headers, not manifest ids |
-| `validate-plan.py` | plan-validation gate | **No interaction — measured `blockers: []`.** Named here only to retire it: it is the gate a reader reaches for, and it does not police this |
+**The `applies when` column is load-bearing.** The rows split into a *slot-used* group and a
+*slot-unused* group. Reading a slot-used row as though it described the unused case is exactly what
+makes Check 4c look benign here — it is benign when the slot is used, and it is the earliest-firing
+blocker when the slot is interior and unused.
+
+| gate | where | applies when | interaction with a reserved in-range slot |
+|---|---|---|---|
+| task-range validation | hook | either | **Passes** — that is the entire point of the variant |
+| Check 4c — dispatch provenance | hook | **slot USED** | **Reached.** Ordinary in-module provenance applies; no boundary skip involved |
+| Check 5c — checkpoint file | hook | **slot USED** | **Reached and satisfiable** — the reserved task belongs to the *current* module, so nothing was archived and the flat lookup is correct |
+| Check 5d — partner review | hook | **slot USED** | **Reached and satisfiable** for the same reason — but it means a real partner review plus a real `type=partner-review` provenance row, every time the slot is used |
+| **Checks 4b/4c on the *following* task** | hook | **slot UNUSED, INTERIOR placement** | **BLOCKS — and this is the earliest-firing of the three.** The unused slot is the previous task for the next in-module dispatch, and N3a's `elif [ "$PREV" -lt "$MANIFEST_TASK_START" ]` skip-guard does not arm inside the range. Measured: `exit 2` with five errors — no implementer report, no spec review, no quality review for the slot, plus no spec-review and no quality-review dispatch recorded — against an `rc=0` positive control with the slot used. **Does not apply to a LAST-IN-RANGE slot:** the successor dispatch is out of range and the range guard refuses it first |
+| `validate_module_completion` | `transition-module.py` | **slot UNUSED**, any placement, any plan shape | **BLOCKS** at module close. `for task_id in module.task_ids:` → `"Task {task_id}: missing or empty implementer report"`. The module cannot transition. Manifest-keyed — measured identically with and without a `### Task N` section for the slot |
+| `all_tasks_have_reports` | `controller-checkpoint.py` | **slot UNUSED *and* the slot has a `### Task N` section** | **BLOCKS** at pre-completion. Measured `{'pass': False, 'missing': [6]}`; positive control `{'pass': True}` once the report exists; negative control also removing task 5's report → `{'pass': False, 'missing': [5, 6]}`. Keys on `### Task N` headers, not manifest ids — so a **manifest-only slot is invisible here** (measured `{'pass': True}`) |
+| `validate-plan.py` | plan-validation gate | either | **No interaction — measured `blockers: []`.** Named here only to retire it: it is the gate a reader reaches for, and it does not police this |
 
 ---
 
@@ -372,12 +434,24 @@ read B's recommendation as covering it.**
 - ~~**Whether the reserved-slot variant survives `validate-plan.py`.**~~ **Now measured, and the
   question was aimed at the wrong gate.** It survives — `blockers: []`, with a negative control
   (`enforcement_tier: bogus` → 2 blockers) proving the validator can block and simply does not block
-  this. The gates that actually bind are `validate_module_completion` and `all_tasks_have_reports`
-  (§Candidate A). Recorded as a correction rather than deleted, because "run `validate-plan.py`
-  first" was this doc's own advice and a future reader may have taken it.
+  this. The gates that actually bind are the hook's **Checks 4b/4c on the following task**,
+  `validate_module_completion`, and `all_tasks_have_reports` (§Candidate A). Recorded as a
+  correction rather than deleted, because "run `validate-plan.py` first" was this doc's own advice
+  and a future reader may have taken it.
 - **Whether the reserved slot is intended always-used or may-be-unused.** This is the open question
-  that replaces the one above, and it decides the cost: unused blocks two gates, always-used levies
-  a per-module review tax. The variant cannot be costed until it is answered.
+  that replaces the one above, and it decides the cost: an unused slot is blocked by one to three
+  gates depending on the two axes below, while an always-used slot levies a per-module review tax.
+  The variant cannot be costed until it is answered.
+- **Where in the module's range a reserved slot should sit — interior or last.** A second,
+  independent axis, deliberately left open. An **interior** unused slot is caught three ways and
+  fails **early**, at the next in-module dispatch; a **last-in-range** one is caught only by the two
+  terminal gates and fails **late**, at module close. Both measured (§Candidate A). Naming the axis
+  is this doc's job; choosing it belongs to the costing task, because the choice trades early
+  detection against how much of the module is already built when the block lands.
+- **Whether a reserved slot should carry a `### Task N` section at all.** A third axis: the slot can
+  be declared as a widened manifest `task_ids` range alone. Measured — that shape is invisible to
+  `all_tasks_have_reports` and is caught by `validate_module_completion` alone. Cheaper to write,
+  weaker to police.
 - **Whether the attempts-not-dispatches property has ever mattered in practice.** Observed in the
   fixture for both `type=fix` and `type=implementer` (a-run); the `type=implementer` case is
   Check-9-visible in principle, but **no live instance of a perturbed Check 9 window was searched
@@ -395,5 +469,5 @@ this branch adds N79, so N80/N81 are the first pair free on both. Enumerating th
 what produced the earlier N76 collision (`deviations.md`, "Cross-branch BACKLOG id collision").
 
 ```
-| N81 | Sanctioned carry-forward fix lane across module transitions | SP4 design spike, `cmux-spawn-v2` Module 1 Task 3, 2026-07-31 | friction, quality | M | open | **Design doc: `2026-07-30-sp4-carry-forward-fix-lane-design.md`. Spike deliverable was design-only; nothing implemented.** Problem: a defect found in module N+1 whose fix belongs to module N's files has no dispatch lane. **Measured blocker (a-run, isolated fixture with `task_range` [4,8]):** a `[task N fix]` dispatch naming an out-of-range task id is refused by the hook's task-range validation (`BLOCKED: Task N is outside the manifest's task_range`) **before** Checks 4b/4c/5c/5d are reached — an in-range fix control passes that guard and reaches the normal gate stack, and a plain out-of-range implementer control returns the same message. So this is a module-boundary question, not a review-gate question. **Attempts, not dispatches — and it is not a `type=fix` quirk:** the dispatch-log row is written BEFORE the refusal for BOTH classes, deliberately — the hook's Stage 2 comment reads *"Written here in Stage 2 — BEFORE the enforcement gate below — so the timestamp is recorded even when the dispatch is ultimately blocked"* (that comment governs the `type=implementer` write; the `type=fix` write sits at the earlier Stage 0 marked-fix branch under a comment about a different concern). The two are NOT equally benign: `type=fix` is invisible to Check 9, but a refused plain implementer leaves `DISPATCH implementer task=N type=implementer`, which is exactly what `_merged_dispatch_times` compiles — so a stale row CAN open or shift a Check 9 window. Mechanism proven in a fixture; no live instance searched. **Not a constraint:** Check 9 `_check_verification_git_reality` short-circuits on `if not verification_ids: return []` and `_merged_dispatch_times` parses only `type=implementer`, so N26's `type=fix` / `type=fix-unattributed` rows never open a window — any new dispatch type must decide explicitly whether it inherits that exclusion, on both sides of that SSOT. **Also flat (not archive-aware):** Check 5c's checkpoint lookup and Check 5d's partner-review lookup, so an archived partner review does not satisfy 5d and the provenance row it also wants was truncated by `transition-module.py` (which `shutil.move`s `task-<NNN>-*` into `archive-<module>/` and truncates the live dispatch log after copying it). **Recommendation: design B** — formalize the plan-amendment + deviations-ledger routing lane this sprint already used twice (Task 0 finding 4's consumer half became a Module 3 plan amendment at `949d310`; findings tagged `0→9` and `0→17`; the Deferred Work table), because it touches no baselined hook and puts the instruction where the future implementer reads it. **Alternative that still needs re-costing (do NOT call it the cheapest yet):** reserve a carry-forward task id inside every module's declared range at plan time — the range check then passes with no hook change. **`validate-plan.py` is the WRONG gate to check it against — measured `blockers: []`, with a negative control (`enforcement_tier: bogus` → 2 blockers) proving the validator can block and simply does not block this.** The two gates that actually bind are `transition-module.py:validate_module_completion` (iterates `for task_id in module.task_ids:` and appends `Task N: missing or empty implementer report`, so an UNUSED slot hard-blocks the module transition) and `controller-checkpoint.py:all_tasks_have_reports` (pre-completion blocker; measured `pass: False, missing: [5]` for an unused slot, positive control `pass: True` once the report exists). **Cost fork:** an unused slot blocks BOTH gates, while an always-used slot makes every module owe an extra implementer report, spec + quality + partner review, checkpoint file and two provenance rows — a recurring per-module tax. Decide always-used vs may-be-unused BEFORE costing. **Rejected:** re-opening an archived module (`transition-module.py` has no inverse). **If any variant edits `sdd-pre-dispatch-hook.sh` it is baselined — the implementing task owes a same-change `check-hooks.sh --capture` plus committed `baseline.txt`.** Residual stated in the doc and NOT solved by B: a module-N defect that blocks module N+1 immediately still has no lane. Evidence base is four instances in one sprint; frequency is unmeasured. |
+| N81 | Sanctioned carry-forward fix lane across module transitions | SP4 design spike, `cmux-spawn-v2` Module 1 Task 3, 2026-07-31 | friction, quality | M | open | **Design doc: `2026-07-30-sp4-carry-forward-fix-lane-design.md`. Spike deliverable was design-only; nothing implemented.** Problem: a defect found in module N+1 whose fix belongs to module N's files has no dispatch lane. **Measured blocker (a-run, isolated fixture with `task_range` [4,8]):** a `[task N fix]` dispatch naming an out-of-range task id is refused by the hook's task-range validation (`BLOCKED: Task N is outside the manifest's task_range`) **before** Checks 4b/4c/5c/5d are reached — an in-range fix control passes that guard and reaches the normal gate stack, and a plain out-of-range implementer control returns the same message. So this is a module-boundary question, not a review-gate question. **Attempts, not dispatches — and it is not a `type=fix` quirk:** the dispatch-log row is written BEFORE the refusal for BOTH classes, deliberately — the hook's Stage 2 comment reads *"Written here in Stage 2 — BEFORE the enforcement gate below — so the timestamp is recorded even when the dispatch is ultimately blocked"* (that comment governs the `type=implementer` write; the `type=fix` write sits at the earlier Stage 0 marked-fix branch under a comment about a different concern). The two are NOT equally benign: `type=fix` is invisible to Check 9, but a refused plain implementer leaves `DISPATCH implementer task=N type=implementer`, which is exactly what `_merged_dispatch_times` compiles — so a stale row CAN open or shift a Check 9 window. Mechanism proven in a fixture; no live instance searched. **Not a constraint:** Check 9 `_check_verification_git_reality` short-circuits on `if not verification_ids: return []` and `_merged_dispatch_times` parses only `type=implementer`, so N26's `type=fix` / `type=fix-unattributed` rows never open a window — any new dispatch type must decide explicitly whether it inherits that exclusion, on both sides of that SSOT. **Also flat (not archive-aware):** Check 5c's checkpoint lookup and Check 5d's partner-review lookup, so an archived partner review does not satisfy 5d and the provenance row it also wants was truncated by `transition-module.py` (which `shutil.move`s `task-<NNN>-*` into `archive-<module>/` and truncates the live dispatch log after copying it). **Recommendation: design B** — formalize the plan-amendment + deviations-ledger routing lane this sprint already used twice (Task 0 finding 4's consumer half became a Module 3 plan amendment at `949d310`; findings tagged `0→9` and `0→17`; the Deferred Work table), because it touches no baselined hook and puts the instruction where the future implementer reads it. **Alternative that still needs re-costing (do NOT call it the cheapest yet):** reserve a carry-forward task id inside every module's declared range at plan time — the range check then passes with no hook change. **`validate-plan.py` is the WRONG gate to check it against — measured `blockers: []`, with a negative control (`enforcement_tier: bogus` → 2 blockers) proving the validator can block and simply does not block this.** **THREE gates bind, and the earliest one is NOT terminal:** (1) the hook's **Checks 4b/4c on the FOLLOWING task** — an unused slot is the previous task for the next in-module dispatch and N3a's `elif [ "$PREV" -lt "$MANIFEST_TASK_START" ]` skip-guard does not arm inside the range, so measured `exit 2` with five simultaneous errors (no implementer report, no spec review, no quality review for the slot, plus no spec-review and no quality-review dispatch recorded), against an `rc=0` positive control with the slot used; (2) `transition-module.py:validate_module_completion` (terminal, module close; iterates `for task_id in module.task_ids:` and appends `Task N: missing or empty implementer report`, so an UNUSED slot hard-blocks the transition — manifest-keyed, therefore placement- and plan-shape-independent); (3) `controller-checkpoint.py:all_tasks_have_reports` (terminal, pre-completion blocker; measured `pass: False, missing: [6]` for an unused slot, positive control `pass: True` once the report exists). **Placement is a DESIGN VARIABLE and is deliberately NOT settled:** an INTERIOR unused slot is caught all three ways and fails early at the next dispatch; a LAST-IN-RANGE one is caught only by the two terminal gates and fails late at module close, because the successor dispatch that would test it is refused first by the range guard (measured: task 9 against `task_range` [4,8] returns the task-range message and nothing about task 8). **Plan shape is a second axis:** `all_tasks_have_reports` keys on `### Task N` headers while `validate_module_completion` keys on manifest ids, so a slot declared ONLY as a widened manifest `task_ids` range is invisible to the former (measured `pass: True`) and caught by the latter alone. **Cost fork:** an unused slot is blocked by one to three gates depending on those two axes — never a no-op — while an always-used slot makes every module owe an extra implementer report, spec + quality + partner review, checkpoint file and THREE provenance rows (`type=spec-review` + `type=quality-review` for Check 4c, plus `type=partner-review` for Check 5d, which greps `task=N type=partner-review` in the dispatch log itself; Check 5d's minimum-tier branch, keyed on a `partner-review-NNN-minimum-tier.md` file, satisfies it with NO provenance row at all) — a recurring per-module tax. Decide always-used vs may-be-unused, interior vs last-in-range, and headered vs manifest-only BEFORE costing, and make the test checklist include a live-hook dispatch of the successor task rather than only the two terminal gates. **Rejected:** re-opening an archived module (`transition-module.py` has no inverse). **If any variant edits `sdd-pre-dispatch-hook.sh` it is baselined — the implementing task owes a same-change `check-hooks.sh --capture` plus committed `baseline.txt`.** Residual stated in the doc and NOT solved by B: a module-N defect that blocks module N+1 immediately still has no lane. Evidence base is four instances in one sprint; frequency is unmeasured. |
 ```
