@@ -336,9 +336,10 @@ class TestHandoffBlockMaterialization:
     def test_spawn_policy_copied_from_plan(self):
         assert self._mf(extra_frontmatter="handoff_spawn: ask")["handoff"]["spawn_policy"] == "ask"
 
-    def test_micro_tier_expected_hops_is_one(self):
-        assert self._mf(tier="micro", tasks=[{"id": 0}, {"id": 1}])["handoff"]["expected_hops"] == 1
+    def test_micro_tier_expected_hops_is_one(self):   # default 5 tasks: micro=1 vs standard=2
+        assert self._mf(tier="micro")["handoff"]["expected_hops"] == 1
 
     def test_off_survives_and_bare_off_is_never_coerced_to_auto(self):   # YAML 1.1: bare off is False
         assert self._mf(extra_frontmatter='handoff_spawn: "off"')["handoff"]["spawn_policy"] == "off"
-        assert self._mf(extra_frontmatter="handoff_spawn: off", ok=False)["exit_code"] != 0
+        r = self._mf(extra_frontmatter="handoff_spawn: off", ok=False)
+        assert r["exit_code"] != 0 and "spawn_policy" in r["stderr"]

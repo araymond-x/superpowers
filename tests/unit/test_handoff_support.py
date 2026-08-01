@@ -16,10 +16,14 @@ VENV_PY = str(Path(__file__).resolve().parent.parent.parent / ".venv" / "bin" / 
 SUPPORT = str(SCRIPTS / "_handoff_support.py")
 
 
-def _write_report(d, task_id, status, task_type="implementation", name=None):
+def _write_report(d, task_id, status, task_type="implementation", name=None,
+                  files_changed="[{path: x, description: y}]"):
+    # files_changed defaults NON-EMPTY: ImplementerReport rejects DONE /
+    # DONE_WITH_CONCERNS with an empty list. Pass files_changed="[]" to
+    # exercise the task_type=="verification" exemption.
     d.mkdir(parents=True, exist_ok=True)
     body = (f"---\nschema_version: 1\ntask_id: {task_id}\nstatus: {status}\n"
-            f"task_type: {task_type}\nfiles_changed: []\n"
+            f"task_type: {task_type}\nfiles_changed: {files_changed}\n"
             "tests: {written: 0, passing: 0, command: x, result: PASS}\n---\nbody\n")
     (d / (name or f"task-{task_id:03d}-implementer-report.md")).write_text(body)
 
@@ -33,6 +37,7 @@ class TestExpectedHops:
         assert expected_hops(1, "standard") == 1
         assert expected_hops(5, "standard") == 2      # ceil(5/2.5)
         assert expected_hops(19, "standard") == 8     # ceil(19/2.5)
+        assert expected_hops(6, "standard") == 3      # ceil(2.4)=3; round() would give 2
 
     def test_micro_is_one(self):
         assert expected_hops(19, "micro") == 1
@@ -59,12 +64,34 @@ class TestDeriveTotalTasks:
     def test_all_invalid_returns_none(self):
         assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [7, 3]}) is None
 
+    def test_module_union_beats_task_range(self):
+        m = {"total_tasks": 0, "modules": [{"task_ids": [0, 1, 2]}], "task_range": [0, 20]}
+        assert derive_total_tasks(m) == 3
+
+    def test_bool_never_counts_as_a_total_or_a_task_id(self):
+        assert derive_total_tasks({"total_tasks": True, "modules": [], "task_range": [1, 4]}) == 4
+        assert derive_total_tasks({"total_tasks": 0, "modules": [{"task_ids": [True, 2]}]}) == 1
+
+    def test_wrong_length_task_range_is_not_derivable(self):
+        assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [1, 2, 3]}) is None
+
+    def test_single_task_range_is_inclusive(self):
+        assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [5, 5]}) == 1
+
 
 class TestDeriveExpectedHops:
-    def test_block_wins_else_derive_else_none(self):
+    def test_valid_block_wins(self):
         assert derive_expected_hops({"handoff": {"expected_hops": 9}, "total_tasks": 5}) == 9
+
+    def test_absent_block_derives(self):
         assert derive_expected_hops({"total_tasks": 5, "tier": "standard"}) == 2
+
+    def test_underivable_returns_none(self):
         assert derive_expected_hops({"total_tasks": 0}) is None
+
+    def test_invalid_block_values_are_rederived_not_trusted(self):
+        assert derive_expected_hops({"handoff": {"expected_hops": 0}, "total_tasks": 5}) == 2
+        assert derive_expected_hops({"handoff": {"expected_hops": True}, "total_tasks": 5}) == 2
 
 
 class TestHopCeiling:
