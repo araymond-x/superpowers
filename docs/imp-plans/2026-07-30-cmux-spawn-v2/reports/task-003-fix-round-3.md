@@ -4,21 +4,35 @@ task_id: 3
 task_type: implementation
 status: DONE
 files_changed:
-  - docs/process-improvement-findings/2026-07-30-sp4-carry-forward-fix-lane-design.md
-  - docs/process-improvement-findings/BACKLOG.md
+  - path: "docs/process-improvement-findings/2026-07-30-sp4-carry-forward-fix-lane-design.md"
+    description: "Round-3 IMPORTANT 1+2: conditioned the 'three ways' gate count on the plan-shape axis at every in-class site (incl. the paired last-in-range bullets); added Check 4's N-1 globs as the third flat lookup site, extended Candidate A's must-skip list, qualified the 'Check 4c is the exception' sentence with its sibling's -eq keying"
+  - path: "docs/process-improvement-findings/BACKLOG.md"
+    description: "N81 regenerated from SP4's fence — conditioned gate counts, third flat-lookup site, and the fifth in-class plan-shape sentence the dispatch's enumeration missed"
 tests:
   written: 0
-  passing: 104
-  failing: 0
-contract_compliance: |
-  Write scope honored exactly: the two files named in the dispatch and no others.
-  SP3 and N80 untouched. reports/* treated as immutable. Out-of-scope items (the
-  hook's rotted comment, the --ignore-files CLAUDE.md gotcha) not touched — reported
-  below. Every fence edit made in SP4 only; the BACKLOG N81 row regenerated
-  programmatically from that fence, never hand-edited twice. No :NNN citations added.
-  All recursive sweeps used /usr/bin/grep. Staged the two explicit paths; no git add -A,
-  no git stash. Verification: verify-symlink-install.sh 104/0/0 PASSED.
+  passing: 0
+  command: "bash tests/ARaymond-installation/verify-symlink-install.sh"
+  result: PASS
+contract_compliance:
+  - constraint: "Write scope: exactly the two files named in the dispatch"
+    status: compliant
+    detail: "SP3 and N80 untouched; reports/* treated as immutable; out-of-scope items (the hook's rotted comment, the --ignore-files CLAUDE.md gotcha) reported not fixed. Staged two explicit paths; no git add -A, no git stash."
+  - constraint: "N81 must stay byte-identical to SP4's row block"
+    status: compliant
+    detail: "Row regenerated programmatically from the fence, never hand-edited twice; verified with a tail-anchored extractor positive-controlled on a mutated copy. Controller re-verified post-commit: IDENTICAL, 7295 bytes."
+  - constraint: "CLAUDE.md: cite constructs, not line numbers; give the command, not the count"
+    status: compliant
+    detail: "No :NNN citations added. All recursive sweeps used /usr/bin/grep (the shell grep is a ugrep --ignore-files wrapper that skips .worktrees/). verify-symlink-install.sh 104/0/0 PASSED."
 ---
+
+> **Controller note (bookkeeping, not content):** this report's YAML frontmatter was
+> reshaped by the controller to the strict `ImplementerReport` schema — `files_changed`
+> as `{path, description}` objects, `tests` with `command`/`result` and no `failing`
+> key, `contract_compliance` as a list. The prose below is the subagent's, unedited.
+> Reshaped rather than left failing because `reports/` is the flight recorder and a
+> malformed artifact there is a silent gap. Check 4b was never at risk: its glob
+> `task-003-implementer-report*` matches only the canonical report, which validates
+> COMPLETE.
 
 ## Implementation Summary
 
