@@ -64,10 +64,14 @@ VENV_PY = str(Path(__file__).resolve().parent.parent.parent / ".venv" / "bin" / 
 SUPPORT = str(SCRIPTS / "_handoff_support.py")
 
 
-def _write_report(d, task_id, status, task_type="implementation", name=None):
+def _write_report(d, task_id, status, task_type="implementation", name=None,
+                  files_changed="[{path: x, description: y}]"):
+    # files_changed defaults NON-EMPTY: ImplementerReport rejects DONE /
+    # DONE_WITH_CONCERNS with an empty list. Pass files_changed="[]" to
+    # exercise the task_type=="verification" exemption.
     d.mkdir(parents=True, exist_ok=True)
     body = (f"---\nschema_version: 1\ntask_id: {task_id}\nstatus: {status}\n"
-            f"task_type: {task_type}\nfiles_changed: []\n"
+            f"task_type: {task_type}\nfiles_changed: {files_changed}\n"
             "tests: {written: 0, passing: 0, command: x, result: PASS}\n---\nbody\n")
     (d / (name or f"task-{task_id:03d}-implementer-report.md")).write_text(body)
 
