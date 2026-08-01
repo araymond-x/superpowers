@@ -64,3 +64,6 @@
 2026-08-01T18:47:30Z task= type=quality-review tokens=278101 source=probe tier=below action=allow
 2026-08-01T19:00:42Z task=7 type=other tokens=285717 source=probe tier=below action=allow
 2026-08-01T19:12:10Z task= type=other tokens=297727 source=probe tier=below action=allow
+2026-08-01T20:02:40Z task= type=other tokens=504353 source=probe tier=hard action=allow
+2026-08-01T20:29:34Z task= type=partner-review tokens=225829 source=probe tier=below action=allow
+2026-08-01T20:44:10Z task= type=other tokens=270955 source=probe tier=below action=allow

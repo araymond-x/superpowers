@@ -61,7 +61,7 @@ All four tasks write the same files — strictly serialized, never parallel.
 - Modify: `skills/subagent-driven-development/scripts/spawn-handoff-session.sh`, and — **for the scheduled deferred rows only** — `skills/subagent-driven-development/scripts/_handoff_support.py`
 - Test: `tests/unit/test_spawn_handoff_v2.py`, `tests/unit/test_spawn_handoff.py`, `tests/unit/spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`, `tests/unit/test_handoff_support.py`, `tests/unit/test_spawn_handoff_hardening.py` (B1)
 
-**B1 — `test_spawn_handoff_hardening.py` is a THIRD consumer of the moving default, and it is currently 10/10 green.** `test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` seeds `.handoff-hops="3"` against today's `MAX_HOPS_DEFAULT=3` and asserts refusal; step (e) reverts an invalid knob to the DERIVED ceiling, which is `6` for that fixture (no `.sdd-session.json`, so `EXPECTED_HOPS="unknown"`), and 3 < 6 means **the gate stops refusing and the script spawns** — a fail-open regression. It fails only HALF-loudly (its `WARNING:` assertion still passes), so pin it deliberately: seed above the new derived ceiling or set `SUPERPOWERS_CMUX_MAX_HOPS` explicitly, whichever preserves each test's stated intent. **Because Task 8 moves a global default, the acceptance run for this task is the FULL suite, not a file list.** The `MAX_HOPS`/`.handoff-hops` sweep is closed at exactly two test files (this one and `test_spawn_handoff.py::test_hop_limit_exits_3`, already migrated by Step 2).
+**B1 — `test_spawn_handoff_hardening.py` is a THIRD consumer of the moving default, and it is currently 10/10 green.** `test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` seeds `.handoff-hops="3"` against today's `MAX_HOPS_DEFAULT=3` and asserts refusal; step (e) reverts an invalid knob to the DERIVED ceiling, which is `6` for that fixture (no `.sdd-session.json`, so `EXPECTED_HOPS="unknown"`), and 3 < 6 means **the gate stops refusing and the script spawns** — a fail-open regression. It fails only HALF-loudly (its `WARNING:` assertion still passes), so pin it deliberately: seed above the new derived ceiling or set `SUPERPOWERS_CMUX_MAX_HOPS` explicitly, whichever preserves each test's stated intent. **Because Task 8 moves a global default, the acceptance run for this task is the FULL suite, not a file list.** **The consumer sweep is FOUR unit tests, not two — and an identifier grep returns a clean FALSE closure.** `/usr/bin/grep -rlc 'MAX_HOPS' tests/unit/*.py` matches ONLY `test_spawn_handoff_hardening.py`; `test_spawn_handoff.py` scores **0** while containing two breaking consumers, because a dependency on a value is not a textual reference to its name. **Sweep the RENDERED form too.** The measured list: (1) `test_spawn_handoff_hardening.py::test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` (above); (2) `test_spawn_handoff.py::test_hop_limit_exits_3` (Step 2 migrates it); (3) `test_spawn_handoff.py::test_new_workspace_and_notify_argv_values_match_spec` — asserts `startswith("Hop 1/3 ")`, which the script renders from `Hop $SP_HOP/$MAX_HOPS`; with no manifest the ceiling becomes 6, so it must become `"Hop 1/6 "`; (4) `test_spawn_handoff.py::test_spawn_log_record_fields_match_spec_log_format` — asserts `_spawn_log_fields(ctx, "intent") == {"hop": "1"}` by EXACT equality, which step (f) breaks by adding `tasks_done=`. Also `tests/integration/sdd-e2e-test.sh:722` reads `.handoff-hops`, benign here (its fixture ships no manifest, so ceiling 6 vs hops 0) and owned by Module 4.
 
 `_handoff_support.py` was read-only for Module 3 as first written, but seven scheduled rows (P7-1(ii), P7-3, P7-5, P7-6, P7-7, P7-8, P7-9) are production/test edits to it and its test file, and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
 
@@ -138,8 +138,14 @@ class TestPolicyDial:
     def test_present_manifest_without_handoff_block_is_auto(self, tmp_path):
         # write_manifest(omit_handoff=True) -> CLI returns auto -> proceeds
     def test_cli_failure_is_non_consent(self, tmp_path):
-        # SUPPORT_CLI pointed at a nonexistent path -> empty stdout -> `ask`, NOT auto
-        # (the *) arm must be non-consent; assert exit 3 + "reason=policy-ask")
+        # THE ONLY test pinning the *) -> ask arm: both siblings above pass even if the
+        # gate is deleted. Do not weaken or drop it. There is NO SUPPORT_CLI override —
+        # it is derived from SCRIPT_DIR. Seam: set SUPERPOWERS_ROOT via env_extra so
+        # $PYTHON falls back to bare `python3`, and put a python3 stub first on PATH that
+        # DISPATCHES ON ARGV — fail only the `spawn-policy` call, `exec` the real
+        # interpreter otherwise (validate_bundle makes four $PYTHON calls and runs BEFORE
+        # this gate, so a blanket stub dies at bundle validation and never reaches it).
+        # Assert exit 3 + "reason=policy-ask".
 ```
 
 ```python
@@ -190,8 +196,9 @@ SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
 
 ```bash
 # Absent manifest FILE stays `auto` DELIBERATELY: every pre-v2 handoff ships without
-# .sdd-session.json and must still spawn. The CLI fails closed to `ask` on a missing
-# --manifest, but this `[ -f ]` short-circuit makes that branch unreachable from here.
+# .sdd-session.json and must still spawn. The CLI fails closed to `ask` on a nonexistent
+# manifest PATH (omitting the flag is argparse exit 2 — different thing), but this
+# `[ -f ]` short-circuit makes that branch unreachable from here.
 # The two layers differ ON PURPOSE on this one input — do not "harmonize" them.
 SPAWN_POLICY="auto"
 if [ -f "$MANIFEST_FILE" ]; then
@@ -268,9 +275,9 @@ fi
 
 (f) The intent record gains the count: `printf '%s %s intent hop=%s tasks_done=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$TASKS_DONE" >> "$SPAWN_LOG"` (same checked-write `if !` wrapper as today).
 
-- [ ] **Step 5: Run both unit files + fix migrations** — `.venv/bin/python3 -m pytest tests/unit/test_spawn_handoff.py tests/unit/test_spawn_handoff_v2.py -v`. All PASS.
+- [ ] **Step 5: Run the FULL suite + fix migrations** — `.venv/bin/python3 -m pytest tests/unit/ -q -p no:cacheprovider`. All PASS (707 green before this task; report the number you measure). A file-list run is dishonest here because this task moves a global default — narrow only while iterating.
 
-- [ ] **Step 6: Commit** — `git add` the four files + fixtures; `git commit -m "feat(cmux-spawn-v2): policy gate + progress-aware stall/ceiling + intent tasks_done"`.
+- [ ] **Step 6: Commit** — `git add` the EIGHT explicit paths (never `-A`): `spawn-handoff-session.sh`, `_handoff_support.py`, `test_spawn_handoff.py`, `test_spawn_handoff_v2.py`, `test_spawn_handoff_hardening.py`, `test_handoff_support.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`; `git commit -m "feat(cmux-spawn-v2): policy gate + progress-aware stall/ceiling + intent tasks_done"`.
 
 ### Task 9: Surface topology + shared launch wrapper + workspace fallback
 
