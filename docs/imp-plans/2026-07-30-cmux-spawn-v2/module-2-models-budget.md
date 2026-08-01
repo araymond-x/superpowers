@@ -522,6 +522,7 @@ class TestCli:
         assert self._run("spawn-policy", "--manifest", str(m)).stdout.strip() == "auto"
         m.write_text('{"total_tasks": 0}')
         assert self._run("expected-hops", "--manifest", str(m)).stdout.strip() == "unknown"
+        assert self._run("spawn-policy", "--manifest", str(tmp_path / "no.json")).stdout.strip() == "ask"   # fails CLOSED
 ```
 
 - [ ] **Step 2: Run to verify failure** — ImportError on `count_tasks_done` / `stall_streak`; CLI exits 2.
@@ -574,9 +575,8 @@ _OUTCOME_RE = re.compile(r"^\S+ \S+ outcome ")
 
 
 def stall_streak(spawn_log_path, current_tasks_done):
-    """Trailing consecutive outcome records whose tasks_done == current count.
-    0 = progress or first hop. 'indeterminate' = newest outcome record missing/
-    malformed on tasks_done — caller SKIPs (fail-closed stays with .handoff-hops)."""
+    """Trailing consecutive outcome records whose tasks_done == current count. 0 = progress or
+    first hop. 'indeterminate' = newest outcome missing/malformed on tasks_done; caller SKIPs."""
     try:
         lines = open(spawn_log_path, encoding="utf-8").read().splitlines()
     except OSError:
@@ -597,8 +597,9 @@ def stall_streak(spawn_log_path, current_tasks_done):
 
 
 def _cli(argv):
-    """CLI for spawn-handoff-session.sh: prints ONE value on stdout. Exit 0
-    with a value ('unknown'/'indeterminate' are values); exit 2 = usage error."""
+    """CLI for spawn-handoff-session.sh: ONE value on stdout; exit 0 with a value
+    ('unknown'/'indeterminate' count), exit 2 = usage. Spec pins only READABLE-but-
+    absent-block -> 'auto'; unreadable fails CLOSED to 'ask' (sole consent gate)."""
     import argparse
     p = argparse.ArgumentParser(prog="_handoff_support.py")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -620,14 +621,14 @@ def _cli(argv):
     try:
         manifest = json.load(open(a.manifest, encoding="utf-8"))
     except Exception:
-        manifest = {}
-    if not isinstance(manifest, dict): manifest = {}   # valid JSON that isn't an object
+        manifest = None                    # unreadable: consent must not default OPEN
+    if not isinstance(manifest, dict): manifest = None   # valid JSON that isn't an object
     if a.cmd == "expected-hops":
-        eh = derive_expected_hops(manifest)
+        eh = derive_expected_hops(manifest or {})
         print("unknown" if eh is None else eh); return 0
-    h = manifest.get("handoff")
-    pol = h.get("spawn_policy") if isinstance(h, dict) else None
-    print(pol if pol in ("auto", "ask", "off") else "auto"); return 0
+    h = (manifest or {}).get("handoff")
+    pol = h.get("spawn_policy") if isinstance(h, dict) else None   # unreadable -> "ask"
+    print(pol if pol in ("auto", "ask", "off") else ("auto" if manifest is not None else "ask")); return 0
 
 
 if __name__ == "__main__":
