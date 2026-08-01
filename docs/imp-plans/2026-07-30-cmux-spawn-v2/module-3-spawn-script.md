@@ -63,7 +63,7 @@ All four tasks write the same files — strictly serialized, never parallel.
 
 **B1 — `test_spawn_handoff_hardening.py` is a THIRD consumer of the moving default, and it is currently 10/10 green.** `test_nonnumeric_max_hops_reverts_to_default_and_still_refuses` seeds `.handoff-hops="3"` against today's `MAX_HOPS_DEFAULT=3` and asserts refusal; step (e) reverts an invalid knob to the DERIVED ceiling, which is `6` for that fixture (no `.sdd-session.json`, so `EXPECTED_HOPS="unknown"`), and 3 < 6 means **the gate stops refusing and the script spawns** — a fail-open regression. It fails only HALF-loudly (its `WARNING:` assertion still passes), so pin it deliberately: seed above the new derived ceiling or set `SUPERPOWERS_CMUX_MAX_HOPS` explicitly, whichever preserves each test's stated intent. **Because Task 8 moves a global default, the acceptance run for this task is the FULL suite, not a file list.** **The consumer sweep is FOUR unit tests, not two — and an identifier grep returns a clean FALSE closure.** `/usr/bin/grep -rlc 'MAX_HOPS' tests/unit/*.py` matches ONLY `test_spawn_handoff_hardening.py`; `test_spawn_handoff.py` scores **0** while containing two breaking consumers, because a dependency on a value is not a textual reference to its name. **Sweep the RENDERED form too.** All four breaking consumers are enumerated with their fixes in **Step 2's migration block** — work from that list, not from this paragraph. Also `tests/integration/sdd-e2e-test.sh:722` reads `.handoff-hops`, benign here (its fixture ships no manifest, so ceiling 6 vs hops 0) and owned by Module 4.
 
-`_handoff_support.py` was read-only for Module 3 as first written, but seven scheduled rows (P7-1(ii), P7-3, P7-5, P7-6, P7-7, P7-8, P7-9) are production/test edits to it and its test file, and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
+`_handoff_support.py` was read-only for Module 3 as first written, but seven scheduled rows are production/test edits to it and its test file (**executed by Step 2b — this paragraph only justifies the scope**), and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
 
 - [ ] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
 
@@ -145,6 +145,10 @@ class TestPolicyDial:
         # DISPATCHES ON ARGV — fail only the `spawn-policy` call, `exec` the real
         # interpreter otherwise (validate_bundle makes four $PYTHON calls and runs BEFORE
         # this gate, so a blanket stub dies at bundle validation and never reaches it).
+        # `exec` BY ABSOLUTE PATH (capture sys.executable when writing the stub): the stub
+        # is first on PATH and is itself named python3, so bare `exec python3 "$@"` re-enters
+        # it and, since exec does not fork, spins forever — a HANG inside the untimed
+        # full-suite acceptance run, not a test failure. Measured: rc=137 under a watchdog.
         # Assert exit 3 + "reason=policy-ask".
 ```
 
@@ -162,7 +166,11 @@ class TestStallAndCeiling:
     def test_malformed_prior_outcome_indeterminate_skips(self, tmp_path):
         # last outcome missing tasks_done= -> proceeds, stderr contains "stall=indeterminate"
     def test_ceiling_derived_from_expected_hops(self, tmp_path):
-        # manifest expected_hops=2 -> ceiling max(6,4)=6; hops file "6" -> exit 3 hop-limit
+        # expected_hops=5 -> ceiling max(6, 2*5)=10; "9" proceeds, "10" -> exit 3 hop-limit.
+        # MUST exceed the floor: at expected_hops=2 the max() picks 6 and the `* 2` branch
+        # decides nothing, so `* 1`/`* 3`/deleting the derivation all SURVIVE. This is the
+        # ONLY pin on the shell's CEILING_FACTOR literal (the Python twin is pinned at
+        # test_handoff_support.py:113) — the SSOT divergence it exists to prevent.
     def test_env_ceiling_wins_absolutely(self, tmp_path):
         # env MAX_HOPS=1, hops file "1" -> refused even though derived ceiling is 6
     def test_over_expected_notifies_never_refuses(self, tmp_path):
@@ -177,6 +185,16 @@ class TestStallAndCeiling:
 - `test_spawn_handoff.py::test_hop_limit_exits_3` — relies on default `MAX_HOPS=3`; set `SUPERPOWERS_CMUX_MAX_HOPS=3` explicitly in its env (the default is now derived, floor 6).
 - `test_spawn_handoff.py::test_new_workspace_and_notify_argv_values_match_spec` — asserts `startswith("Hop 1/3 ")`, rendered from `Hop $SP_HOP/$MAX_HOPS`; no manifest → ceiling 6 → must become `"Hop 1/6 "`.
 - `test_spawn_handoff.py::test_spawn_log_record_fields_match_spec_log_format` — asserts `_spawn_log_fields(ctx, "intent") == {"hop": "1"}` by EXACT equality; step (f) adds `tasks_done=`. Before fixing it, sweep for OTHER exact-equality field-set assertions — step (f) and Tasks 9–10 also grow `outcome` records; do not assume this is the only one.
+
+- [ ] **Step 2b: The EIGHT `_handoff_support.py` / `test_handoff_support.py` rows — these are STEPS, not background reading.** Every path Step 6 stages must have a step that writes it; these two had none. (The scope paragraph above said "seven" and omitted **P7-2**, which is explicitly a `test_handoff_support.py` edit — a count inherited and never enumerated, the same defect that BLOCKED an earlier round of this dispatch. Count them yourself.) Each bullet is a required edit with its row id. Production edits in `_handoff_support.py`, tests in `test_handoff_support.py`:
+  - **P7-1(ii)** — a readable manifest with a present-but-INVALID `spawn_policy` (`"OFF"`, `"Off"`, JSON `false`, `null`, non-dict `handoff`) currently prints `auto`. **Fail closed to `ask`.** The shell's `*)` arm cannot cover this: `auto` is a recognized value matching its own case arm.
+  - **P7-3** — `count_tasks_done` reaches its lazy `import yaml` only INSIDE the glob loop, so zero matches ⇒ the `ImportError` never fires ⇒ a fake `0`, which manufactures a stall. **Probe the import once before the glob**, keeping the stdlib-only-at-import property (P7-9(B)).
+  - **P7-6** — `UnicodeDecodeError` subclasses `ValueError`, not the `OSError` `count_tasks_done` catches, so one non-UTF-8 byte in any report exits 1 with empty stdout (violates Module 2 AC-5). Use `errors="replace"` or widen the except. Fixture with invalid bytes; assert `returncode == 0`.
+  - **P7-8** — `stall_streak` returns `0` for ANY `OSError`. **Split it:** `FileNotFoundError` → `0`, other `OSError` → `indeterminate`. **NOT a blanket `except OSError: return "indeterminate"`** — that breaks the legitimate first-hop `0` and passes any test pinning only "unreadable ⇒ indeterminate". **Required positive control: assert a MISSING log still returns `0` in the same battery.**
+  - **P7-2** — `TestCli` has two tests and neither invokes `stall-streak`. Add CLI coverage, including P7-8's new degraded return.
+  - **P7-5** — nothing pins `spawn-policy` on valid-JSON-but-non-object (`5`, `null`, `[1,2]`). They return `ask` correctly today; add the assertions.
+  - **P7-7** — the `except ImportError: print("unknown")` mitigation (the designated mitigation for P7-3) has NO test; the mutation `print("unknown")` → `print(0)` SURVIVED. Technique: an `ImportError`-raising `yaml.py` on `PYTHONPATH`. **Positive-control it** — `/usr/bin/python3` on this machine DOES ship PyYAML, so the naive probe passes for the wrong reason.
+  - **P7-9** — (A) `expected-hops` on an unreadable manifest; (B) the lazy `import yaml` PLACEMENT invariant (hoisting it to module scope passes every existing test, and P7-3 edits that exact function); (D) `derive_expected_hops`'s `isinstance(h, dict)` guard, unpinned while its `_cli` twin is pinned.
 
 - [ ] **Step 3: Run to verify failures**, then **Step 4: Implement** in the script:
 
