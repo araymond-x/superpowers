@@ -1,8 +1,27 @@
-# Context Summary — cmux-spawn-v2, **Module 2 IN PROGRESS: Task 4 COMPLETE, resume at Task 5**
+# Context Summary — cmux-spawn-v2, **Module 2 IN PROGRESS: Tasks 4 + 5 COMPLETE, resume at Task 6**
 
-Updated 2026-08-01 **after Task 4 closed** (superseding the Module-1→2-boundary version, whose Module 1 detail is retained below). Compresses Module 1 + Task 4 so a fresh controller can resume at Task 5 without re-reading ~400KB of flight recorder. **Module 1's source reports live under `reports/archive-Contracts, cold-start measurement, spikes/`**; Task 4's are live in `reports/`. Both remain authoritative where this summary is terse.
+Updated 2026-08-01 **after Task 5 closed** (superseding the post-Task-4 version, whose detail is retained below). Compresses Module 1 + Tasks 4-5 so a fresh controller can resume at Task 6 without re-reading ~400KB of flight recorder. **Module 1's source reports live under `reports/archive-Contracts, cold-start measurement, spikes/`**; Tasks 4-5's are live in `reports/`. Both remain authoritative where this summary is terse.
 
-## SESSION 6 — what changed since the boundary
+## SESSION 7 — Task 5 COMPLETE, resume at Task 6
+
+| | |
+|---|---|
+| **Task 5 — COMPLETE** | `sdd_session.py: optional handoff block`. All 5 checkboxes. Commits `f91b94f` (impl), `d1741e0` (`[task 5 fix]`), `d52baf8` (flight recorder). Plan amendment `0529136` landed BEFORE dispatch |
+| **Trajectory** | partner APPROVED (1 Major actioned) → implementer DONE → spec PASS → quality **r1 CHANGES_REQUESTED** (3 surviving mutations, 2 over-permissive) → fix → quality r2 APPROVED, cosmetics only = convergence |
+| **Suite** | **674 passed** (was 671 at `fe2437e`; +8 Task 5 tests, +3 fix-round tests, −8… i.e. 663+8+3) |
+| **Next** | **Task 6** — `_handoff_support.py` (formula + precedence) + `materialize-manifest.py` wiring. `checkpoint-pre-dispatch-006.json` saved; owes `partner-review-006.md` before dispatch |
+| **Controller context** | 242,376 tokens at the Task 5/6 boundary (SOFT 300k / HARD 400k). **Verified in the hook source that the context gate arms ONLY on the implementer new-task path** (`IS_IMPLEMENTER && ! MARKED_FIX`) — fix dispatches are logged not gated, reviews aren't implementers. So Task 6 cannot be blocked mid-cycle; the next possible block is **Task 7's dispatch**, a clean boundary |
+
+**Four things from Task 5 worth carrying:**
+
+1. **The adversarial quality review found real defects on a fully green upstream for the NINTH consecutive round** — implementer DONE, spec PASS with behavior-level evidence, 671 tests green. Three mutations survived: `ge=1`→`ge=2`, `int`→`float`, and a `mode="before"` validator silently coercing unknown `spawn_policy` to `"auto"`. All three fixes were **test-only** and passed against the code exactly as committed — zero behavioral risk.
+2. **An annotation guard is not a behavior guard.** `test_spawn_policy_literal_is_closed_set` pins `get_args(...)`, which a coercing `mode="before"` validator leaves untouched. Consequential because the reviewer checked the consumer side: the `_handoff_support` CLI **and** `spawn-handoff-session.sh` both silently default an unrecognized consent value to `"auto"` — the spawn-*without*-asking value — making the Pydantic model the only layer that would reject a typo'd policy loudly.
+3. **The controller's own pre-dispatch amendment was the highest-leverage act of the task.** Before dispatching, the advisor asked whether the seven planned tests could distinguish `StrictModel` from `BaseModel`. They could not — none supplied an undeclared key. `test_extra_key_rejected` was added to the PLAN (`0529136`), and round 1 later confirmed it kills that mutation and nothing else.
+4. **A reviewer caught a bug in its OWN harness and re-ran before reporting.** Round 1's first battery mis-attributed 13 failures to two different mutations — a stale `__pycache__` `.pyc` surviving between runs (mtime+size aliasing at sub-second cadence). It self-reported on the grounds that *a harness that mis-attributes failures can equally mis-attribute survivals*. **Clear `__pycache__` between mutation runs and use `-p no:cacheprovider`.**
+
+**Two premises that FAILED at execution this session** (eighth and ninth in the sprint): (a) the partner review measured the global pre-commit format hook as registered and predicted a whole-file reformat — **it did not fire on either commit**, twice; (b) `_materialize()` in Task 6 Step 5 **does not exist** (third phantom-helper instance after `_minimal_plan()`/`_minimal_session()`), pre-resolved in the plan text before dispatch. **A FOURTH vacuous-harness instance hit the controller directly:** Bash cwd persists between tool calls, so an earlier `cd` into the feature dir made a `validate-plan.py` check run against a nonexistent path — and it surfaced as a `KeyError` in the *parsing* code, which reads like a script bug rather than "validation never ran."
+
+## SESSION 6 — what changed at the Task 4/5 boundary
 
 | | |
 |---|---|
@@ -35,7 +54,7 @@ Updated 2026-08-01 **after Task 4 closed** (superseding the Module-1→2-boundar
 | Feature | `docs/imp-plans/2026-07-30-cmux-spawn-v2/` — parent + 4 modules, 19 tasks (0–18) |
 | Module | **2 of 4** — "Models + hop-budget support layer", tasks **4–7** |
 | Complete | **Module 1 in full** (+ Task 4, see above) — Task 0 (11/11), Task 1 (4/4), Task 2 (4/4), Task 3 (3/3) **+ all 8 acceptance criteria** = 30/30 checkboxes. Commits `474c1bb`, `9669b09`, `43bdcee`, `783973b`, transition `dafc119` |
-| Next | ~~Task 4~~ **DONE** (see the Session 6 section above) — the live next task is **Task 5**. _This row is the Module-1-boundary snapshot, retained as written._ |
+| Next | ~~Task 4~~ ~~Task 5~~ **BOTH DONE** — the live next task is **Task 6** (see the Session 7 section at the top). _This row is the Module-1-boundary snapshot, retained as written._ |
 | Manifest | `active_module_id: 2`, `task_range: [4,7]`, `midpoint: 6`, `context_summary_at: 6` (recomputed by the transition — the N11 fix working) |
 | Tier | `standard`. Dispatch, spec review, quality review, partner review all **dispatched**, not self-written |
 | Baseline at transition | unit **658 passed**; `verify-symlink-install.sh` **104/0/0**; plan gate **PASS / 0 / 0** on all 5 files; tree clean; zero residual cmux probe workspaces (verified live twice) |

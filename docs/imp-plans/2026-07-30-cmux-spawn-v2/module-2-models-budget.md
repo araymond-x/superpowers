@@ -393,25 +393,25 @@ def hop_ceiling(exp):
 
 - [ ] **Step 4: Run** — the new test file passes.
 
-- [ ] **Step 5: Write the failing materialize tests** (append to `tests/unit/test_materialize_manifest.py`, following its existing run-and-load idiom):
+- [ ] **Step 5: Write the failing materialize tests** (append to `tests/unit/test_materialize_manifest.py`). **`_materialize()` DOES NOT EXIST** — verified; third instance of this plan-wide phantom-helper defect after `_minimal_plan()` and `_minimal_session()`, pre-resolved here rather than handed to an implementer. Real idiom: module-level `make_plan(tier=, tasks=, modules=, omit_tier=)` returns plan TEXT, then `run_materialize(plan, tmp_dir=)` returns a dict whose `["manifest"]` is the parsed JSON; wrap in `tempfile.mkdtemp()` + `try/finally shutil.rmtree` (both already imported). Two signature traps: `tasks` is a **list of dicts** (`[{"id": i}]`), NOT a count; and there is **no `extra_frontmatter` param** — add one to `make_plan` (you own the file) so frontmatter can carry `handoff_spawn`. There is no `tmp_path` fixture in this file.
 
 ```python
 class TestHandoffBlockMaterialization:
-    def test_manifest_gains_handoff_block(self, tmp_path):
-        # plan frontmatter WITHOUT handoff_spawn, 5 tasks, standard tier
-        manifest = _materialize(tmp_path, tasks=5)          # existing helper idiom
-        assert manifest["handoff"] == {"expected_hops": 2, "spawn_policy": "auto"}
-
-    def test_spawn_policy_copied_from_plan(self, tmp_path):
-        manifest = _materialize(tmp_path, tasks=5, extra_frontmatter="handoff_spawn: ask")
-        assert manifest["handoff"]["spawn_policy"] == "ask"
-
-    def test_micro_tier_expected_hops_is_one(self, tmp_path):
-        manifest = _materialize(tmp_path, tasks=2, tier="micro")
-        assert manifest["handoff"]["expected_hops"] == 1
+    def _mf(self, **kw):                    # make_plan + run_materialize + cleanup
+        tmp = tempfile.mkdtemp()
+        try:
+            r = run_materialize(make_plan(**kw), tmp_dir=tmp)
+            assert r["exit_code"] == 0, r["stderr"]
+            return r["manifest"]
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+    def test_manifest_gains_handoff_block(self):      # default 5 tasks, standard
+        assert self._mf()["handoff"] == {"expected_hops": 2, "spawn_policy": "auto"}
+    def test_spawn_policy_copied_from_plan(self):
+        assert self._mf(extra_frontmatter="handoff_spawn: ask")["handoff"]["spawn_policy"] == "ask"
+    def test_micro_tier_expected_hops_is_one(self):
+        assert self._mf(tier="micro", tasks=[{"id": 0}, {"id": 1}])["handoff"]["expected_hops"] == 1
 ```
-
-Adapt `_materialize(...)` to however the file actually builds plan files and invokes the script — read it first; do not invent a parallel harness.
 
 - [ ] **Step 6: Implement the materialize wiring** — in `materialize-manifest.py`:
 
