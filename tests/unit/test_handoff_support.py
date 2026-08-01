@@ -121,6 +121,11 @@ class TestTasksDone:
         _write_report(r, 2, "DONE_WITH_CONCERNS")
         _write_report(r, 3, "BLOCKED")
         (r / "task-005-implementer-report.md").write_text("no frontmatter at all")
+        # both task_id type guards: `no` is a YAML 1.1 boolean, "3" a string.
+        # `no`/False (not `yes`/True) because hash(True) == hash(1) would dedupe
+        # into the already-counted task 1 and let the bool mutation survive.
+        _write_report(r, "no", "DONE", name="task-006-implementer-report.md")
+        _write_report(r, '"3"', "DONE", name="task-007-implementer-report.md")
         assert count_tasks_done(str(r)) == 2                    # filename alone never counts
 
     def test_archives_counted_and_duplicates_deduped(self, tmp_path):
@@ -130,6 +135,14 @@ class TestTasksDone:
         _write_report(r / "archive-module-1", 1, "DONE")
         _write_report(r / "archive-module-1", 4, "DONE")        # dupe of live task 4
         assert count_tasks_done(str(r)) == 2                    # {1, 4}
+
+    def test_non_mapping_and_invalid_yaml_frontmatter_are_skipped_not_raised(self, tmp_path):
+        from _handoff_support import count_tasks_done
+        r = tmp_path / "reports"
+        r.mkdir(parents=True)
+        (r / "task-008-implementer-report.md").write_text("---\n- a\n- b\n---\nbody\n")
+        (r / "task-009-implementer-report.md").write_text("---\nkey: [unclosed\n---\nbody\n")
+        assert count_tasks_done(str(r)) == 0      # crash path, not a permissiveness path
 
 
 class TestStallStreak:
@@ -156,6 +169,17 @@ class TestStallStreak:
         rows = ["2026-07-30T00:00:01Z u1 outcome hop=1 workspace=w launch=auto"]  # no tasks_done=
         assert self._streak(tmp_path, rows, 3) == "indeterminate"
 
+    def test_intent_rows_between_outcomes_do_not_break_the_streak(self, tmp_path):
+        rows = ["2026-07-30T00:00:01Z u1 intent hop=1", self.OUT.format(i=2, td=4),
+                "2026-07-30T00:00:03Z u2 intent hop=2", self.OUT.format(i=4, td=4)]
+        assert self._streak(tmp_path, rows, 4) == 2      # real logs ALWAYS interleave intent
+
+    def test_malformed_older_outcome_truncates_rather_than_indeterminate(self, tmp_path):
+        # indeterminate is correct ONLY when the NEWEST record is malformed
+        rows = ["2026-07-30T00:00:01Z u1 outcome hop=1 workspace=w launch=auto",  # no tasks_done=
+                self.OUT.format(i=2, td=4), self.OUT.format(i=3, td=4)]
+        assert self._streak(tmp_path, rows, 4) == 2
+
 
 class TestCli:
     def _run(self, *args):
@@ -175,3 +199,7 @@ class TestCli:
         m.write_text('{"total_tasks": 0}')
         assert self._run("expected-hops", "--manifest", str(m)).stdout.strip() == "unknown"
         assert self._run("spawn-policy", "--manifest", str(tmp_path / "no.json")).stdout.strip() == "ask"   # fails CLOSED
+        m.write_text('{"total_tasks": 5, "handoff": {"expected_hops": 2, "spawn_policy": "off"}}')
+        assert self._run("spawn-policy", "--manifest", str(m)).stdout.strip() == "off"   # declared refusal is HONORED
+        m.write_text('{"total_tasks": 5, "handoff": {"expected_hops": 2, "spawn_policy": "ask"}}')
+        assert self._run("spawn-policy", "--manifest", str(m)).stdout.strip() == "ask"
