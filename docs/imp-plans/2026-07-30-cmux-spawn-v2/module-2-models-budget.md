@@ -129,30 +129,32 @@ git commit -m "feat(cmux-spawn-v2): plan.py handoff_spawn consent field (no sche
 - Modify: `skills/scripts/models/sdd_session.py`
 - Test: `tests/unit/test_models/test_sdd_session_model.py`
 
-- [ ] **Step 1: Write the failing tests:**
+- [ ] **Step 1: Write the failing tests.** `_minimal_session()` **DOES NOT EXIST** — verified, see the note below. Use the file's real idiom: the module-level `MINIMAL_SESSION` dict spread into `SddSession.model_validate({**MINIMAL_SESSION, ...})`, exactly as `TestSddSessionGoldenInput` does. Add `Handoff` to the existing `from sdd_session import (...)` block.
 
 ```python
 class TestHandoffBlock:
     def test_absent_handoff_still_validates(self):
-        s = _minimal_session()          # the file's existing construction idiom
+        s = SddSession.model_validate(MINIMAL_SESSION)
         assert s.handoff is None
 
     def test_handoff_block_validates(self):
-        s = _minimal_session(handoff={"expected_hops": 5, "spawn_policy": "ask"})
+        s = SddSession.model_validate({**MINIMAL_SESSION,
+                                       "handoff": {"expected_hops": 5, "spawn_policy": "ask"}})
         assert s.handoff.expected_hops == 5
         assert s.handoff.spawn_policy == "ask"
 
     def test_spawn_policy_defaults_auto(self):
-        s = _minimal_session(handoff={"expected_hops": 3})
+        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 3}})
         assert s.handoff.spawn_policy == "auto"
 
     def test_expected_hops_must_be_positive(self):
         for bad in (0, -1):
             with pytest.raises(ValidationError):
-                _minimal_session(handoff={"expected_hops": bad})
+                SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": bad}})
 
     def test_round_trips_through_json(self):
-        s = _minimal_session(handoff={"expected_hops": 4, "spawn_policy": "off"})
+        s = SddSession.model_validate({**MINIMAL_SESSION,
+                                       "handoff": {"expected_hops": 4, "spawn_policy": "off"}})
         import json
         s2 = SddSession.model_validate(json.loads(s.model_dump_json()))
         assert s2.handoff == s.handoff
@@ -160,12 +162,22 @@ class TestHandoffBlock:
     def test_partial_block_rejected(self):        # deferred order B4 — see note below
         for partial in ({}, {"spawn_policy": "ask"}):
             with pytest.raises(ValidationError):
-                _minimal_session(handoff=partial)
+                SddSession.model_validate({**MINIMAL_SESSION, "handoff": partial})
 
     def test_spawn_policy_literal_is_closed_set(self):   # carry-forward from Task 4 quality r2
         from typing import get_args
         assert get_args(Handoff.model_fields["spawn_policy"].annotation) == ("auto", "ask", "off")
 ```
+
+**The `_minimal_session()` helper is hypothetical — the same defect Task 4 hit, pre-resolved here
+rather than passed to an implementer.** Verified with `/usr/bin/grep -rn "_minimal_session" tests/
+skills/`: the only match is a *test method* named `test_minimal_session_parses`, not a helper.
+`tests/unit/test_models/test_sdd_session_model.py` builds sessions from a module-level
+`MINIMAL_SESSION` dict (line 19, itself referencing `MINIMAL_PATHS` at line 12) — the exact sibling
+of `test_plan_model.py`'s `MINIMAL_PLAN`. Two further facts the Task 5 implementer needs: the file
+already imports `CURRENT_SCHEMA_VERSION` and `ValidationError` at top level (do not re-import
+inside a method), and it imports selectively from `sdd_session` — so **`Handoff` must be added to
+that import list or `test_spawn_policy_literal_is_closed_set` raises `NameError`.**
 
 **Deferred order B4 — the pinned reading, applied here and in Module 3.** `Handoff.expected_hops`
 stays **required** (`int = Field(ge=1)`), i.e. the block is **all-or-nothing**: absent entirely is
