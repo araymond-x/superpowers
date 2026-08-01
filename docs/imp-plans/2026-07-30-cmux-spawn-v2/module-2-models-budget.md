@@ -167,7 +167,21 @@ class TestHandoffBlock:
     def test_spawn_policy_literal_is_closed_set(self):   # carry-forward from Task 4 quality r2
         from typing import get_args
         assert get_args(Handoff.model_fields["spawn_policy"].annotation) == ("auto", "ask", "off")
+
+    def test_extra_key_rejected(self):    # pins StrictModel base — see note below
+        with pytest.raises(ValidationError):
+            SddSession.model_validate({**MINIMAL_SESSION,
+                                       "handoff": {"expected_hops": 5, "typo": 1}})
 ```
+
+**`test_extra_key_rejected` pins the BASE CLASS, and none of the other seven can.** Controller
+amendment at Task 5 dispatch. Every one of the first seven tests exercises only fields `Handoff`
+declares, so they pin its *positive* surface; `class Handoff(BaseModel)` — non-strict — passes all
+seven green. `test_partial_block_rejected` is not a substitute: "missing required field" and
+"unknown field rejected" are different Pydantic mechanisms, and only `extra="forbid"` (inherited
+from `StrictModel`, `_base.py`) produces the latter. This is the over-permissive shape a
+one-directional mutation battery misses — the same class of defect as Task 4's un-pinned `Literal`.
+Discriminating control: swapping the base to `BaseModel` must fail exactly this test and no other.
 
 **The `_minimal_session()` helper is hypothetical — the same defect Task 4 hit, pre-resolved here
 rather than passed to an implementer.** Verified with `/usr/bin/grep -rn "_minimal_session" tests/
