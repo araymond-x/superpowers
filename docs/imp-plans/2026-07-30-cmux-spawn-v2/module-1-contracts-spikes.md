@@ -328,11 +328,11 @@ git commit -m "docs(cmux-spawn-v2): SP1 — probe-row attribution root cause"
 
 NO implementation in either — design docs only.
 
-- [ ] **Step 1: SP3 doc** — where a context guard for non-SDD sessions should live. Must cover: the evidence ($127 / 569k-token unguarded planning session, spec §6), why the SDD gate cannot simply extend (it is manifest-gated and fires on the implementer dispatch path only), candidate homes (a UserPromptSubmit/PreToolUse hook independent of SDD artifacts; a stop-hook advisory; a `claude-usage-pace`-based session monitor), the probe reuse story (`context-probe.py` is already transcript-driven and SDD-agnostic), and a recommendation with rollout risk. End with the BACKLOG row text.
+- [x] **Step 1: SP3 doc** — where a context guard for non-SDD sessions should live. Must cover: the evidence ($127 / 569k-token unguarded planning session, spec §6), why the SDD gate cannot simply extend (it is manifest-gated and fires on the implementer dispatch path only), candidate homes (a UserPromptSubmit/PreToolUse hook independent of SDD artifacts; a stop-hook advisory; a `claude-usage-pace`-based session monitor), the probe reuse story (`context-probe.py` is already transcript-driven and SDD-agnostic), and a recommendation with rollout risk. End with the BACKLOG row text.
 
-- [ ] **Step 2: SP4 doc** — a sanctioned carry-forward fix lane across module transitions. Must cover: today's rule (fixes belong to the module that owns the file; `transition-module.py` archives reports and truncates the dispatch log at the boundary), the observed friction (a defect found in module N+1 whose fix belongs to module N's files has no clean dispatch lane), candidate designs (a `type=fix` cross-module dispatch class the hook already logs; a deviations-ledger lane; re-opening the archived module), enforcement interactions (Checks 4c/5c/9 and the N26 fix-attribution rows), and a recommendation. End with the BACKLOG row text.
+- [x] **Step 2: SP4 doc** — a sanctioned carry-forward fix lane across module transitions. Must cover: today's rule (fixes belong to the module that owns the file; `transition-module.py` archives reports and truncates the dispatch log at the boundary), the observed friction (a defect found in module N+1 whose fix belongs to module N's files has no clean dispatch lane), candidate designs (a `type=fix` cross-module dispatch class the hook already logs; a deviations-ledger lane; re-opening the archived module), enforcement interactions (Checks 4c/5c/9 and the N26 fix-attribution rows), and a recommendation. End with the BACKLOG row text.
 
-- [ ] **Step 3: Append both BACKLOG rows** (next free N-ids; cite both docs), then commit:
+- [x] **Step 3: Append both BACKLOG rows** (next free N-ids; cite both docs), then commit:
 
 ```bash
 git add docs/process-improvement-findings/2026-07-30-sp3-non-sdd-context-guard-design.md \
@@ -343,11 +343,11 @@ git commit -m "docs(cmux-spawn-v2): SP3 + SP4 design docs + BACKLOG rows"
 
 ## Module 1 Acceptance Criteria
 
-- [ ] `cmux-verb-shapes.json` + `cold-start-timing.json` exist with `captured: live` / `measured: true` (or the documented blocked-path values + a deviation row).
-- [ ] `test_spawn_handoff_v2.py` fixture-contract section passes (3 tests).
-- [ ] The three audit-ordered probes are recorded, negative answers included: `surface_uuid_source` (A1), `wait_for_latching` (A2), `rc_confirmation_screen` (A3a).
-- [ ] Any escalation trigger fired to the controller rather than worked around: `wait_for_latching.latching == false` (Task 10's re-wait is unsound as designed), `surface_uuid_source.available == false` (operator addendum #1 becomes a recorded refusal), or a captured verb shape contradicting a pinned Contract Constraint.
-- [ ] The derived `default_seconds` is pinned and ≥ 2 × the worst measured run.
-- [ ] SP1 doc committed (with probe fix + green probe/gate test set, or a pinned exclusion rule).
-- [ ] SP2 disposition + SP3/SP4 design docs committed with BACKLOG rows.
-- [ ] No `task0-*` or `sp2-*` workspaces remain in `cmux list-workspaces`.
+- [x] `cmux-verb-shapes.json` + `cold-start-timing.json` exist with `captured: live` / `measured: true` (or the documented blocked-path values + a deviation row).
+- [x] `test_spawn_handoff_v2.py` fixture-contract section passes (**6** tests — grew past the planned 3 in the Task 0 fix round; `pytest tests/unit/test_spawn_handoff_v2.py -q` → 6 passed).
+- [x] The three audit-ordered probes are recorded, negative answers included: `surface_uuid_source` (A1), `wait_for_latching` (A2), `rc_confirmation_screen` (A3a).
+- [x] Any escalation trigger fired to the controller rather than worked around: `wait_for_latching.latching == false` (Task 10's re-wait is unsound as designed), `surface_uuid_source.available == false` (operator addendum #1 becomes a recorded refusal), or a captured verb shape contradicting a pinned Contract Constraint.
+- [x] The derived `default_seconds` is pinned and ≥ 2 × the worst measured run. (60 ≥ 2×11; the **60s floor dominated** — runs were [11,10,11,8,8], so the samples give ~5.5× headroom rather than setting the value.)
+- [x] SP1 doc committed (with probe fix + green probe/gate test set, or a pinned exclusion rule).
+- [x] SP2 disposition + SP3/SP4 design docs committed with BACKLOG rows. (N79 / N80 / N81, one row each; N80+N81 byte-identical to their docs' fences.)
+- [x] No `task0-*` or `sp2-*` workspaces remain in `cmux list-workspaces`. (Verified live twice — at Task 3 dispatch and again at module close — against `cmux 0.64.20 (100) [14e3400b9]`; also swept `sp2fix-*` from Task 1's second probe session.)
