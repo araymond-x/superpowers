@@ -1,6 +1,33 @@
-# Context Summary — cmux-spawn-v2, **Module 2 IN PROGRESS: Tasks 4 + 5 COMPLETE, resume at Task 6**
+# Context Summary — cmux-spawn-v2, **MODULE 2 COMPLETE (Tasks 4-7) — resume at Module 3, Task 8**
 
-Updated 2026-08-01 **after Task 5 closed** (superseding the post-Task-4 version, whose detail is retained below). Compresses Module 1 + Tasks 4-5 so a fresh controller can resume at Task 6 without re-reading ~400KB of flight recorder. **Module 1's source reports live under `reports/archive-Contracts, cold-start measurement, spikes/`**; Tasks 4-5's are live in `reports/`. Both remain authoritative where this summary is terse.
+Updated 2026-08-01 **after Task 7 closed and Module 2 completed** (superseding the post-Task-5 version, whose detail is retained below). Compresses Module 1 + Tasks 4-7 so a fresh controller can resume at Task 8 without re-reading the full flight recorder. **Module 1's reports live under `reports/archive-Contracts, cold-start measurement, spikes/`**; Module 2's are live in `reports/` until the transition archives them. Both remain authoritative where this summary is terse.
+
+> **Hand-maintained.** `context-summary.py` is NOT archive-aware and cannot regenerate this after a module transition; Check 6b gates on EXISTENCE, not freshness, so nothing warns when it goes stale. A merge-time BACKLOG row is already logged.
+
+## SESSION 8 — Tasks 6 + 7 COMPLETE, MODULE 2 DONE, resume at Module 3 Task 8
+
+| | |
+|---|---|
+| **Task 6 — COMPLETE** | `_handoff_support.py` formula/precedence SSOT + `materialize-manifest.py` wiring. 8 checkboxes. `9b32c25` (impl), `55e96a1` (fix r1), `bf4343a` (fix r2), `f343bc1` (close). Converged at **quality round 3** |
+| **Task 7 — COMPLETE** | `tasks_done` counting + stall streak + `_cli`. `83a9ccf` (impl), `cf5de3b` (fix), `c28e33d` (close). Converged at **quality round 2** |
+| **Plan amendments before dispatch** | `64ba56a` (B9 + R3-2, net-zero), `bbd3773` (shared-helper spec sync), `b8131b2` (**consent fail-open fix**), `d12f83c` (P7-1 address fix) |
+| **Suite** | 694 → **707 passed**. Regression PASS 160 / FAIL 0 / WARNING 2. e2e PASS 15 steps. Plan gate PASS/0/0 on all 5 files |
+| **Module 2 checkboxes** | 11 total: **10 checked + AC-5 as an annotated `[~]` PARTIAL** (deliberately not green — see below) |
+| **Next** | **Module 3, Task 8** ("Policy gate, stall/ceiling rework"). Run `transition-module.py` FIRST. Then **OP-1: compress Task 9 (exactly 200 lines) as a DISCRETE step at Module 3 entry, before any amendment lands** |
+| **Controller context** | ~300k at the Module 2/3 boundary (SOFT 300k / HARD 400k). The gate arms ONLY on the implementer new-task path (`IS_IMPLEMENTER && ! MARKED_FIX`), so reviews and fix rounds are never blocked; the next gateable moment is **Task 8's dispatch** |
+
+**Six things from Tasks 6-7 worth carrying:**
+
+1. **The adversarial quality review is now 13-for-13 on green upstreams.** Task 7's round 1 ran against implementer DONE + a spec review that *mechanically diffed* the plan's fenced block against the landed code and found only whitespace + 704 tests green — and still found **12 of 14 mutations surviving**.
+2. **THE PARTNER REVIEW BLOCKED THE TASK 7 DISPATCH AND FOUND A CONSENT FAIL-OPEN IN THE PLAN'S OWN CODE** — the second such catch on this feature. `spawn-policy` printed `auto` (spawn-without-asking) for any missing/unreadable/corrupt manifest, because `except → {}` is indistinguishable from a readable manifest with no `handoff` block. It is the SOLE consent gate, and **the defaults STACK**: Module 3's `*) SPAWN_POLICY="auto"` independently coerces anything unrecognized. Fixed to fail closed to `ask` (retryable, pre-reservation). **Pre-dispatch controller/partner work has now been the highest-leverage act on three consecutive tasks.**
+3. **VACUOUSNESS IS THE DEFECT CLASS, AND IT REACHED THE FIXES THEMSELVES.** Quality r1 prescribed a `task_id: yes` fixture to pin a bool guard; the implementer **measured it and it does not discriminate** — `yes` → `True`, `True == 1`, so `done.add(True)` collapses into an already-counted task 1 and the mutation SURVIVES. `no` → `False` → `0` works. Round 2 confirmed and generalized: `{"task_ids": [True, 2]}` in existing code discriminates ONLY because the sibling is `2`. **Standing rule now in `deviations.md`.**
+4. **The bool-guard family is at SIX sites plus a near-miss, and four rounds each believed they had closed it.** Treat "the family is closed" as a claim to disprove.
+5. **NINE instrument failures this sprint.** ugrep `--ignore-files` skipping `.worktrees/`; a vacuous pytest glob; `ruff` absent from PATH; an inherited `cd`; a `cmux --help` truncated by `head -50` from which absence was inferred; a `grep -E` using backslash-pipe for alternation; a PyYAML-absent probe using `/usr/bin/python3`, which *ships* PyYAML here; the `task_id: yes` fixture; and a restore that silently dropped a trailing newline. **Positive-control every probe — an empty or passing result is a claim, not a fact.**
+6. **The pre-commit format hook now attacks EVERY Python commit** (three consecutive), black-rewriting whole files and deleting the pinned seam imports `HOP_DIVISOR` / `CEILING_FACTOR`. **Standing procedure: check `git diff --cached --stat`, then `git commit --no-verify`.**
+
+**AC-5 is a `[~]` annotated partial, not green** — three measured paths violate "degradation is observable at exit 0" (**P7-3** fake `0`, **P7-6** `UnicodeDecodeError` → exit 1, **P7-8** `stall_streak` returns proceed on any `OSError`), each needing a production edit to a plan-verbatim body. Quality r2 **blocked the transition until these were in `deviations.md`**, because the reports carrying them get archived at the boundary while the register survives it. **That is the reusable lesson: a finding recorded only in a report is a finding you are about to lose.**
+
+**Module 3 inherits nine scheduled rows**: P7-1 (i shell + ii Python, both required — neither subsumes the other), P7-3, P7-4, P7-5, P7-6, P7-7, P7-8, P7-9, plus OP-1 and the standing bool-guard rule.
 
 ## SESSION 7 — Task 5 COMPLETE, resume at Task 6
 
