@@ -30,7 +30,7 @@ tasks:
 
 _External contracts were frozen into fixtures by Module 1's Task 0 (repo convention: the mechanical Task-0 gate resolves against the module that owns Task 0). The binding facts this module consumes — spec-distilled Contract Facts (Plan model, Manifest, `expected_hops` formula, `tasks_done` counting), `skills/scripts/models/implementer_report.py` statuses, and the parent plan's Shared Contract Section items 2 and 4 — are restated under Contract Constraints below._
 
-**Contract Constraints:** `Plan` and `SddSession` are `extra="forbid"` — new fields must be optional with defaults so every existing plan/manifest still validates; `CURRENT_SCHEMA_VERSION` stays 1. `expected_hops = ceil(total_tasks / 2.5)` standard, `1` micro. Derivation precedence: validated manifest total → union of module task IDs → inclusive `task_range`; invalid/zero → `None` (absent-with-warning). `tasks_done`: unique task IDs whose implementer-report frontmatter parses AND has status `DONE`/`DONE_WITH_CONCERNS` (verification reports count under the same statuses — their `files_changed` may be empty); filenames alone never count; scans `reports/` AND `archive-*/`. **Python 3.9 scan asymmetry (deferred order B7):** `check_python39_compat` flat-globs `skills/subagent-driven-development/scripts/*.py` ONLY — so `_handoff_support.py` (Tasks 6-7) must use no PEP-604 unions and no builtin generics in annotations (`Optional[X]` / `Dict[str, int]`, not `X | None` / `dict[str, int]`), while `skills/scripts/models/` is NOT scanned and Task 5's `Handoff | None` is correct there. Do not "harmonize" the two directories.
+**Contract Constraints:** `Plan` and `SddSession` are `extra="forbid"` — new fields must be optional with defaults so every existing plan/manifest still validates; `CURRENT_SCHEMA_VERSION` stays 1. `expected_hops = ceil(total_tasks / 2.5)` standard, `1` micro. Derivation precedence: validated manifest total → union of module task IDs → inclusive `task_range`; invalid/zero → `None` (absent-with-warning). `tasks_done`: unique task IDs whose implementer-report frontmatter parses AND has status `DONE`/`DONE_WITH_CONCERNS` (verification reports count under the same statuses — their `files_changed` may be empty); filenames alone never count; scans `reports/` AND `archive-*/`. **Python 3.9 scan asymmetry (deferred order B7):** `check_python39_compat` flat-globs `skills/subagent-driven-development/scripts/*.py` ONLY — so `_handoff_support.py` (Tasks 6-7) must use no PEP-604 unions and no builtin generics in annotations (`Optional[X]` / `Dict[str, int]`, not `X | None` / `dict[str, int]`), while `skills/scripts/models/` is NOT scanned and Task 5's `Handoff | None` is correct there. Do not "harmonize" the two directories. **Never normalize `handoff_spawn` with `or` (Task 6):** PyYAML is YAML 1.1, so bare `handoff_spawn: off` parses to boolean `False`, and `False or "auto"` silently turns a *refusal* into spawn-without-asking. Use `if spawn_policy is None:` so a falsy value reaches the `Handoff` model and fails materialization loudly.
 
 ## File Map
 
@@ -397,12 +397,12 @@ def hop_ceiling(exp):
 
 ```python
 class TestHandoffBlockMaterialization:
-    def _mf(self, **kw):                    # make_plan + run_materialize + cleanup
+    def _mf(self, ok=True, **kw):            # make_plan + run_materialize + cleanup
         tmp = tempfile.mkdtemp()
         try:
             r = run_materialize(make_plan(**kw), tmp_dir=tmp)
-            assert r["exit_code"] == 0, r["stderr"]
-            return r["manifest"]
+            assert (r["exit_code"] == 0) is ok, r["stderr"]
+            return r["manifest"] if ok else r
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
     def test_manifest_gains_handoff_block(self):      # default 5 tasks, standard
@@ -411,26 +411,24 @@ class TestHandoffBlockMaterialization:
         assert self._mf(extra_frontmatter="handoff_spawn: ask")["handoff"]["spawn_policy"] == "ask"
     def test_micro_tier_expected_hops_is_one(self):
         assert self._mf(tier="micro", tasks=[{"id": 0}, {"id": 1}])["handoff"]["expected_hops"] == 1
+    def test_off_survives_and_bare_off_is_never_coerced_to_auto(self):   # YAML 1.1: bare off is False
+        assert self._mf(extra_frontmatter='handoff_spawn: "off"')["handoff"]["spawn_policy"] == "off"
+        assert self._mf(extra_frontmatter="handoff_spawn: off", ok=False)["exit_code"] != 0
 ```
 
-- [ ] **Step 6: Implement the materialize wiring** — in `materialize-manifest.py`:
+- [ ] **Step 6: Implement the materialize wiring** — import beside the existing `_midpoint` import (mid-file, ~line 59 — NOT the file top), then in `materialize()` between `total_tasks` and the `SddSession(...)` call:
 
 ```python
-from _handoff_support import expected_hops  # top, beside the _midpoint import
-```
-
-and in `materialize()`, after the tier/tasks are known and before `SddSession(...)`:
-
-```python
+from _handoff_support import expected_hops   # beside the _midpoint import
     # --- Handoff block (cmux-spawn-v2) ---
-    spawn_policy = frontmatter.get("handoff_spawn") or "auto"
-    handoff = {
-        "expected_hops": expected_hops(total_tasks, tier),
-        "spawn_policy": spawn_policy,
-    }
+    spawn_policy = frontmatter.get("handoff_spawn")
+    if spawn_policy is None:                 # NOT `or` — bare `off` is YAML 1.1 False
+        spawn_policy = "auto"
+    handoff = {"expected_hops": expected_hops(total_tasks, tier),
+               "spawn_policy": spawn_policy}
 ```
 
-pass `handoff=handoff` into the `SddSession(...)` constructor (the model validates the policy literal — an invalid frontmatter value fails materialization loudly, which is correct: the plan gate should have caught it).
+Pass `handoff=handoff` into `SddSession(...)`. The model then validates the literal, so a non-`None` bad value (incl. `False` from bare `off`) fails materialization **loudly** — correct: the plan gate should have caught it.
 
 - [ ] **Step 7: Run everything this touches**
 
