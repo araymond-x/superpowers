@@ -13,7 +13,7 @@ Updated 2026-08-01 **after Task 7 closed and Module 2 completed** (superseding t
 | **Plan amendments before dispatch** | `64ba56a` (B9 + R3-2, net-zero), `bbd3773` (shared-helper spec sync), `b8131b2` (**consent fail-open fix**), `d12f83c` (P7-1 address fix) |
 | **Suite** | 694 → **707 passed**. Regression PASS 160 / FAIL 0 / WARNING 2. e2e PASS 15 steps. Plan gate PASS/0/0 on all 5 files |
 | **Module 2 checkboxes** | 11 total: **10 checked + AC-5 as an annotated `[~]` PARTIAL** (deliberately not green — see below) |
-| **Next** | **Module 3, Task 8** ("Policy gate, stall/ceiling rework"). Run `transition-module.py` FIRST. Then **OP-1: compress Task 9 (exactly 200 lines) as a DISCRETE step at Module 3 entry, before any amendment lands** |
+| **Next** | **Task 8 implementer dispatch — but a PARTNER ROUND 3 is owed first.** Module 2 transitioned; OP-1 CLOSED as mis-specified (`f06ae2b`/`da5bf58`/`e020e59`); Task 8 pre-dispatch work landed across `ca70612`, `3f6cbe6`, `f135c4f`, `50623b6`. Partner rounds 1 and 2 both BLOCKED and both found real defects; round 2's four findings are addressed but UNREVIEWED. The reviewed dispatch prompt is at `task-008-dispatch-prompt.md` (feature-dir root). Checkpoint `checkpoint-pre-dispatch-008.json` PASSes (0 blockers). |
 | **Controller context** | ~300k at the Module 2/3 boundary (SOFT 300k / HARD 400k). The gate arms ONLY on the implementer new-task path (`IS_IMPLEMENTER && ! MARKED_FIX`), so reviews and fix rounds are never blocked; the next gateable moment is **Task 8's dispatch** |
 
 **Six things from Tasks 6-7 worth carrying:**
