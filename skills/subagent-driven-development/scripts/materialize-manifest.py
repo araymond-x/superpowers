@@ -57,6 +57,7 @@ def extract_frontmatter(text: str) -> Optional[dict]:
 
 
 from _midpoint import compute_midpoint  # noqa: E402  (single source of truth)
+from _handoff_support import expected_hops  # noqa: E402  (single source of truth)
 
 
 def git_root_relative(path: str) -> str:
@@ -112,6 +113,13 @@ def materialize(plan_file: str, feature_dir: str) -> int:
     if total_tasks == 0:
         print("No tasks found in plan frontmatter", file=sys.stderr)
         return 1
+
+    # --- Handoff block (cmux-spawn-v2) ---
+    spawn_policy = frontmatter.get("handoff_spawn")
+    if spawn_policy is None:                 # NOT `or` — bare `off` is YAML 1.1 False
+        spawn_policy = "auto"
+    handoff = {"expected_hops": expected_hops(total_tasks, tier),
+               "spawn_policy": spawn_policy}
 
     # --- Modules (optional) ---
     modules_raw = frontmatter.get("modules")
@@ -184,6 +192,7 @@ def materialize(plan_file: str, feature_dir: str) -> int:
                 profile["process_requirements"]
             ),
             modules=modules,
+            handoff=handoff,
         )
     except ValidationError as exc:
         print(f"Manifest validation failed:\n{exc}", file=sys.stderr)

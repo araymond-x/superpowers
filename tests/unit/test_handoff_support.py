@@ -1,0 +1,74 @@
+"""_handoff_support.py — formula, precedence, degradation."""
+import sys
+from pathlib import Path
+
+SCRIPTS = Path(__file__).resolve().parent.parent.parent / "skills" / "subagent-driven-development" / "scripts"
+sys.path.insert(0, str(SCRIPTS))
+
+from _handoff_support import (  # noqa: E402
+    HOP_DIVISOR, CEILING_FLOOR, CEILING_FACTOR,
+    expected_hops, derive_total_tasks, derive_expected_hops, hop_ceiling,
+)
+
+import subprocess
+
+VENV_PY = str(Path(__file__).resolve().parent.parent.parent / ".venv" / "bin" / "python3")
+SUPPORT = str(SCRIPTS / "_handoff_support.py")
+
+
+def _write_report(d, task_id, status, task_type="implementation", name=None):
+    d.mkdir(parents=True, exist_ok=True)
+    body = (f"---\nschema_version: 1\ntask_id: {task_id}\nstatus: {status}\n"
+            f"task_type: {task_type}\nfiles_changed: []\n"
+            "tests: {written: 0, passing: 0, command: x, result: PASS}\n---\nbody\n")
+    (d / (name or f"task-{task_id:03d}-implementer-report.md")).write_text(body)
+
+
+def _log(lines):
+    return "".join(l + "\n" for l in lines)
+
+
+class TestExpectedHops:
+    def test_formula_standard(self):
+        assert expected_hops(1, "standard") == 1
+        assert expected_hops(5, "standard") == 2      # ceil(5/2.5)
+        assert expected_hops(19, "standard") == 8     # ceil(19/2.5)
+
+    def test_micro_is_one(self):
+        assert expected_hops(19, "micro") == 1
+
+    def test_invalid_total_raises(self):
+        import pytest
+        for bad in (0, -3, "7", None):
+            with pytest.raises(ValueError):
+                expected_hops(bad, "standard")
+
+
+class TestDeriveTotalTasks:
+    def test_precedence_1_manifest_total(self):
+        assert derive_total_tasks({"total_tasks": 12, "modules": [{"task_ids": [1]}]}) == 12
+
+    def test_precedence_2_module_union_dedupes(self):
+        m = {"total_tasks": 0,
+             "modules": [{"task_ids": [0, 1, 2]}, {"task_ids": [2, 3]}]}
+        assert derive_total_tasks(m) == 4
+
+    def test_precedence_3_task_range_inclusive(self):
+        assert derive_total_tasks({"total_tasks": None, "modules": [], "task_range": [3, 7]}) == 5
+
+    def test_all_invalid_returns_none(self):
+        assert derive_total_tasks({"total_tasks": 0, "modules": [], "task_range": [7, 3]}) is None
+
+
+class TestDeriveExpectedHops:
+    def test_block_wins_else_derive_else_none(self):
+        assert derive_expected_hops({"handoff": {"expected_hops": 9}, "total_tasks": 5}) == 9
+        assert derive_expected_hops({"total_tasks": 5, "tier": "standard"}) == 2
+        assert derive_expected_hops({"total_tasks": 0}) is None
+
+
+class TestHopCeiling:
+    def test_floor_factor_and_none(self):
+        assert hop_ceiling(2) == 6                    # max(6, 4)
+        assert hop_ceiling(8) == 16
+        assert hop_ceiling(None) == CEILING_FLOOR

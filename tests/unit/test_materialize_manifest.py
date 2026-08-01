@@ -52,6 +52,7 @@ def make_plan(
     tasks: list[dict] | None = None,
     modules: list[dict] | None = None,
     omit_tier: bool = False,
+    extra_frontmatter: str | None = None,
 ) -> str:
     """Generate plan text with YAML frontmatter.
 
@@ -60,6 +61,8 @@ def make_plan(
         tasks: List of task dicts with 'id' keys. Defaults to 5 tasks (0-4).
         modules: Optional list of module dicts for multi-module plans.
         omit_tier: If True, exclude enforcement_tier from frontmatter entirely.
+        extra_frontmatter: Optional raw YAML line(s) injected into the
+            frontmatter (e.g. ``handoff_spawn: ask``).
 
     Returns:
         Plan markdown with YAML frontmatter.
@@ -70,6 +73,8 @@ def make_plan(
     lines = ["---"]
     if not omit_tier:
         lines.append(f"enforcement_tier: {tier}")
+    if extra_frontmatter:
+        lines.append(extra_frontmatter)
     lines.append("tasks:")
     for t in tasks:
         lines.append(f"  - id: {t['id']}")
@@ -308,3 +313,32 @@ class TestMultiModuleManifest:
             assert r["manifest"]["modules"][1]["id"] == 2
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
+# ---------------------------------------------------------------------------
+# Tests: handoff block materialization (cmux-spawn-v2)
+# ---------------------------------------------------------------------------
+
+
+class TestHandoffBlockMaterialization:
+    def _mf(self, ok=True, **kw):            # make_plan + run_materialize + cleanup
+        tmp = tempfile.mkdtemp()
+        try:
+            r = run_materialize(make_plan(**kw), tmp_dir=tmp)
+            assert (r["exit_code"] == 0) is ok, r["stderr"]
+            return r["manifest"] if ok else r
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+    def test_manifest_gains_handoff_block(self):      # default 5 tasks, standard
+        assert self._mf()["handoff"] == {"expected_hops": 2, "spawn_policy": "auto"}
+
+    def test_spawn_policy_copied_from_plan(self):
+        assert self._mf(extra_frontmatter="handoff_spawn: ask")["handoff"]["spawn_policy"] == "ask"
+
+    def test_micro_tier_expected_hops_is_one(self):
+        assert self._mf(tier="micro", tasks=[{"id": 0}, {"id": 1}])["handoff"]["expected_hops"] == 1
+
+    def test_off_survives_and_bare_off_is_never_coerced_to_auto(self):   # YAML 1.1: bare off is False
+        assert self._mf(extra_frontmatter='handoff_spawn: "off"')["handoff"]["spawn_policy"] == "off"
+        assert self._mf(extra_frontmatter="handoff_spawn: off", ok=False)["exit_code"] != 0
