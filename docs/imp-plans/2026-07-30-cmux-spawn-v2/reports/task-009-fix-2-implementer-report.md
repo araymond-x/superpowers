@@ -187,7 +187,15 @@ both surfaced rather than absorbed:
    the amended test and `command` names that single nodeid. The full-suite figure that
    actually matters is in Testing above: **777 before, 777 after.**
 
-4. **Added an unrequested measurement (Probe C).** The instructions did not ask for the
+4. **Prose section names follow `validate-report.py`, not the dispatch's list.** The
+   dispatch specified Summary / Implementation / Testing / Deviations from Plan /
+   Self-Review. The validator requires Implementation Summary / Source Files Read /
+   Deviations from Plan / Self-Review Findings / Concerns, and returned `INCOMPLETE`
+   with all four naming in `sections_missing` until renamed. The gate outranks the
+   prompt, so the gate's names are used; `## Testing` and `## Changes Made` are retained
+   as extra sections carrying the dispatch's Testing and Implementation content.
+
+5. **Added an unrequested measurement (Probe C).** The instructions did not ask for the
    `CMUX_WS_CREATE_RC=1` world, but my new docstring names it as MEASURED, so I measured
    it. This adds no code — it is evidence for a claim the docstring makes.
 
@@ -228,3 +236,11 @@ None. Status is DONE: the Deviations section records how the fixes were applied 
 non-uniqueness, the hoisted binding, the schema's lack of an "amended test" count) and
 one measurement added beyond instruction — none of these is an unresolved risk to the
 change.
+
+`validate-report.py` emits the advisory `status is DONE but report has non-empty
+Deviations or Concerns. Consider DONE_WITH_CONCERNS.` Considered and kept at **DONE**
+deliberately: all five Deviations are procedural (how a probe was anchored, which
+section names the gate demands, one extra measurement), none is an unresolved risk to
+the change, and the Concerns section is a "none" statement rather than a finding. The
+one item a reviewer might want to act on — the I3 attribution below — is a disposition
+for the controller, not an open defect in this round's work.
