@@ -550,7 +550,13 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
 **Files:** same set.
 
-- [ ] **Step 1: Screen fixtures** — `tests/unit/fixtures/spawn-handoff/screens/`: `trust-dialog.txt` (contains `Do you trust the files in this folder?`), `banner.txt` (a Claude session banner WITHOUT any token side-effect — e.g. `Claude Code v2` + composer chrome), `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk).
+- [ ] **Step 1: Screen fixtures** — `tests/unit/fixtures/spawn-handoff/screens/`.
+
+  **AMENDED 2026-08-02 (partner review, BLOCKER 1) — the original anchors were INVENTED and the frozen READ-ONLY Task 0 fixture CONTRADICTS them.** Measured, with a positive control (the string `trust` IS present in the fixture, so the instrument works): the phrase `Do you trust the files in this folder?` **appears nowhere** in `cmux-verb-shapes.json`. The real measured anchors under `trust_dialog_screen.candidate_anchors` are `Quick safety check: Is this a project you created or` and `1. Yes, I trust this folder`. Worse, run against the ONE live capture that carries a screen (`trust_dialog_screen`), the fence's **banner** regex `claude code|esc to interrupt` MATCHES while its **trust** regex does not — so a real trust modal would be classified `banner` and the operator told *"attach to that tab and continue there"* instead of *"answer the trust dialog"*, **the exact failure `deviations.md:18` exists to prevent.** It would have shipped GREEN, because Step 1 as originally written told you to author a fixture containing the invented phrase — code and fixture agreeing with each other and both disagreeing with reality.
+
+  **`trust-dialog.txt` MUST BE DERIVED FROM THE FROZEN CAPTURE, NOT HAND-AUTHORED**: write it from `cmux-verb-shapes.json`'s `trust_dialog_screen.screen` value verbatim. Then add a test asserting the fixture still equals that frozen value, so the two cannot drift. **A fixture authored to match the code under test proves only that you can spell the same string twice.**
+
+  The other three are synthetic by necessity (Task 0 captured no live screen for them) and that limitation must be stated in each file or its loader comment: `banner.txt` (a Claude session banner WITHOUT any token side-effect — e.g. `Claude Code v2` + composer chrome), `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk). **For the synthetic three, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
 
 - [ ] **Step 2: Failing tests:**
 
@@ -562,13 +568,36 @@ class TestHandshake:
         # outcome: handshake=timeout diagnosis=banner
     def test_timeout_rewaits_once_same_duration(self, tmp_path):
         # cmux.log contains exactly TWO wait-for lines, both --timeout <same value>
+        # AMENDED 2026-08-02 (partner LOW 6): do NOT reach for
+        # _flag(_argv(tmp_path, "wait-for"), "--timeout") here — _argv/_flag resolve
+        # only the FIRST matching invocation, so "both" would silently assert one
+        # value once and the re-wait half would be VACUOUS. Parse BOTH wait-for
+        # lines out of cmux.log and compare them. Positive-control it: make the
+        # re-wait use a different duration and confirm this test goes RED.
     def test_diagnosis_trust_dialog_names_dialog_and_steers_to_tab(self, tmp_path):
         # screen=trust-dialog.txt -> stderr names the trust dialog, contains the surface
         # ref, and does NOT contain the fresh-session manual instructions block
+    # --- AMENDED 2026-08-02 (partner review) -------------------------------
+    def test_trust_dialog_fixture_matches_the_frozen_capture(self):
+        # BLOCKER 1: screens/trust-dialog.txt == cmux-verb-shapes.json
+        # trust_dialog_screen.screen, verbatim. Stops fixture/contract drift.
+    def test_real_trust_capture_diagnoses_trust_not_banner(self, tmp_path):
+        # BLOCKER 1, the compounding half: the banner regex MATCHES the real trust
+        # screen, so this pins that trust WINS. Positive-control it by reordering
+        # the two greps in diagnose_target and confirming this test goes RED.
+    def test_diagnosis_banner_steers_to_tab_and_omits_manual_block(self, tmp_path):
+        # MEDIUM 3: module AC names BOTH trust-dialog AND banner as steering to the
+        # existing tab; only trust had a test. Assert the manual-instructions block
+        # is ABSENT (the discriminator vs picker-error/none, which print it).
     def test_diagnosis_picker_error(self, tmp_path):        # diagnosis=picker-error
     def test_diagnosis_none_on_noise(self, tmp_path):       # diagnosis=none
     def test_diagnosis_unreadable_on_cold_surface(self, tmp_path):
         # no CMUX_SCREEN_FILE -> stub errors internal_error -> diagnosis=unreadable, no crash
+        # AMENDED 2026-08-02 (partner LOW 5): `unreadable` has TWO disjuncts — a
+        # non-zero read-screen rc, and the literal `internal_error` in its output.
+        # This test exercises them together. If a stub knob can separate them, add
+        # the second case; if not, SAY SO in the report rather than implying both
+        # are covered. An untestable disjunct needs a KNOB, not another assertion.
     def test_timeout_notifies_and_keeps_hop(self, tmp_path):
         # notify line present; .handoff-hops still incremented; message NEVER claims
         # "nothing was spawned" (assert the string is absent)
@@ -576,7 +605,7 @@ class TestHandshake:
         # CMUX_WAITFOR_RC=0 -> exit 0, outcome handshake=ok
 ```
 
-Also add the **import assertion** tying the script's wait default to Task 0's measurement (relocated here from Task 9 — it is wait-for work; see OP-1). Tasks 0/8/9 have all edited `test_spawn_handoff_v2.py` by now, so ADD `import re` and the `SCRIPT` constant **only if absent** (verify `parents[N]` actually resolves; a wrong path fails on `read_text()`, not on the assertion). `SPAWN_WAIT_TIMEOUT_DEFAULT=` must stay a **top-level, column-0** assignment in the script — the regex is anchored, so indenting it into a function or `if` block silently breaks the match.
+**VERIFY — DO NOT RE-ADD — the import assertion** tying the script's wait default to Task 0's measurement (relocated here from Task 9 by OP-1). **AMENDED 2026-08-02 at Task 10's obligation audit: Task 9 PRE-EMPTED it and it is ALREADY LANDED** in `test_spawn_handoff_v2.py` (the `cold-start-timing.json` load plus the anchored `^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)$` search, asserting the script's literal equals `default_seconds`), and the script side is a column-0 `SPAWN_WAIT_TIMEOUT_DEFAULT=60`. **Following the original wording literally would ship a DUPLICATE assertion.** Your obligation is to CONFIRM it still exists, still resolves, and still passes — then say so in your report with the line numbers you actually read. If it is absent or broken, THEN add it in the shape below. Tasks 0/8/9 have all edited `test_spawn_handoff_v2.py` by now, so ADD `import re` and the `SCRIPT` constant **only if absent** (verify `parents[N]` actually resolves; a wrong path fails on `read_text()`, not on the assertion). `SPAWN_WAIT_TIMEOUT_DEFAULT=` must stay a **top-level, column-0** assignment in the script — the regex is anchored, so indenting it into a function or `if` block silently breaks the match.
 
 ```python
 SCRIPT = (Path(__file__).resolve().parents[2] / "skills" / "subagent-driven-development"
@@ -602,14 +631,20 @@ diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision
   if [ $? -ne 0 ] || grep -qi "internal_error" <<< "$screen"; then
     printf 'unreadable'; return 0
   fi
-  if grep -qi "do you trust the files" <<< "$screen"; then printf 'trust-dialog'; return 0; fi
+  # AMENDED 2026-08-02 (partner BLOCKER 1): anchors come from the FROZEN capture
+  # (cmux-verb-shapes.json trust_dialog_screen.candidate_anchors), NOT invented.
+  # The trust test MUST precede the banner test: the banner regex MATCHES the real
+  # trust screen, so reordering these silently misroutes a trust modal to "banner".
+  if grep -qiE "quick safety check|yes, i trust this folder" <<< "$screen"; then printf 'trust-dialog'; return 0; fi
   if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then printf 'picker-error'; return 0; fi
   if grep -qiE "claude code|esc to interrupt" <<< "$screen"; then printf 'banner'; return 0; fi
   printf 'none'
 }
 ```
 
-(pattern constants may be hoisted; every grep uses here-strings, never a pipe. The banner regex is finalized against Task 0's live captures if they contain a better anchor — record the choice in the code comment.)
+(pattern constants may be hoisted; every grep uses here-strings, never a pipe.)
+
+- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). Today exactly one is measurable: `trust-dialog`. `banner`, `picker-error` and the `internal_error` disjunct have **no live capture**, so they are hypotheses — label them as such rather than letting a future reader mistake a guess for a frozen contract. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
 
 Timeout tail:
 
@@ -623,7 +658,7 @@ if ! wait_for_token; then
     cmux notify --title "SDD handoff" --body "Successor in $SPAWN_SURFACE_REF spawned but NOT confirmed (diagnosis=$DIAG) — check that tab" 2>/dev/null || true
     case "$DIAG" in
       trust-dialog)
-        echo "[spawn-handoff] handshake=timeout: the successor in $SPAWN_SURFACE_REF is sitting on Claude's FOLDER-TRUST DIALOG ('Do you trust the files in this folder?'). Go to that tab and answer it — do NOT start a fresh session (a successor was spawned; a second one is a double-spawn)." >&2 ;;
+        echo "[spawn-handoff] handshake=timeout: the successor in $SPAWN_SURFACE_REF is sitting on Claude's FOLDER-TRUST PROMPT ('Quick safety check: ... 1. Yes, I trust this folder'). Go to that tab and answer it — do NOT start a fresh session (a successor was spawned; a second one is a double-spawn)." >&2 ;;
       banner)
         echo "[spawn-handoff] handshake=timeout: a Claude session IS visible in $SPAWN_SURFACE_REF but no readiness token arrived. Attach to that tab and continue there — do NOT start a fresh session." >&2 ;;
       picker-error)
@@ -639,7 +674,17 @@ fi
 # token received — handshake=ok success stanza (from Task 9) continues here
 ```
 
-- [ ] **Step 4: Run + commit** — both unit files PASS; `"feat(cmux-spawn-v2): wait-for handshake + re-wait + read-screen diagnosis enrichment"`.
+- [ ] **Step 4: Run + commit + record TWO decisions.** **AMENDED 2026-08-02 at Task 10's obligation audit — the original one-line step carried a stale claim and silently omitted two obligations that were commanded elsewhere.**
+
+  **(a) Run the FULL unit suite — NOT "both unit files".** That phrasing is STALE and contradicts this module's own Acceptance Criteria, whose last bullet reads *"the FULL unit suite green after every task (**not \"both unit files\"**)"*. Task 9's N6 corrected the AC and left this twin uncorrected — the same one-sided-edit shape as N1 (fix one site of a claim, leave its twin). Re-measure the baseline; **do not inherit a count** (the pre-task baseline is 777, itself re-measured, but verify it yourself).
+
+  **(b) Record the TRUST-PREFLIGHT DECISION and flip `deviations.md:18` off `Pending`.** This is commanded by the ROUTING note at the head of this task but was never carried into a step, which is exactly how a decision becomes a silent omission. It is a **DECISION to record, not necessarily a preflight to build**. Task 0 MEASURED the failure live: an interactive `claude-picker` launch into an untrusted `--working-directory` raises the folder-trust modal and sits there, never reaching SessionStart, so the token never signals -> `handshake=timeout` plus a consumed hop that one keystroke would have fixed — **and a fresh worktree is exactly the untrusted-path case this feature targets.** Build it or decline it, with reasoning. **Explicitly forbidden: declining on the unmeasured assumption that `$WORKTREE_ROOT` is already trusted because the parent runs there** — that argument is plausible, untested, and Task 0 measured the opposite case. If you decline, state what would have to be true and what would falsify it.
+
+  **(c) Record a DECISION on the five inline log-readers** (`deviations.md:271`, routed `Pending — TASK 10`). Five inline `(tmp_path / "cmux.log").read_text()` sites survive in `test_spawn_handoff.py` — count VERIFIED at 5 on 2026-08-02. They are a **DIFFERENT SHAPE, not a fourth copy** of the consolidated helper: they read unconditionally and RAISE on a missing file, whereas the helper returns `""`. **Swapping them would change failure semantics**, so this is a judgment call, not a mechanical cleanup. Evaluate and record — fix, or decline with reasoning and flip the row. Do NOT silently leave it.
+
+  **(e) Resolve the ROUTING of `deviations.md:165`** (orphaned fallback workspace). *(AMENDED 2026-08-02 — partner MEDIUM 4.)* Its disposition names Task 10/13 but **no step in EITHER task produces it** — the identical shape as row 18, which is how a decision becomes a silent omission. **You are asked to resolve the ROUTING, not necessarily to build the fix:** read the row, decide whether it belongs to this task, a later one, or merge, and record that with reasoning. A row naming two tasks and owned by neither is owned by nobody.
+
+  **(d) Commit** — never `git add -A`; stage explicit paths enumerated against what you ACTUALLY changed. Message: `"feat(cmux-spawn-v2): wait-for handshake + re-wait + read-screen diagnosis enrichment"`.
 
 ### Task 11: Post-spawn setup (/rename, /rc) + knobs
 
