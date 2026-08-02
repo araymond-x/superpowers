@@ -739,13 +739,16 @@ fi
 
 **Files:** same set.
 
+**AMENDED 2026-08-02 (pre-dispatch obligation audit, discharging deferred order `A3b/c + B2`) — the fence below was WRONG on two counts, and Task 10 round 1 already proved a wrong fence ships green.** The pre-amendment `rc` anchor carried a `|remote.control` alternation, and the pre-amendment `rename` anchor was the bare title string — **both are exactly the "echo defeats the verify" hazard Task 0 measured live** (`cmux-verb-shapes.json` → `rc_confirmation_screen`): `rc_anchor_rationale` states bare `/remote-control` occurs **twice** (echo + response) while `/remote-control is active` occurs **once**, response-only; `rename_anchor_rationale` states the naive title anchor "matches 3 lines INCLUDING the command echo" while `Session renamed to:` "matches exactly 1 line and cannot appear in the sent line." Both anchors below are MEASURED, not invented — quoted verbatim from `rc_confirmation_screen.rc_anchor` / `.rename_anchor`. Separately, `cmux-verb-shapes.json`'s `addendum_3_result` field shows the post-`/rc` send hazard did **NOT** reproduce at N=1 (`send_after_rc_landed: true`) — already adjudicated at Task 0 (`deviations.md` row: "IndependentDecision... Disposition: keep the addendum's ordering constraint"), **not re-litigated here**: the ordering canonicalization below stays, on safety-costs-nothing grounds, independent of this non-reproduction.
+
 - [ ] **Step 1: Failing tests:**
 
 ```python
 class TestPostSpawn:
     def test_default_sequence_rename_then_rc(self, tmp_path):
-        # screen file returns text containing the title after /rename and
-        # "/remote-control is active" after /rc (stub: CMUX_SCREEN_FILE with both) ->
+        # screen file returns text containing "Session renamed to: <title>" after
+        # /rename and "/remote-control is active" after /rc (stub: CMUX_SCREEN_FILE
+        # with both — both anchors MEASURED, see Task 0's rc_confirmation_screen) ->
         # cmux.log order: send "/rename hop1 SDD feat" -> send-key enter -> read-screen
         # -> send "/rc" -> send-key enter -> read-screen; outcome has NO post_spawn= field
     def test_verify_failure_warns_partial_never_fails_spawn(self, tmp_path):
@@ -757,6 +760,20 @@ class TestPostSpawn:
         # "rc" -> only /rc; "rename,bogus" -> WARNING + revert to default both
     def test_title_format_override(self, tmp_path):
         # SUPERPOWERS_CMUX_TITLE_FORMAT='{feature} h{hop}' -> /rename feat h1 (and Task 9's rename-tab used it too)
+    # --- AMENDED 2026-08-02 (deferred order A3b/c + B2) ----------------------
+    def test_echo_only_screen_does_not_false_positive_either_anchor(self, tmp_path):
+        # NEGATIVE FIXTURE (row 172's explicit requirement): a screen containing ONLY
+        # the echoed sent lines ("> /rename <title>", "> /remote-control") and NO
+        # confirmation phrase -> BOTH post_spawn_send_verified calls must return
+        # false (post_spawn=partial:rename, since rename runs first and the sequence
+        # stops at the first failure). This is the fence the pre-amendment anchors
+        # would have FAILED: a bare-title or bare-/remote-control anchor matches an
+        # echo-only screen and would have reported false success.
+    def test_knob_order_rc_before_rename_is_reordered_with_warning(self, tmp_path):
+        # SUPERPOWERS_CMUX_POST_SPAWN="rc,rename" -> cmux.log sends /rename BEFORE
+        # /rc (never the reverse — operator addendum #3: no send after /rc lands);
+        # stderr WARNING names the reorder and cites the addendum; outcome still
+        # carries NO post_spawn= field on full success (reordering is not a partial).
 ```
 
 - [ ] **Step 2: Implement.** Config (beside the other knobs):
@@ -774,30 +791,39 @@ Functions + wiring (between handshake success and the outcome record; `POST_SPAW
 
 ```bash
 post_spawn_send_verified() {
-  # $1=text to send, $2=expected on screen, $3=step name, $4=match mode (fixed|regex).
-  # rename verifies the TITLE (arbitrary user text -> fixed-string -F); rc
-  # verifies a known phrase (regex alternation -E). Both here-strings, no pipes.
+  # $1=text to send, $2=anchor to verify, $3=step name. BOTH anchors are FIXED
+  # STRINGS (grep -F) -- no regex/alternation branch: both confirmation phrases
+  # are MEASURED to be unique to the response region and absent from the echoed
+  # sent line (Task 0, cmux-verb-shapes.json rc_confirmation_screen.{rc_anchor,
+  # rename_anchor} + their _rationale fields). Here-string, never a pipe.
   local screen
   cmux send --surface "$SPAWN_SURFACE_REF" "$1" 2>/dev/null
   cmux send-key --surface "$SPAWN_SURFACE_REF" enter 2>/dev/null
   sleep 2
   screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>/dev/null)"
-  if [ "$4" = "fixed" ]; then
-    grep -qiF "$2" <<< "$screen" && return 0
-  else
-    grep -qiE "$2" <<< "$screen" && return 0
-  fi
+  grep -qiF "$2" <<< "$screen" && return 0
   echo "[spawn-handoff] warn: post-spawn step '$3' unverified — cosmetic, successor is alive (post_spawn=partial:$3)." >&2
   return 1
 }
 POST_SPAWN_FIELD=""
 run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
+  # AMENDED 2026-08-02 (deferred order A3b/c + B2): canonicalize ordering BEFORE
+  # the loop. Operator addendum #3 forbids any send after /rc lands (kept despite
+  # Task 0's N=1 non-reproduction -- deviations.md, "keep the addendum's ordering
+  # constraint... a single non-reproduction is not grounds to drop a safety
+  # ordering that costs nothing"). Reorder, don't reject: "rc" alone is already
+  # rc-last and stays valid; only "rc,rename" is unsafe, and dropping a step the
+  # operator asked for is worse than running it in a safe order.
+  if [ "$POST_SPAWN" = "rc,rename" ]; then
+    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=rc,rename would send after /rc landed (operator addendum #3: /rc must be sent LAST) — reordering to rename,rc." >&2
+    POST_SPAWN="rename,rc"
+  fi
   local step
   local IFS=','
   for step in $POST_SPAWN; do
     case "$step" in
-      rename) post_spawn_send_verified "/rename $TAB_TITLE" "$TAB_TITLE" "rename" "fixed" || { POST_SPAWN_FIELD=" post_spawn=partial:rename"; return 0; } ;;
-      rc)     post_spawn_send_verified "/rc" "/remote-control is active|remote.control" "rc" "regex" || { POST_SPAWN_FIELD=" post_spawn=partial:rc"; return 0; } ;;
+      rename) post_spawn_send_verified "/rename $TAB_TITLE" "Session renamed to: $TAB_TITLE" "rename" || { POST_SPAWN_FIELD=" post_spawn=partial:rename"; return 0; } ;;
+      rc)     post_spawn_send_verified "/rc" "/remote-control is active" "rc" || { POST_SPAWN_FIELD=" post_spawn=partial:rc"; return 0; } ;;
     esac
   done
   return 0
@@ -817,5 +843,5 @@ run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contrac
 - [ ] Success path: `new-surface --focus false` in the caller's workspace → `rename-tab` → `send` (inline `export` env prefix) → token → `handshake=ok` → exit 0. Outcome carries `workspace=`, `surface=`, `tasks_done=`.
 - [ ] Surface-path failure BEFORE an accepted send falls back ONCE through the SAME wrapper via `workspace create` (`topology=workspace-fallback`); an accepted send NEVER spawns twice.
 - [ ] Timeout → one re-wait → exit 3 `handshake=timeout` with `diagnosis=` enrichment; a stubbed banner with no token is NOT success; trust-dialog/banner instructions steer to the existing tab; every timeout notifies; no message claims nothing was spawned.
-- [ ] Post-spawn `/rename` + `/rc` verified by read-screen; failures are `post_spawn=partial:<step>` WARNINGs, never spawn failures; `SUPERPOWERS_CMUX_POST_SPAWN=""` disables.
+- [ ] Post-spawn `/rename` + `/rc` verified by read-screen against anchors the sent line cannot itself contain (echo-proof); failures are `post_spawn=partial:<step>` WARNINGs, never spawn failures; `SUPERPOWERS_CMUX_POST_SPAWN=""` disables; ordering always resolves to `/rc` LAST (operator addendum #3 — `rc,rename` is reordered, not rejected).
 - [ ] `tests/unit/test_spawn_handoff.py` fully migrated in the same tasks that changed the behavior; the FULL unit suite green after every task (**not "both unit files"** — Task 9 writes three test files, and its Step 3 rewrites the spawn core other suites exercise).
