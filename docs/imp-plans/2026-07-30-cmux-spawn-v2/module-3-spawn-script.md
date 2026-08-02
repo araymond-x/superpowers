@@ -741,7 +741,9 @@ fi
 
 **AMENDED 2026-08-02 (pre-dispatch obligation audit, discharging deferred order `A3b/c + B2`) — the fence below was WRONG on two counts, and Task 10 round 1 already proved a wrong fence ships green.** The pre-amendment `rc` anchor carried a `|remote.control` alternation, and the pre-amendment `rename` anchor was the bare title string — **both are exactly the "echo defeats the verify" hazard Task 0 measured live** (`cmux-verb-shapes.json` → `rc_confirmation_screen`): `rc_anchor_rationale` states bare `/remote-control` occurs **twice** (echo + response) while `/remote-control is active` occurs **once**, response-only; `rename_anchor_rationale` states the naive title anchor "matches 3 lines INCLUDING the command echo" while `Session renamed to:` "matches exactly 1 line and cannot appear in the sent line." Both anchors below are MEASURED, not invented — quoted verbatim from `rc_confirmation_screen.rc_anchor` / `.rename_anchor`. Separately, `cmux-verb-shapes.json`'s `addendum_3_result` field shows the post-`/rc` send hazard did **NOT** reproduce at N=1 (`send_after_rc_landed: true`) — already adjudicated at Task 0 (`deviations.md` row: "IndependentDecision... Disposition: keep the addendum's ordering constraint"), **not re-litigated here**: the ordering canonicalization below stays, on safety-costs-nothing grounds, independent of this non-reproduction.
 
-- [ ] **Step 1: Failing tests:**
+**AMENDED AGAIN 2026-08-02 (round-2 adversarial quality review, finding #1 — the fix round `[task 11 fix]`).** The first implementation shipped the fence's single-literal reorder (`if [ "$POST_SPAWN" = "rc,rename" ]`), which the quality review MEASURED to leave the module AC unmet: any other regex-valid multi-token knob (`rename,rc,rename`, `rc,rename,rc`) slipped a `/rename` **after** `/rc` with no warning, and duplicates (`rename,rename`) sent a step twice. The AC (below) says ordering **always** resolves to `/rc` LAST; "safety costs nothing" (the same rationale that keeps addendum #3 despite Task 0's N=1 non-reproduction) applies to **every** accepted token list, not one literal. The Step 2 fence's canonicalization block is now generalized (reorder + dedupe over the fixed `{rename, rc}` universe; warn iff the effective sequence changed, naming the actual input→result). Step 1 gains two tests (`test_knob_multitoken_forces_rc_last`, `test_knob_duplicate_token_deduped`), and the already-landed `test_knob_order_rc_before_rename_is_reordered_with_warning` must have its WARNING-text assertion updated to the generalized message (hunt-the-twin). The AC below is unchanged — it was already correct; only the fence was under-specified.
+
+- [x] **Step 1: Failing tests:**
 
 ```python
 class TestPostSpawn:
@@ -774,9 +776,26 @@ class TestPostSpawn:
         # /rc (never the reverse — operator addendum #3: no send after /rc lands);
         # stderr WARNING names the reorder and cites the addendum; outcome still
         # carries NO post_spawn= field on full success (reordering is not a partial).
+        # HUNT-THE-TWIN (round-2 amendment): this LANDED test's WARNING assertion
+        # pins the OLD hardcoded text ("reordering to rename,rc"). The generalized
+        # canonicalization emits "canonicalized to rename,rc" instead — so this
+        # test's stderr assertion MUST be updated to the new generalized message
+        # (input+result), or it goes RED. Updating it is part of this fix, not scope creep.
+    # --- AMENDED 2026-08-02 (round-2 quality review finding #1: the "rc last"
+    #     guarantee must hold for EVERY accepted token list, not one literal) ------
+    def test_knob_multitoken_forces_rc_last(self, tmp_path):
+        # SUPERPOWERS_CMUX_POST_SPAWN="rename,rc,rename" -> cmux.log sends /rename
+        # then /rc, and the LAST post-spawn send is /rc (NO /rename after /rc);
+        # stderr WARNING names the input ("rename,rc,rename") AND the canonical
+        # result ("rename,rc") and cites addendum #3; full-success outcome carries
+        # NO post_spawn= field. (rc,rename,rc canonicalizes identically -> rename,rc.)
+    def test_knob_duplicate_token_deduped(self, tmp_path):
+        # SUPERPOWERS_CMUX_POST_SPAWN="rename,rename" -> /rename sent EXACTLY ONCE
+        # (assert the count, not just presence); stderr WARNING names input+canonical
+        # ("rename"); exit 0, no post_spawn= field. ("rc,rc" -> /rc once, same shape.)
 ```
 
-- [ ] **Step 2: Implement.** Config (beside the other knobs):
+- [x] **Step 2: Implement.** Config (beside the other knobs):
 
 ```bash
 POST_SPAWN_DEFAULT="rename,rc"
@@ -807,16 +826,26 @@ post_spawn_send_verified() {
 }
 POST_SPAWN_FIELD=""
 run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
-  # AMENDED 2026-08-02 (deferred order A3b/c + B2): canonicalize ordering BEFORE
-  # the loop. Operator addendum #3 forbids any send after /rc lands (kept despite
-  # Task 0's N=1 non-reproduction -- deviations.md, "keep the addendum's ordering
-  # constraint... a single non-reproduction is not grounds to drop a safety
-  # ordering that costs nothing"). Reorder, don't reject: "rc" alone is already
-  # rc-last and stays valid; only "rc,rename" is unsafe, and dropping a step the
-  # operator asked for is worse than running it in a safe order.
-  if [ "$POST_SPAWN" = "rc,rename" ]; then
-    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=rc,rename would send after /rc landed (operator addendum #3: /rc must be sent LAST) — reordering to rename,rc." >&2
-    POST_SPAWN="rename,rc"
+  # AMENDED 2026-08-02 (round-2 quality review, finding #1): canonicalize ordering
+  # BEFORE the loop, for EVERY accepted token list — not the one literal "rc,rename".
+  # The pre-amendment single-literal reorder was WRONG: any OTHER regex-valid
+  # multi-token knob slipped a /rename AFTER /rc with no warning (MEASURED:
+  # "rename,rc,rename" -> /rename,/rc,/rename; "rc,rename,rc" likewise), violating
+  # this module's AC ("ordering always resolves to /rc LAST"). Operator addendum #3
+  # forbids any send after /rc lands (kept despite Task 0's N=1 non-reproduction --
+  # deviations.md, "a single non-reproduction is not grounds to drop a safety
+  # ordering that costs nothing"); by that SAME "safety costs nothing" rationale the
+  # guarantee must hold for ALL inputs. The token universe is exactly {rename, rc},
+  # so the canonical form is fully determined: rename first (if present), rc last
+  # (if present), duplicates collapsed. Reorder+dedupe, NEVER reject. Warn iff
+  # canonicalization changed the effective sequence, naming the ACTUAL input and
+  # result (not a hardcoded pair). Uses [[ == *glob* ]] + ${x:+..} (bash-3.2 safe).
+  local canon=""
+  [[ ",$POST_SPAWN," == *,rename,* ]] && canon="rename"
+  [[ ",$POST_SPAWN," == *,rc,* ]] && canon="${canon:+$canon,}rc"
+  if [ "$canon" != "$POST_SPAWN" ]; then
+    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=$POST_SPAWN canonicalized to $canon (operator addendum #3: /rc must be sent LAST; duplicate steps collapsed)." >&2
+    POST_SPAWN="$canon"
   fi
   local step
   local IFS=','
@@ -833,7 +862,7 @@ run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contrac
 
 (First failed step records `partial:<step>` and stops the sequence — the record names where it stopped.)
 
-- [ ] **Step 3: Run + commit** — both files PASS; `"feat(cmux-spawn-v2): script-driven /rename + /rc post-spawn setup + knobs"`.
+- [x] **Step 3: Run + commit** — both files PASS; `"feat(cmux-spawn-v2): script-driven /rename + /rc post-spawn setup + knobs"`. (Round-2 quality-review fix in `7a224ff`+`532c7b6`: generalized rc-last canonicalization; see deviations.md.)
 
 ## Module 3 Acceptance Criteria
 

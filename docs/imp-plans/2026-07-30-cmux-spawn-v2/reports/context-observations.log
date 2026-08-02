@@ -102,3 +102,6 @@
 2026-08-02T17:30:44Z task= type=partner-review tokens=342647 source=probe tier=soft action=allow
 2026-08-02T17:34:41Z task=11 type=implementer tokens=347104 source=probe tier=soft action=nudge
 2026-08-02T18:16:29Z task= type=spec-review tokens=404404 source=probe tier=hard action=allow
+2026-08-02T22:32:36Z task= type=quality-review tokens=163307 source=probe tier=below action=allow
+2026-08-02T23:07:36Z task=11 type=other tokens=231189 source=probe tier=below action=allow
+2026-08-02T23:33:00Z task= type=other tokens=282513 source=probe tier=below action=allow

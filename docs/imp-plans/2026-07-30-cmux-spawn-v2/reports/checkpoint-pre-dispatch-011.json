@@ -30,7 +30,7 @@
     },
     "context_load_estimate": {
       "status": "WARNING",
-      "detail": "Accumulated files: ~775.1KB (~198,431 tokens, 31 file(s))"
+      "detail": "Accumulated files: ~798.2KB (~204,351 tokens, 32 file(s))"
     }
   },
   "warnings": [
