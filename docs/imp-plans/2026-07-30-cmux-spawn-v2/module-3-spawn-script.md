@@ -556,7 +556,11 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
   **`trust-dialog.txt` MUST BE DERIVED FROM THE FROZEN CAPTURE, NOT HAND-AUTHORED**: write it from `cmux-verb-shapes.json`'s `trust_dialog_screen.screen` value verbatim. Then add a test asserting the fixture still equals that frozen value, so the two cannot drift. **A fixture authored to match the code under test proves only that you can spell the same string twice.**
 
-  The other three are synthetic by necessity (Task 0 captured no live screen for them) and that limitation must be stated in each file or its loader comment: `banner.txt` (a Claude session banner WITHOUT any token side-effect — e.g. `Claude Code v2` + composer chrome), `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk). **For the synthetic three, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
+  **`banner.txt` IS ALSO DERIVED FROM A LIVE CAPTURE. AMENDED AGAIN 2026-08-02 (partner round 2, BLOCKER A) — the round-1 amendment asserted "Task 0 captured no live screen for them", and THAT CLAIM WAS FALSE.** `cmux-verb-shapes.json` is `captured: "live"` throughout, and `rc_confirmation_screen` holds **TWO live captures of a running Claude session** (`rc_screen`, `rename_screen`) — exactly the `banner` branch's semantic. **This is the controller writing a second false factual claim into the plan while fixing the first one**, the same shape partner round 2 caught on Task 9. Derive `banner.txt` from `rc_confirmation_screen.rc_screen` and pin BOTH live captures to `diagnosis=banner`.
+
+  **Measured, with controls, against those two captures and the trust capture:** `shift+tab to cycle` is present in BOTH live sessions and ABSENT from the trust screen — it is the one usable MEASURED banner anchor. `esc to interrupt` occurs **zero times in the entire fixture** (both live captures are IDLE sessions; that string only appears while Claude is generating), so it is an INFERENCE covering the busy state. `claude code` matches **only the trust screen** and NEITHER running session — an anchor that fires on the wrong screen; it is REMOVED from the banner pattern.
+
+  The remaining two ARE synthetic — `picker-error.txt` (`claude-picker: error: no matching version`) and `noise.txt` (shell prompt + scrollback junk) — and that limitation must be stated in each file or its loader comment. **For those two, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
 
 - [ ] **Step 2: Failing tests:**
 
@@ -568,9 +572,10 @@ class TestHandshake:
         # outcome: handshake=timeout diagnosis=banner
     def test_timeout_rewaits_once_same_duration(self, tmp_path):
         # cmux.log contains exactly TWO wait-for lines, both --timeout <same value>
-        # AMENDED 2026-08-02 (partner LOW 6): do NOT reach for
-        # _flag(_argv(tmp_path, "wait-for"), "--timeout") here — _argv/_flag resolve
-        # only the FIRST matching invocation, so "both" would silently assert one
+        # AMENDED 2026-08-02 (partner LOW 6; misattribution corrected round 2): do NOT
+        # reach for _flag(_argv(tmp_path, "wait-for"), "--timeout") here. _argv returns
+        # ALL matching lines; it is _flag that resolves only the FIRST occurrence — so
+        # the blame sits on _flag alone. Either way "both" would silently assert one
         # value once and the re-wait half would be VACUOUS. Parse BOTH wait-for
         # lines out of cmux.log and compare them. Positive-control it: make the
         # re-wait use a different duration and confirm this test goes RED.
@@ -589,15 +594,25 @@ class TestHandshake:
         # MEDIUM 3: module AC names BOTH trust-dialog AND banner as steering to the
         # existing tab; only trust had a test. Assert the manual-instructions block
         # is ABSENT (the discriminator vs picker-error/none, which print it).
+    def test_both_live_session_captures_diagnose_banner(self, tmp_path):
+        # BLOCKER A (round 2): rc_confirmation_screen.rc_screen AND .rename_screen
+        # are LIVE captures of a running Claude session. Before this amendment the
+        # banner regex matched NEITHER -- both fell through to diagnosis=none,
+        # breaking the module AC's "banner steers to the existing tab". Drive both
+        # verbatim from the fixture. Positive-control by reverting the pattern to
+        # `claude code|esc to interrupt` and confirming this test goes RED.
     def test_diagnosis_picker_error(self, tmp_path):        # diagnosis=picker-error
     def test_diagnosis_none_on_noise(self, tmp_path):       # diagnosis=none
     def test_diagnosis_unreadable_on_cold_surface(self, tmp_path):
         # no CMUX_SCREEN_FILE -> stub errors internal_error -> diagnosis=unreadable, no crash
-        # AMENDED 2026-08-02 (partner LOW 5): `unreadable` has TWO disjuncts — a
-        # non-zero read-screen rc, and the literal `internal_error` in its output.
-        # This test exercises them together. If a stub knob can separate them, add
-        # the second case; if not, SAY SO in the report rather than implying both
-        # are covered. An untestable disjunct needs a KNOB, not another assertion.
+        # AMENDED 2026-08-02 (partner LOW 5, strengthened round 2): `unreadable` has
+        # TWO disjuncts — a non-zero read-screen rc, and the literal `internal_error`
+        # in the output. THE SEPARATING KNOB ALREADY EXISTS: CMUX_SCREEN_FILE pointing
+        # at a file whose CONTENT carries `internal_error` gives rc 0 + the literal,
+        # isolating the second disjunct from the first. Round 1 established this with
+        # evidence; do not re-open it as an open question. Write BOTH cases. The live
+        # capture for this anchor is read_screen_cold (stderr `Error: internal_error:
+        # Failed to read terminal text`, exit 1) — MEASURED, not invented.
     def test_timeout_notifies_and_keeps_hop(self, tmp_path):
         # notify line present; .handoff-hops still incremented; message NEVER claims
         # "nothing was spawned" (assert the string is absent)
@@ -637,14 +652,21 @@ diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision
   # trust screen, so reordering these silently misroutes a trust modal to "banner".
   if grep -qiE "quick safety check|yes, i trust this folder" <<< "$screen"; then printf 'trust-dialog'; return 0; fi
   if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then printf 'picker-error'; return 0; fi
-  if grep -qiE "claude code|esc to interrupt" <<< "$screen"; then printf 'banner'; return 0; fi
+  # AMENDED 2026-08-02 (partner round 2, BLOCKER A). `shift+tab to cycle` is
+  # MEASURED: present in BOTH live running-session captures
+  # (cmux-verb-shapes.json rc_confirmation_screen.rc_screen/.rename_screen) and
+  # absent from trust_dialog_screen. `esc to interrupt` is INFERRED, covering the
+  # BUSY state -- it occurs zero times in the whole fixture because both live
+  # captures are IDLE. `claude code` was REMOVED: measured to match ONLY the trust
+  # screen and NEITHER running session, i.e. it fired on the wrong screen.
+  if grep -qiE "shift\+tab to cycle|esc to interrupt" <<< "$screen"; then printf 'banner'; return 0; fi
   printf 'none'
 }
 ```
 
 (pattern constants may be hoisted; every grep uses here-strings, never a pipe.)
 
-- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). Today exactly one is measurable: `trust-dialog`. `banner`, `picker-error` and the `internal_error` disjunct have **no live capture**, so they are hypotheses — label them as such rather than letting a future reader mistake a guess for a frozen contract. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
+- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). **AMENDED AGAIN 2026-08-02 (partner round 2, MEDIUM B) — the round-1 wording undercounted what Task 0 actually measured.** THREE are MEASURED: `trust-dialog` (`trust_dialog_screen.candidate_anchors`), `banner` (`rc_confirmation_screen`, two live running-session captures — see Step 1), and the `internal_error` disjunct of `unreadable`, whose live capture is `read_screen_cold` (`stderr: "Error: internal_error: Failed to read terminal text"`, exit 1) — that capture is the direct SOURCE of the anchor, not a guess. Only `picker-error` is genuinely un-captured. Label it INVENTED; do NOT mislabel the other three, and do not label as INFERRED anything the fixture measured. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
 
 Timeout tail:
 
@@ -682,9 +704,9 @@ fi
 
   **(c) Record a DECISION on the five inline log-readers** (`deviations.md:271`, routed `Pending — TASK 10`). Five inline `(tmp_path / "cmux.log").read_text()` sites survive in `test_spawn_handoff.py` — count VERIFIED at 5 on 2026-08-02. They are a **DIFFERENT SHAPE, not a fourth copy** of the consolidated helper: they read unconditionally and RAISE on a missing file, whereas the helper returns `""`. **Swapping them would change failure semantics**, so this is a judgment call, not a mechanical cleanup. Evaluate and record — fix, or decline with reasoning and flip the row. Do NOT silently leave it.
 
-  **(e) Resolve the ROUTING of `deviations.md:165`** (orphaned fallback workspace). *(AMENDED 2026-08-02 — partner MEDIUM 4.)* Its disposition names Task 10/13 but **no step in EITHER task produces it** — the identical shape as row 18, which is how a decision becomes a silent omission. **You are asked to resolve the ROUTING, not necessarily to build the fix:** read the row, decide whether it belongs to this task, a later one, or merge, and record that with reasoning. A row naming two tasks and owned by neither is owned by nobody.
+  **(d) Resolve the ROUTING of `deviations.md:165`** (orphaned fallback workspace). *(AMENDED 2026-08-02 — partner MEDIUM 4.)* Its disposition names Task 10/13 but **no step in EITHER task produces it** — the identical shape as row 18, which is how a decision becomes a silent omission. **You are asked to resolve the ROUTING, not necessarily to build the fix:** read the row, decide whether it belongs to this task, a later one, or merge, and record that with reasoning. A row naming two tasks and owned by neither is owned by nobody.
 
-  **(d) Commit** — never `git add -A`; stage explicit paths enumerated against what you ACTUALLY changed. Message: `"feat(cmux-spawn-v2): wait-for handshake + re-wait + read-screen diagnosis enrichment"`.
+  **(e) Commit** — never `git add -A`; stage explicit paths enumerated against what you ACTUALLY changed. Message: `"feat(cmux-spawn-v2): wait-for handshake + re-wait + read-screen diagnosis enrichment"`.
 
 ### Task 11: Post-spawn setup (/rename, /rc) + knobs
 

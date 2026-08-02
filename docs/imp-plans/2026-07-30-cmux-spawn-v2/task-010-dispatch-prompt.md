@@ -46,10 +46,15 @@ The compounding half is worse: run against the one live capture that carries a s
 
 **And it would have shipped GREEN**, because Step 1 originally told you to author a fixture containing the invented phrase: code and fixture agreeing with each other, both disagreeing with reality. **A fixture authored to match the code under test proves only that you can spell the same string twice.**
 
-The plan is amended. Consequences you must honor:
-- `trust-dialog.txt` is **DERIVED from the frozen capture verbatim**, never hand-authored, with a test pinning it against that capture so the two cannot drift.
+**Then the controller's own FIX for that carried a second false claim**, caught by partner round 2: it asserted the three non-trust screens were "synthetic by necessity (Task 0 captured no live screen for them)". Also false. `cmux-verb-shapes.json` is `captured: "live"` throughout; `rc_confirmation_screen` holds **two live captures of a running Claude session** (`rc_screen`, `rename_screen`) — exactly the `banner` branch's semantic — and `read_screen_cold` is the live capture behind the `internal_error` disjunct. **Measured consequence: the banner regex matched NEITHER live session** (both fell through to `diagnosis=none`), breaking the module AC's "banner steers to the existing tab" against real evidence.
+
+Take the lesson, because it will apply to your work too: **when you correct an evidence defect, your correction is itself an evidence claim and must be measured to the same standard. "No capture exists" is a NEGATIVE claim, and negative claims are exactly the ones a broken instrument manufactures.**
+
+The plan is amended twice over. Consequences you must honor:
+- `trust-dialog.txt` is **DERIVED from the frozen capture verbatim**, never hand-authored, with a test pinning it against that capture so the two cannot drift. `banner.txt` likewise derives from `rc_confirmation_screen.rc_screen`, and BOTH live captures must pin to `diagnosis=banner`.
 - The trust grep **must precede** the banner grep in `diagnose_target`, and a test pins that ordering. Reordering them silently misroutes a trust modal.
-- The other three screens are **synthetic by necessity** — Task 0 captured no live screen for them. Label those anchors as hypotheses, not contracts (Step 3b).
+- Banner anchors, chosen by measurement: `shift+tab to cycle` is **MEASURED** (in both live captures, absent from the trust screen). `esc to interrupt` is a **LABELLED INFERENCE** covering the busy state — it occurs zero times in the whole fixture because both captures are idle. `claude code` is **REMOVED**: it matches only the trust screen and neither running session.
+- **THREE anchors are MEASURED** (trust-dialog, banner, the `internal_error` disjunct); only `picker-error` is genuinely un-captured. Step 3b asks you to label provenance — **do not mislabel a measured anchor as invented, and do not label an invention as measured.**
 - The frozen fixtures are READ-ONLY and win every tiebreak. **If a stub or a fixture you write disagrees with `cmux-verb-shapes.json`, you are wrong, not the fixture.**
 
 ## Obligations the plan carries that are easy to miss
