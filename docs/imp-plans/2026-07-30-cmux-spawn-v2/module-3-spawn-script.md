@@ -550,7 +550,7 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
 **Files:** same set.
 
-- [ ] **Step 1: Screen fixtures** — `tests/unit/fixtures/spawn-handoff/screens/`.
+- [x] **Step 1: Screen fixtures** — `tests/unit/fixtures/spawn-handoff/screens/`.
 
   **AMENDED 2026-08-02 (partner review, BLOCKER 1) — the original anchors were INVENTED and the frozen READ-ONLY Task 0 fixture CONTRADICTS them.** Measured, with a positive control (the string `trust` IS present in the fixture, so the instrument works): the phrase `Do you trust the files in this folder?` **appears nowhere** in `cmux-verb-shapes.json`. The real measured anchors under `trust_dialog_screen.candidate_anchors` are `Quick safety check: Is this a project you created or` and `1. Yes, I trust this folder`. Worse, run against the ONE live capture that carries a screen (`trust_dialog_screen`), the fence's **banner** regex `claude code|esc to interrupt` MATCHES while its **trust** regex does not — so a real trust modal would be classified `banner` and the operator told *"attach to that tab and continue there"* instead of *"answer the trust dialog"*, **the exact failure `deviations.md:18` exists to prevent.** It would have shipped GREEN, because Step 1 as originally written told you to author a fixture containing the invented phrase — code and fixture agreeing with each other and both disagreeing with reality.
 
@@ -562,7 +562,7 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
   The remaining THREE are synthetic *(AMENDED — partner round 4, MEDIUM O: the count was two until MEDIUM L's remedy required a fifth fixture, and this inventory line was the twin that did not get updated)*: `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk), and **`both-anchors.txt`** — a screen carrying BOTH a trust anchor and a banner anchor, which no capture does, needed to pin the `diagnose_target` ordering now that the fixed banner pattern no longer overlaps the trust capture. Their synthetic status must be stated in each file or its loader comment. **For these three, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
 
-- [ ] **Step 2: Failing tests:**
+- [x] **Step 2: Failing tests:**
 
 ```python
 class TestHandshake:
@@ -654,7 +654,7 @@ def test_wait_timeout_default_matches_measured_fixture():
         f"script default {m.group(1)} != measured {d['default_seconds']} (cold-start-timing.json)")
 ```
 
-- [ ] **Step 3: Implement.** Replace Task 9's placeholder timeout tail:
+- [x] **Step 3: Implement.** Replace Task 9's placeholder timeout tail:
 
 ```bash
 wait_for_token() {   # one bounded wait; caller decides on re-wait
@@ -693,7 +693,7 @@ diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision
 
 (pattern constants may be hoisted; every grep uses here-strings, never a pipe.)
 
-- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). **AMENDED AGAIN 2026-08-02 (partner round 2, MEDIUM B) — the round-1 wording undercounted what Task 0 actually measured.** THREE are MEASURED: `trust-dialog` (`trust_dialog_screen.candidate_anchors`), `banner` (`rc_confirmation_screen`, two live running-session captures — see Step 1), and the `internal_error` disjunct of `unreadable`, whose live capture is `read_screen_cold` (`stderr: "Error: internal_error: Failed to read terminal text"`, exit 1) — that capture is the direct SOURCE of the anchor, not a guess. Only `picker-error` is genuinely un-captured. Label it INVENTED; do NOT mislabel the other three, and do not label as INFERRED anything the fixture measured. **LABEL PER ANCHOR, NOT PER BRANCH, and use THREE categories — MEASURED / INFERRED / INVENTED** *(partner round 3)*. The `banner` branch alone holds two anchors of DIFFERENT provenance: `shift+tab to cycle` is MEASURED, `esc to interrupt` is INFERRED (zero occurrences in the fixture; it covers the busy state that neither idle capture exercises). Labelled per-branch, `banner` reads MEASURED wholesale and the inference silently disappears — which is precisely the blurring this step exists to prevent. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
+- [x] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). **AMENDED AGAIN 2026-08-02 (partner round 2, MEDIUM B) — the round-1 wording undercounted what Task 0 actually measured.** THREE are MEASURED: `trust-dialog` (`trust_dialog_screen.candidate_anchors`), `banner` (`rc_confirmation_screen`, two live running-session captures — see Step 1), and the `internal_error` disjunct of `unreadable`, whose live capture is `read_screen_cold` (`stderr: "Error: internal_error: Failed to read terminal text"`, exit 1) — that capture is the direct SOURCE of the anchor, not a guess. Only `picker-error` is genuinely un-captured. Label it INVENTED; do NOT mislabel the other three, and do not label as INFERRED anything the fixture measured. **LABEL PER ANCHOR, NOT PER BRANCH, and use THREE categories — MEASURED / INFERRED / INVENTED** *(partner round 3)*. The `banner` branch alone holds two anchors of DIFFERENT provenance: `shift+tab to cycle` is MEASURED, `esc to interrupt` is INFERRED (zero occurrences in the fixture; it covers the busy state that neither idle capture exercises). Labelled per-branch, `banner` reads MEASURED wholesale and the inference silently disappears — which is precisely the blurring this step exists to prevent. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
 
 Timeout tail:
 
@@ -723,7 +723,7 @@ fi
 # token received — handshake=ok success stanza (from Task 9) continues here
 ```
 
-- [ ] **Step 4: Run + commit + record TWO decisions.** **AMENDED 2026-08-02 at Task 10's obligation audit — the original one-line step carried a stale claim and silently omitted two obligations that were commanded elsewhere.**
+- [x] **Step 4: Run + commit + record TWO decisions.** **AMENDED 2026-08-02 at Task 10's obligation audit — the original one-line step carried a stale claim and silently omitted two obligations that were commanded elsewhere.**
 
   **(a) Run the FULL unit suite — NOT "both unit files".** That phrasing is STALE and contradicts this module's own Acceptance Criteria, whose last bullet reads *"the FULL unit suite green after every task (**not \"both unit files\"**)"*. Task 9's N6 corrected the AC and left this twin uncorrected — the same one-sided-edit shape as N1 (fix one site of a claim, leave its twin). Re-measure the baseline; **do not inherit a count** (the pre-task baseline is 777, itself re-measured, but verify it yourself).
 
