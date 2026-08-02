@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spawn-handoff-session.sh BUNDLE_ID [--dry-run]
+# spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved]
 #
 # Auto-spawn the SDD controller's successor session in a new cmux workspace via
 # the extended claude-picker. Invoked by context-handoff-protocol.md step 4.
@@ -57,7 +57,7 @@ for a in "$@"; do
   esac
 done
 if [ -z "$BUNDLE_ID" ]; then
-  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run]  (BUNDLE_ID required)" >&2
+  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved]  (BUNDLE_ID required)" >&2
   exit 1
 fi
 
@@ -225,20 +225,35 @@ if [ -f "$MANIFEST_FILE" ]; then
   EXPECTED_HOPS="$("$PYTHON" "$SUPPORT_CLI" expected-hops --manifest "$MANIFEST_FILE" 2>/dev/null)"
   [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
 fi
-# Ceiling: explicit env wins absolutely; else derived max(6, 2 x expected).
-# SSOT: the literals 6 and 2 below MIRROR CEILING_FLOOR / CEILING_FACTOR in
-# _handoff_support.py — shell cannot import them, so this is a deliberate,
-# NAMED duplication. Change both or neither; a silent divergence is invisible.
+# Ceiling: derive max(6, 2 x expected) ONCE, then let an explicit VALID env value
+# override it absolutely. The derivation used to exist TWICE — once as the
+# invalid-knob revert target, once as the else-branch default — and only the
+# second copy was reachable by any test, so `* 99` in the first survived the
+# entire suite. Duplication does not merely risk drift: it SPLITS a guard's test
+# coverage in a way per-guard review cannot see. Keep this single.
+# SSOT: the floor and factor literals below MIRROR CEILING_FLOOR / CEILING_FACTOR
+# in _handoff_support.py — shell cannot import them, so this is a deliberate,
+# NAMED duplication. It is enforced: test_handoff_support.py::
+# test_shared_constants_are_the_ssot_the_shell_mirrors READS THIS FILE and
+# compares the literals. Change both or neither.
+# Deliberately NOT clamped from above: expected_hops is plan-author-declared and
+# schema-validated, so an author who writes expected_hops=500 has declared a
+# 500-hop plan and the ceiling is elastic in it BY DESIGN. The backstop against a
+# chain that spawns without PROGRESSING is the stall gate below, not this number.
+# A CEILING_MAX was considered and rejected (deviations.md): it would add a fourth
+# literal with no Python twin, in the region Task 9 edits.
+DERIVED=6
+if [ "$EXPECTED_HOPS" != "unknown" ]; then
+  DERIVED=$((EXPECTED_HOPS * 2))
+  [ "$DERIVED" -lt 6 ] && DERIVED=6
+fi
+MAX_HOPS="$DERIVED"
 if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
-  MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
-  if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
-    DERIVED=6; [ "$EXPECTED_HOPS" != "unknown" ] && { DERIVED=$((EXPECTED_HOPS * 2)); [ "$DERIVED" -lt 6 ] && DERIVED=6; }
-    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to derived default $DERIVED." >&2
-    MAX_HOPS="$DERIVED"
+  if [[ "$SUPERPOWERS_CMUX_MAX_HOPS" =~ ^[0-9]+$ ]]; then
+    MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
+  else
+    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($SUPERPOWERS_CMUX_MAX_HOPS) — reverting to derived default $DERIVED." >&2
   fi
-else
-  MAX_HOPS=6
-  [ "$EXPECTED_HOPS" != "unknown" ] && { MAX_HOPS=$((EXPECTED_HOPS * 2)); [ "$MAX_HOPS" -lt 6 ] && MAX_HOPS=6; }
 fi
 # SP_HOP is the successor's hop number; defined early because the Task-5 launch
 # composition references it in the runtime fallback chain.
@@ -257,7 +272,15 @@ else
   if [ "$STREAK" = "indeterminate" ]; then
     echo "[spawn-handoff] stall=indeterminate — previous outcome record missing/malformed; stall check skipped." >&2
   elif [[ "$STREAK" =~ ^[0-9]+$ ]] && [ "$STREAK" -gt "$MAX_STALL_HOPS" ]; then
-    TOTAL_DISP="?"; [ -f "$MANIFEST_FILE" ] && TOTAL_DISP="$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("total_tasks","?"))' "$MANIFEST_FILE" 2>/dev/null)"
+    # The `?` placeholder was previously OVERWRITTEN by the substitution itself:
+    # on a malformed manifest the one-liner raises, stdout is empty, and the
+    # refusal rendered "tasks 3/" with the denominator silently gone. Assign
+    # through a temp and keep `?` unless a real value came back.
+    TOTAL_DISP="?"
+    if [ -f "$MANIFEST_FILE" ]; then
+      _total_raw="$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("total_tasks","?"))' "$MANIFEST_FILE" 2>/dev/null)"
+      [ -n "$_total_raw" ] && TOTAL_DISP="$_total_raw"
+    fi
     cmux notify --title "SDD handoff" --body "Chain spawning without progress (tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS) — manual resume" 2>/dev/null || true
     echo "[spawn-handoff] refused: $STREAK consecutive zero-progress hops (> SUPERPOWERS_CMUX_MAX_STALL_HOPS=$MAX_STALL_HOPS) at tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS (reason=stall). If this chain is legitimately slow, raise SUPERPOWERS_CMUX_MAX_STALL_HOPS via inline env on the spawn invocation — settings.local.json is NOT read by a running session." >&2
     print_manual_instructions; exit 3

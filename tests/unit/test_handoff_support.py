@@ -200,19 +200,51 @@ class TestDeriveExpectedHops:
         )
 
 
-def test_shared_constants_are_the_ssot_the_shell_mirrors():
-    """The three constants are a PINNED SEAM, not decoration.
+SPAWN_SCRIPT = SCRIPTS / "spawn-handoff-session.sh"
 
-    spawn-handoff-session.sh cannot import Python, so its ceiling derivation
-    hardcodes the literals 6 and `* 2` with a comment naming this module as SSOT.
-    An unused-import remover has stripped HOP_DIVISOR/CEILING_FACTOR from this
-    file three times (see deviations.md, Task 7 EnvironmentChange); asserting on
-    them here makes the imports load-bearing so the strip cannot recur silently,
-    and makes a divergence between the two sides fail rather than drift.
+
+def test_shared_constants_are_the_ssot_the_shell_mirrors():
+    """Reads spawn-handoff-session.sh and compares its literals to ours.
+
+    An earlier version of this test asserted the three Python constants and never
+    opened the shell file, while its docstring claimed to make a shell/Python
+    divergence fail. The shell side WAS caught — but by a rendered `Hop 1/6`
+    assertion and the derived-ceiling tests in test_spawn_handoff*.py, neither of
+    which names the seam. A docstring that overstates what a test catches invites
+    deleting the tests that actually catch it, so this one now does the reading.
+
+    CEILING_FLOOR and CEILING_FACTOR are mirrored in the shell (it cannot import
+    Python). HOP_DIVISOR is deliberately Python-only — the shell never divides;
+    it consumes an already-computed expected_hops through the CLI. Do not go
+    looking for a missing mirror.
+
+    Anchored on the EXECUTABLE lines, not on any `6`/`2` in the file: the
+    derivation's own SSOT comment quotes both literals, and the file also carries
+    MAX_STALL_HOPS_DEFAULT=1, QUOTA_MIN_PCT_DEFAULT=15 and
+    QUOTA_TIMEOUT_DEFAULT=60. A loose search would pass for the wrong reason.
+
+    Asserting on the imported names also keeps them load-bearing: an unused-import
+    remover has stripped HOP_DIVISOR/CEILING_FACTOR from this file four times
+    (deviations.md, Task 7 EnvironmentChange).
     """
-    assert HOP_DIVISOR == 2.5
-    assert CEILING_FLOOR == 6
-    assert CEILING_FACTOR == 2
+    import re
+
+    assert HOP_DIVISOR == 2.5  # Python-only; no shell mirror by design
+    sh = SPAWN_SCRIPT.read_text()
+
+    seed = re.findall(r"(?m)^DERIVED=(\d+)$", sh)
+    factor = re.findall(r"(?m)^\s*DERIVED=\$\(\(EXPECTED_HOPS \* (\d+)\)\)$", sh)
+    floor_cmp = re.findall(r'(?m)^\s*\[ "\$DERIVED" -lt (\d+) \]', sh)
+
+    # Exactly one of each: the derivation must stay SINGLE. It was duplicated
+    # once, and the untested copy was the one that failed open.
+    assert len(seed) == 1, f"expected one `DERIVED=<floor>` line, got {seed}"
+    assert len(factor) == 1, f"expected one derivation line, got {factor}"
+    assert len(floor_cmp) == 1, f"expected one floor comparison, got {floor_cmp}"
+
+    assert int(seed[0]) == CEILING_FLOOR
+    assert int(floor_cmp[0]) == CEILING_FLOOR
+    assert int(factor[0]) == CEILING_FACTOR
 
 
 class TestHopCeiling:

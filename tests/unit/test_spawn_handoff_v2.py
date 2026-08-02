@@ -544,3 +544,199 @@ class TestStallAndCeiling:
         assert r.returncode == 0, r.stderr
         assert "stall=indeterminate" not in r.stderr
         assert " intent hop=1 tasks_done=1" in _spawn_log_text_or_empty(ctx)
+
+
+# ══ Task 8 quality-review remediation ═════════════════════════════════════════
+# Four mutations survived the shipped suite. Each test below exists to kill one.
+
+
+class TestCeilingDerivationIsSingle:
+    """The invalid-knob path must reach the SAME derivation as the default path.
+
+    Before this pair the ceiling was derived TWICE — once as the invalid-knob
+    revert target, once as the else-branch default — and only the second copy was
+    reachable by a test, so `* 99` in the first SURVIVED all 107 spawn tests. The
+    remediation collapses the two into one derivation; these tests pin the
+    invalid-knob path onto it.
+
+    LOAD-BEARING PRECONDITION: this pin only covers the invalid-knob path because
+    the derivation is SINGLE. If anyone re-duplicates it, these tests silently
+    stop covering the second copy — exactly the failure they were written for.
+
+    expected_hops=5 -> derived ceiling max(6, 2*5) = 10, which EXCEEDS the floor,
+    so the `* 2` factor decides the outcome (at expected_hops=2 the max() picks 6
+    and `* 1`/`* 3`/deletion all survive).
+    """
+
+    def test_invalid_knob_reverts_to_the_derived_ceiling_and_proceeds_below_it(
+        self, tmp_path
+    ):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_MAX_HOPS="abc")
+        write_manifest(ctx, expected_hops=5, total_tasks=5)
+        _hops(ctx, 9)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert any(
+            ln.startswith("WARNING:") and "MAX_HOPS" in ln
+            for ln in r.stderr.splitlines()
+        ), f"no MAX_HOPS warning on stderr: {r.stderr!r}"
+        assert r.returncode == 0, (
+            f"hop 9 must proceed under the DERIVED ceiling of 10 an invalid knob "
+            f"reverts to: {r.stderr}"
+        )
+
+    def test_invalid_knob_reverts_to_the_derived_ceiling_and_refuses_at_it(
+        self, tmp_path
+    ):
+        # Separate tmp_path: the proceeding half consumes a hop and dirties the tree.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_MAX_HOPS="abc")
+        write_manifest(ctx, expected_hops=5, total_tasks=5)
+        _hops(ctx, 10)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert "10/10" in r.stderr, (
+            f"the invalid-knob revert target must be the derived 10, not the "
+            f"floor or a drifted factor: {r.stderr}"
+        )
+
+
+class TestMaxStallHopsKnob:
+    """Both halves of the validate-warn-revert contract its siblings already have.
+
+    Mirrors test_spawn_handoff.py's quota-knob pair (invalid value still leaves
+    the gate live / the knob is actually read). Neither half existed for
+    MAX_STALL_HOPS: deleting the validation block AND making the env read inert
+    both left the suite green, and the first is a genuine fail-OPEN — with the
+    block gone, `[ 2 -gt abc ]` errors, the branch is not taken, and a two-stall
+    chain that must refuse EXITS 0 AND SPAWNS.
+    """
+
+    def _two_stall_fixture(self, tmp_path, **knobs):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, **knobs)
+        write_manifest(ctx, expected_hops=5, total_tasks=5)
+        for t in (0, 1, 2):
+            write_done_report(ctx, t)
+        append_outcome(ctx, 1, 3)
+        append_outcome(ctx, 2, 3)  # streak 2
+        _hops(ctx, 2)
+        _commit(ctx)
+        return ctx, env
+
+    def test_invalid_knob_warns_and_the_stall_gate_still_refuses(self, tmp_path):
+        ctx, env = self._two_stall_fixture(
+            tmp_path, SUPERPOWERS_CMUX_MAX_STALL_HOPS="abc"
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert any(
+            ln.startswith("WARNING:") and "MAX_STALL_HOPS" in ln
+            for ln in r.stderr.splitlines()
+        ), f"no MAX_STALL_HOPS warning on stderr: {r.stderr!r}"
+        assert r.returncode == 3, (
+            f"an invalid stall knob must revert to 1 and still refuse a two-stall "
+            f"chain, not fall through and spawn: {r.stderr}"
+        )
+        assert "reason=stall" in r.stderr
+
+    def test_raised_knob_is_honoured_and_the_same_chain_proceeds(self, tmp_path):
+        # The env read itself: byte-identical fixture, knob raised to 5, streak 2
+        # is no longer > 5. Distinct mutation from the test above — making the
+        # `${SUPERPOWERS_CMUX_MAX_STALL_HOPS:-...}` read inert kills only this one.
+        ctx, env = self._two_stall_fixture(
+            tmp_path, SUPERPOWERS_CMUX_MAX_STALL_HOPS="5"
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, (
+            f"the knob the refusal message tells the user to raise must actually "
+            f"be read: {r.stderr}"
+        )
+        assert "reason=stall" not in r.stderr
+
+
+class TestPolicyOffIsNotBypassable:
+    def test_off_refuses_even_with_user_approved(self, tmp_path):
+        """`off` is the plan author's HARD refusal — the flag cannot override it.
+
+        The two policy branches are adjacent and both consult SPAWN_POLICY, so
+        folding them into one `[ "$SPAWN_POLICY" != "auto" ] && [ "$USER_APPROVED"
+        != "1" ]` is the most natural simplification anyone will reach for — and it
+        converts a hard refusal into a soft one with a green suite, because
+        test_off_refuses_pre_reservation never passes the flag.
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        write_manifest(ctx, expected_hops=3, spawn_policy="off")
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", "--user-approved", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert "reason=policy-off" in r.stderr
+        assert not (ctx["reports"] / ".handoff-hops").exists()
+        assert "intent" not in _spawn_log_text_or_empty(ctx)
+
+
+class TestTasksDoneFallbackAndDenominator:
+    def test_failed_tasks_done_cli_degrades_to_unknown_with_a_diagnostic(
+        self, tmp_path
+    ):
+        """The `|| TASKS_DONE="unknown"` fallback is load-bearing, not defensive.
+
+        Sibling of test_unknown_tasks_done_skips_the_stall_check_and_is_recorded,
+        but forcing the OTHER degradation: that one shadows yaml so the CLI exits 0
+        printing `unknown`; this one kills the CLI outright so stdout is EMPTY.
+        Delete the fallback and the empty value reaches
+        `stall-streak --tasks-done ""` -> argparse exit 2 -> empty STREAK ->
+        matches NEITHER arm -> a two-stall chain spawns with no diagnostic at all.
+        Exit code cannot see it (both spawn), so assert the diagnostic.
+
+        The stub DISPATCHES ON ARGV and `exec`s by ABSOLUTE path: validate_bundle
+        makes four $PYTHON calls before this point (a blanket stub dies there), and
+        the stub is itself named python3 first on PATH, so a bare `exec python3`
+        re-enters it and spins forever inside the untimed suite.
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        write_manifest(ctx, expected_hops=5, total_tasks=5)
+        write_done_report(ctx, 0)
+        _commit(ctx)
+        stubs = tmp_path / "stubs"
+        stubs.mkdir(exist_ok=True)
+        make_stub(
+            stubs,
+            "python3",
+            f'case "$*" in *tasks-done*) exit 1 ;; esac\nexec {sys.executable} "$@"',
+        )
+        env["SUPERPOWERS_ROOT"] = str(tmp_path / "no-venv-here")  # force bare python3
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "tasks_done could not be counted" in r.stderr
+        assert "stall=indeterminate" in r.stderr
+        assert " intent hop=1 tasks_done=unknown" in _spawn_log_text_or_empty(ctx)
+
+    def test_stall_refusal_keeps_its_denominator_placeholder(self, tmp_path):
+        """`TOTAL_DISP="?"` was overwritten by the substitution meant to replace it.
+
+        A malformed manifest makes the total_tasks one-liner raise; stdout is empty
+        and the refusal rendered "tasks 3/" with the denominator silently gone.
+        Route: malformed JSON -> spawn-policy fails closed to `ask` -> pass
+        --user-approved to reach the stall gate. The file must be PRESENT (an
+        absent manifest short-circuits and never runs the substitution).
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        for t in (0, 1, 2):
+            write_done_report(ctx, t)
+        append_outcome(ctx, 1, 3)
+        append_outcome(ctx, 2, 3)  # streak 2 > default 1
+        _hops(ctx, 2)
+        (ctx["wt"] / ctx["feat"] / ".sdd-session.json").write_text("{not json")
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", "--user-approved", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert "reason=stall" in r.stderr
+        assert "tasks 3/?" in r.stderr, (
+            f"the denominator placeholder must survive an unreadable manifest: "
+            f"{r.stderr}"
+        )
