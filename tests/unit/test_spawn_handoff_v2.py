@@ -867,7 +867,12 @@ def _sent_text(tmp_path):
 class TestSurfaceTopology:
     def test_surface_happy_path(self, tmp_path):
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx)
+        # Task 11's post-spawn setup is DEFAULT-ON and fires on every real
+        # handshake=ok, adding its own send/send-key/read-screen calls after
+        # wait-for — irrelevant to what THIS test pins (the launch sequence),
+        # so it is disabled here rather than the assertion widened to tolerate
+        # noise it isn't testing. See TestPostSpawn for the feature itself.
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_POST_SPAWN="")
         write_manifest(ctx, expected_hops=3, total_tasks=5)
         _commit(ctx)  # the manifest is new content; Precondition 1 wants it clean
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
@@ -901,7 +906,10 @@ class TestSurfaceTopology:
         # env prefix with nothing after it would `send` a no-op and still leave
         # every env assertion below green.
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx)
+        # Post-spawn's OWN `send` calls would otherwise pollute `_sent_text`,
+        # which aggregates every `send` call's tokens (see its docstring) —
+        # disabled here since this test pins the LAUNCH send, not post-spawn.
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_POST_SPAWN="")
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         marker = "[spawn-handoff] successor command: "
@@ -917,7 +925,13 @@ class TestSurfaceTopology:
 
     def test_sent_command_carries_inline_env(self, tmp_path):
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_MAX_STALL_HOPS="2")
+        # Post-spawn disabled — see test_sent_command_ends_with_the_successor_command.
+        env = _reach_gate(
+            tmp_path,
+            ctx,
+            SUPERPOWERS_CMUX_MAX_STALL_HOPS="2",
+            SUPERPOWERS_CMUX_POST_SPAWN="",
+        )
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         sent = _sent_text(tmp_path)
@@ -936,8 +950,17 @@ class TestSurfaceTopology:
         # every knob unconditionally (`KNOB=` with an empty value) would satisfy
         # the test above and silently override the child's own defaults with
         # empty strings.
+        # Post-spawn disabled: `_sent_text` returns the LAST logged `send`
+        # call's payload, and an enabled post-spawn appends its own `/rename`
+        # send after the launch — this negative assertion would then check
+        # THAT unrelated line (which never contains INLINE_ENV at all) and
+        # pass VACUOUSLY regardless of what the launch actually forwarded.
+        # MEASURED: forwarding every knob unconditionally (removing the
+        # `[ -n "$v" ] &&` guard) still left this assertion green with
+        # post-spawn enabled — confirmed by mutation, restored by file copy +
+        # `diff -q` (never `git checkout --`/`git stash`).
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_POST_SPAWN="")
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         assert "SUPERPOWERS_CMUX_MAX_STALL_HOPS" not in _sent_text(tmp_path)
@@ -968,7 +991,17 @@ class TestSurfaceTopology:
         """
         payload = "a b; touch /tmp/PWNED"
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_TITLE_FORMAT=payload)
+        # Post-spawn disabled — see test_sent_command_ends_with_the_successor_command.
+        # This payload also becomes TAB_TITLE, so an enabled post-spawn would
+        # add its own `/rename <payload>` send — a second, unrelated `send`
+        # call that `_sent_text` would pick up instead of the launch's, out of
+        # scope for what THIS test pins (INLINE_ENV's `shq` quoting alone).
+        env = _reach_gate(
+            tmp_path,
+            ctx,
+            SUPERPOWERS_CMUX_TITLE_FORMAT=payload,
+            SUPERPOWERS_CMUX_POST_SPAWN="",
+        )
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         sent = _sent_text(tmp_path)
@@ -1195,8 +1228,14 @@ class TestSurfaceTopology:
     def test_send_failure_on_surface_falls_back(self, tmp_path):
         # The launch command is not "accepted" until `cmux send` returns 0, so a
         # failure THERE is still before the point of no return.
+        # Post-spawn disabled: it would add a THIRD `send` call (its own
+        # CMUX_SEND_FAIL_COUNT-numbered attempt succeeds too, since the
+        # counter is global across every `cmux send` invocation), which is
+        # irrelevant to what this test pins — the fallback's send count.
         ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx, CMUX_SEND_FAIL_COUNT="1")
+        env = _reach_gate(
+            tmp_path, ctx, CMUX_SEND_FAIL_COUNT="1", SUPERPOWERS_CMUX_POST_SPAWN=""
+        )
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         assert "workspace create" in cmux_log_text(tmp_path)
@@ -1564,3 +1603,235 @@ class TestHandshake:
         combined = r.stdout + r.stderr
         for lie in ("nothing was spawned", "no spawn attempted", "nothing spawned"):
             assert lie not in combined, lie
+
+
+# --- Task 11: post-spawn setup (/rename, /rc) -------------------------------
+#
+# The AMENDED 2026-08-02 fence (deviations.md:172/295) replaced BOTH
+# pre-amendment anchors after measuring that they matched the ECHOED sent
+# line, not just the confirmation response — the exact "echo defeats the
+# verify" hazard A3a/A3b/c were run to find. `_post_spawn_screen` therefore
+# always renders the echoed line ALONGSIDE the confirmation phrase (never the
+# confirmation alone), so a test that accidentally reverted to a bare-title or
+# bare-"/remote-control" anchor would fail on its own fixture, not merely on a
+# fixture engineered to catch it.
+
+RENAME_ECHO_VERB = "/rename"
+RC_ECHO_VERB = "/remote-control"  # composer-expanded echo of the `/rc` alias — MEASURED, rc_anchor_rationale
+
+
+def _rc_anchor():
+    return _verb_shapes()["rc_confirmation_screen"]["rc_anchor"]
+
+
+def _rename_anchor():
+    return _verb_shapes()["rc_confirmation_screen"]["rename_anchor"]
+
+
+def _post_spawn_screen(tab_title, rename_confirmed=True, rc_confirmed=True):
+    """A read-screen response for post-spawn verification tests.
+
+    Always carries BOTH steps' ECHOED sent lines (a real terminal shows them
+    regardless of which step is under test); `rename_confirmed`/`rc_confirmed`
+    control whether the corresponding MEASURED anchor (`_rename_anchor()` /
+    `_rc_anchor()`) is also present. The stub returns this SAME static text for
+    every `read-screen` call in a run, mirroring the real capture where both
+    confirmations were visible on one screen (`rc_confirmation_screen.rename_screen`).
+    """
+    lines = [f"❯ {RENAME_ECHO_VERB} {tab_title} "]
+    if rename_confirmed:
+        lines.append(f"  ⎿  {_rename_anchor()} {tab_title}")
+    lines.append(f"❯ {RC_ECHO_VERB}")
+    if rc_confirmed:
+        lines.append(f"  {_rc_anchor()} · Continue here, on your phone")
+    return "\n".join(lines) + "\n"
+
+
+def _echo_only_screen(tab_title):
+    """NEGATIVE FIXTURE (deviations.md:172's explicit requirement) — ONLY the
+    echoed sent lines, no confirmation phrase for either step. This is the
+    exact hazard the AMENDED fence guards against: the pre-amendment anchors
+    (bare title / `remote.control` alternation) both match a screen shaped
+    exactly like this one and would have reported false success."""
+    return f"❯ {RENAME_ECHO_VERB} {tab_title} \n❯ {RC_ECHO_VERB}\n"
+
+
+def _success_ctx(tmp_path, screen_text=None, **knobs):
+    """A spawnable ctx whose handshake SUCCEEDS (handshake=ok), optionally with
+    a static read-screen response for post-spawn verification."""
+    ctx = setup_worktree(tmp_path)
+    extra = {"CMUX_WAITFOR_RC": "0"}
+    if screen_text is not None:
+        screen = tmp_path / "post_spawn_screen.txt"
+        screen.write_text(screen_text, encoding="utf-8")
+        extra["CMUX_SCREEN_FILE"] = str(screen)
+    extra.update(knobs)
+    env = _reach_gate(tmp_path, ctx, **extra)
+    write_manifest(ctx, expected_hops=3, total_tasks=5)
+    _commit(ctx)
+    return ctx, env
+
+
+def _run_post_spawn(tmp_path, screen_text=None, **knobs):
+    """Run a spawn through to `handshake=ok` and return (result, ctx)."""
+    ctx, env = _success_ctx(tmp_path, screen_text=screen_text, **knobs)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    return r, ctx
+
+
+def _send_lines(tmp_path):
+    """Every logged `send` CALL, one entry per call, in call order — the
+    launch send is always first; post-spawn's /rename and /rc (if attempted)
+    follow. Same rationale as `_wait_for_lines`: the `.argv` sidecar
+    interleaves multiple calls' tokens with no separator."""
+    return [ln for ln in cmux_log_text(tmp_path).splitlines() if ln.startswith("send ")]
+
+
+def _post_spawn_verbs(tmp_path):
+    """Verbs logged AFTER the handshake's `wait-for` call — i.e. exactly
+    run_post_spawn's own cmux calls plus the trailing `notify`."""
+    verbs = _verbs(tmp_path)
+    return verbs[verbs.index("wait-for") + 1 :]
+
+
+DEFAULT_TAB_TITLE = "hop1 SDD feat"  # fresh worktree: SP_HOP=1, feature="feat" — pinned by TestSurfaceTopology.test_tab_title_renders_hop_and_feature
+
+
+class TestPostSpawn:
+    def test_default_sequence_rename_then_rc(self, tmp_path):
+        screen = _post_spawn_screen(DEFAULT_TAB_TITLE)
+        r, ctx = _run_post_spawn(tmp_path, screen_text=screen)
+        assert r.returncode == 0, r.stderr
+        assert "post_spawn" not in _outcome(ctx)
+        assert _post_spawn_verbs(tmp_path) == [
+            "send",
+            "send-key",
+            "read-screen",
+            "send",
+            "send-key",
+            "read-screen",
+            "notify",
+        ]
+        send_lines = _send_lines(tmp_path)
+        assert len(send_lines) == 3, send_lines  # launch send + /rename + /rc
+        assert (
+            send_lines[1] == f"send --surface surface:7 /rename {DEFAULT_TAB_TITLE}"
+        ), send_lines
+        assert send_lines[2] == "send --surface surface:7 /rc", send_lines
+
+    def test_verify_failure_warns_partial_never_fails_spawn(self, tmp_path):
+        screen = _post_spawn_screen(DEFAULT_TAB_TITLE, rc_confirmed=False)
+        r, ctx = _run_post_spawn(tmp_path, screen_text=screen)
+        assert r.returncode == 0, r.stderr
+        assert _outcome(ctx)["post_spawn"] == "partial:rc"
+        assert _outcome(ctx)["handshake"] == "ok"
+        assert "post-spawn step 'rc' unverified" in r.stderr, r.stderr
+        assert "cosmetic" in r.stderr, r.stderr
+
+    def test_knob_disables_all(self, tmp_path):
+        r, ctx = _run_post_spawn(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        assert r.returncode == 0, r.stderr
+        assert "post_spawn" not in _outcome(ctx)
+        assert _post_spawn_verbs(tmp_path) == ["notify"]
+        assert "/rename" not in cmux_log_text(tmp_path)
+
+    def test_knob_subset_and_invalid_token(self, tmp_path):
+        # Leg A: "rc" -> only /rc sent, /rename never attempted.
+        rc_only = tmp_path / "rc-only"
+        rc_only.mkdir()
+        screen_a = _post_spawn_screen(DEFAULT_TAB_TITLE, rename_confirmed=False)
+        r_a, ctx_a = _run_post_spawn(
+            rc_only, screen_text=screen_a, SUPERPOWERS_CMUX_POST_SPAWN="rc"
+        )
+        assert r_a.returncode == 0, r_a.stderr
+        assert "post_spawn" not in _outcome(ctx_a)
+        assert _post_spawn_verbs(rc_only) == [
+            "send",
+            "send-key",
+            "read-screen",
+            "notify",
+        ]
+        send_lines_a = _send_lines(rc_only)
+        assert len(send_lines_a) == 2, send_lines_a  # launch send + /rc only
+        assert send_lines_a[1] == "send --surface surface:7 /rc", send_lines_a
+
+        # Leg B: "rename,bogus" -> WARNING + revert to default (both steps).
+        subset_bogus = tmp_path / "rename-bogus"
+        subset_bogus.mkdir()
+        screen_b = _post_spawn_screen(DEFAULT_TAB_TITLE)
+        r_b, ctx_b = _run_post_spawn(
+            subset_bogus,
+            screen_text=screen_b,
+            SUPERPOWERS_CMUX_POST_SPAWN="rename,bogus",
+        )
+        assert r_b.returncode == 0, r_b.stderr
+        assert "invalid SUPERPOWERS_CMUX_POST_SPAWN (rename,bogus)" in r_b.stderr, (
+            r_b.stderr
+        )
+        assert "reverting to default rename,rc" in r_b.stderr, r_b.stderr
+        assert "post_spawn" not in _outcome(ctx_b)
+        assert _post_spawn_verbs(subset_bogus) == [
+            "send",
+            "send-key",
+            "read-screen",
+            "send",
+            "send-key",
+            "read-screen",
+            "notify",
+        ]
+
+    def test_title_format_override(self, tmp_path):
+        # Mirrors TestSurfaceTopology.test_tab_title_format_knob_is_read's knob
+        # -> value mapping (Task 9's rename-tab uses the same TAB_TITLE).
+        tab_title = "Xfeat/1"
+        screen = _post_spawn_screen(tab_title)
+        r, ctx = _run_post_spawn(
+            tmp_path,
+            screen_text=screen,
+            SUPERPOWERS_CMUX_TITLE_FORMAT="X{feature}/{hop}",
+        )
+        assert r.returncode == 0, r.stderr
+        send_lines = _send_lines(tmp_path)
+        assert send_lines[1] == f"send --surface surface:7 /rename {tab_title}", (
+            send_lines
+        )
+        assert "post_spawn" not in _outcome(ctx)
+
+    # --- AMENDED 2026-08-02 (deferred order A3b/c + B2) ---------------------
+    def test_echo_only_screen_does_not_false_positive_either_anchor(self, tmp_path):
+        screen = _echo_only_screen(DEFAULT_TAB_TITLE)
+        # Fixture sanity: the PRE-AMENDMENT (defective) anchors would have
+        # matched this screen — proving the negative fixture actually
+        # exercises the hazard the amendment closed, not an unrelated failure.
+        assert DEFAULT_TAB_TITLE in screen  # old bare-title rename anchor
+        assert "/remote-control" in screen  # old bare alternation half
+        r, ctx = _run_post_spawn(tmp_path, screen_text=screen)
+        assert r.returncode == 0, r.stderr
+        assert _outcome(ctx)["post_spawn"] == "partial:rename", (
+            "an echo-only screen must never satisfy either MEASURED anchor; "
+            "rename runs first by default, so the sequence must stop there"
+        )
+        # /rc must never be attempted: the sequence stops at the FIRST failure.
+        assert _post_spawn_verbs(tmp_path) == [
+            "send",
+            "send-key",
+            "read-screen",
+            "notify",
+        ]
+
+    def test_knob_order_rc_before_rename_is_reordered_with_warning(self, tmp_path):
+        screen = _post_spawn_screen(DEFAULT_TAB_TITLE)
+        r, ctx = _run_post_spawn(
+            tmp_path, screen_text=screen, SUPERPOWERS_CMUX_POST_SPAWN="rc,rename"
+        )
+        assert r.returncode == 0, r.stderr
+        # Reordering is not itself a partial — only a verify FAILURE is.
+        assert "post_spawn" not in _outcome(ctx)
+        send_lines = _send_lines(tmp_path)
+        assert (
+            send_lines[1] == f"send --surface surface:7 /rename {DEFAULT_TAB_TITLE}"
+        ), send_lines
+        assert send_lines[2] == "send --surface surface:7 /rc", send_lines
+        assert "SUPERPOWERS_CMUX_POST_SPAWN=rc,rename" in r.stderr, r.stderr
+        assert "reordering to rename,rc" in r.stderr, r.stderr
+        assert "addendum #3" in r.stderr, r.stderr

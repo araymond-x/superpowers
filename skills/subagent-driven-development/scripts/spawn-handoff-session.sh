@@ -57,6 +57,17 @@ if ! [[ "$SPAWN_WAIT_TIMEOUT" =~ ^[0-9]+$ ]]; then
   echo "WARNING: invalid SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT ($SPAWN_WAIT_TIMEOUT) — reverting to default $SPAWN_WAIT_TIMEOUT_DEFAULT." >&2
   SPAWN_WAIT_TIMEOUT="$SPAWN_WAIT_TIMEOUT_DEFAULT"
 fi
+# Post-spawn setup, run after handshake=ok (below): /rename then /rc. Both
+# steps are cosmetic (§5.3) — see run_post_spawn's wiring for why a failure
+# here can only WARN, never change the exit code. NOTE ${var-def}, not
+# ${var:-def}: an explicit empty string is a VALID, deliberately-set value
+# (disables both steps) and must be told apart from "unset" (use the default).
+POST_SPAWN_DEFAULT="rename,rc"
+POST_SPAWN="${SUPERPOWERS_CMUX_POST_SPAWN-$POST_SPAWN_DEFAULT}"
+if [ -n "$POST_SPAWN" ] && ! [[ "$POST_SPAWN" =~ ^(rename|rc)(,(rename|rc))*$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_POST_SPAWN ($POST_SPAWN) — reverting to default $POST_SPAWN_DEFAULT." >&2
+  POST_SPAWN="$POST_SPAWN_DEFAULT"
+fi
 SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
 BUNDLES_DIR="$HOME/.claude-codex-handoff/bundles"
 QUOTA_TOOL_DEFAULT="$HOME/.claude/bin/claude-usage-pace"
@@ -857,9 +868,50 @@ if ! wait_for_token; then
     exit 3
   fi
 fi
-# Token received.
-printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s\n' \
-  "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
+# Token received. Post-spawn setup (/rename, /rc) runs HERE — after handshake
+# success, before the outcome record — so a WARNING it emits lands beside the
+# other diagnostics and POST_SPAWN_FIELD is populated before the printf below.
+post_spawn_send_verified() {
+  # $1=text to send, $2=anchor to verify, $3=step name. BOTH anchors are FIXED
+  # STRINGS (grep -F) -- no regex/alternation branch: both confirmation phrases
+  # are MEASURED to be unique to the response region and absent from the echoed
+  # sent line (Task 0, cmux-verb-shapes.json rc_confirmation_screen.{rc_anchor,
+  # rename_anchor} + their _rationale fields). Here-string, never a pipe.
+  local screen
+  cmux send --surface "$SPAWN_SURFACE_REF" "$1" 2>/dev/null
+  cmux send-key --surface "$SPAWN_SURFACE_REF" enter 2>/dev/null
+  sleep 2
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>/dev/null)"
+  grep -qiF "$2" <<< "$screen" && return 0
+  echo "[spawn-handoff] warn: post-spawn step '$3' unverified — cosmetic, successor is alive (post_spawn=partial:$3)." >&2
+  return 1
+}
+POST_SPAWN_FIELD=""
+run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
+  # AMENDED 2026-08-02 (deferred order A3b/c + B2): canonicalize ordering BEFORE
+  # the loop. Operator addendum #3 forbids any send after /rc lands (kept despite
+  # Task 0's N=1 non-reproduction -- deviations.md, "keep the addendum's ordering
+  # constraint... a single non-reproduction is not grounds to drop a safety
+  # ordering that costs nothing"). Reorder, don't reject: "rc" alone is already
+  # rc-last and stays valid; only "rc,rename" is unsafe, and dropping a step the
+  # operator asked for is worse than running it in a safe order.
+  if [ "$POST_SPAWN" = "rc,rename" ]; then
+    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=rc,rename would send after /rc landed (operator addendum #3: /rc must be sent LAST) — reordering to rename,rc." >&2
+    POST_SPAWN="rename,rc"
+  fi
+  local step
+  local IFS=','
+  for step in $POST_SPAWN; do
+    case "$step" in
+      rename) post_spawn_send_verified "/rename $TAB_TITLE" "Session renamed to: $TAB_TITLE" "rename" || { POST_SPAWN_FIELD=" post_spawn=partial:rename"; return 0; } ;;
+      rc)     post_spawn_send_verified "/rc" "/remote-control is active" "rc" || { POST_SPAWN_FIELD=" post_spawn=partial:rc"; return 0; } ;;
+    esac
+  done
+  return 0
+}
+[ -n "$POST_SPAWN" ] && run_post_spawn
+printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s%s\n' \
+  "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" "$POST_SPAWN_FIELD" >> "$SPAWN_LOG"
 cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
   echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
 echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
