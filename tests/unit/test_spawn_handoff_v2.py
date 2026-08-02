@@ -1835,7 +1835,8 @@ class TestPostSpawn:
         assert "SUPERPOWERS_CMUX_POST_SPAWN=rc,rename" in r.stderr, r.stderr
         # HUNT-THE-TWIN (round-2 amendment): the generalized canonicalization
         # emits "canonicalized to rename,rc", not the old "reordering to ...".
-        assert "canonicalized to rename,rc" in r.stderr, r.stderr
+        # Trailing "(" anchors the result so it can't match a longer prefix.
+        assert "canonicalized to rename,rc (" in r.stderr, r.stderr
         assert "addendum #3" in r.stderr, r.stderr
 
     # --- AMENDED 2026-08-02 (round-2 quality review finding #1: the "/rc last"
@@ -1859,7 +1860,9 @@ class TestPostSpawn:
         assert send_lines[2] == "send --surface surface:7 /rc", send_lines
         # WARNING names the ACTUAL input AND the canonical result, cites the addendum.
         assert "SUPERPOWERS_CMUX_POST_SPAWN=rename,rc,rename" in r.stderr, r.stderr
-        assert "canonicalized to rename,rc" in r.stderr, r.stderr
+        # Trailing "(" anchors "rename,rc" so it can't match the "rename,rc,rename"
+        # input substring — the same discipline as the duplicate test's assertion.
+        assert "canonicalized to rename,rc (" in r.stderr, r.stderr
         assert "addendum #3" in r.stderr, r.stderr
 
     def test_knob_duplicate_token_deduped(self, tmp_path):
