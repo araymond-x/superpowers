@@ -218,10 +218,20 @@ def test_shared_constants_are_the_ssot_the_shell_mirrors():
     it consumes an already-computed expected_hops through the CLI. Do not go
     looking for a missing mirror.
 
-    Anchored on the EXECUTABLE lines, not on any `6`/`2` in the file: the
-    derivation's own SSOT comment quotes both literals, and the file also carries
-    MAX_STALL_HOPS_DEFAULT=1, QUOTA_MIN_PCT_DEFAULT=15 and
-    QUOTA_TIMEOUT_DEFAULT=60. A loose search would pass for the wrong reason.
+    COMMENT LINES ARE STRIPPED FIRST and the patterns are SHAPE-TOLERANT — both
+    deliberately. The derivation's own SSOT comment quotes `max(6, 2 x expected)`
+    and "the literals 6 and 2"; the malformed-hop-counter comment contains
+    `MAX_HOPS=0`; the file also carries MAX_STALL_HOPS_DEFAULT=1,
+    QUOTA_MIN_PCT_DEFAULT=15 and QUOTA_TIMEOUT_DEFAULT=60. A loose search over the
+    raw text passes for the wrong reason.
+
+    Shape-tolerance is the harder half, and it was got wrong once here. Line-shape
+    anchors (`^DERIVED=6$`, a trailing `$` after the arithmetic) matched only the
+    tidy form: the duplication that ACTUALLY existed was indented and
+    semicolon-joined, and derived into `MAX_HOPS` in one copy and `DERIVED` in the
+    other — so a re-duplication in the historical shape SURVIVED the first version
+    of this assertion. Match the CONSTRUCT anywhere in executable text, not a line
+    layout, and do not key on the target variable's name.
 
     Asserting on the imported names also keeps them load-bearing: an unused-import
     remover has stripped HOP_DIVISOR/CEILING_FACTOR from this file four times
@@ -230,21 +240,30 @@ def test_shared_constants_are_the_ssot_the_shell_mirrors():
     import re
 
     assert HOP_DIVISOR == 2.5  # Python-only; no shell mirror by design
-    sh = SPAWN_SCRIPT.read_text()
+    code = "\n".join(
+        ln
+        for ln in SPAWN_SCRIPT.read_text().splitlines()
+        if not ln.lstrip().startswith("#")
+    )
+    # Positive control on the stripper: the derivation must survive it.
+    assert "EXPECTED_HOPS" in code, "comment-stripping removed the derivation itself"
 
-    seed = re.findall(r"(?m)^DERIVED=(\d+)$", sh)
-    factor = re.findall(r"(?m)^\s*DERIVED=\$\(\(EXPECTED_HOPS \* (\d+)\)\)$", sh)
-    floor_cmp = re.findall(r'(?m)^\s*\[ "\$DERIVED" -lt (\d+) \]', sh)
+    # Any target variable: the two historical copies derived into DIFFERENT names.
+    factor = re.findall(r"=\$\(\(EXPECTED_HOPS \* (\d+)\)\)", code)
+    floor_cmp = re.findall(r"-lt (\d+) \]", code)
+    seeds = re.findall(r"\b(?:DERIVED|MAX_HOPS)=(\d+)\b", code)
 
-    # Exactly one of each: the derivation must stay SINGLE. It was duplicated
-    # once, and the untested copy was the one that failed open.
-    assert len(seed) == 1, f"expected one `DERIVED=<floor>` line, got {seed}"
-    assert len(factor) == 1, f"expected one derivation line, got {factor}"
-    assert len(floor_cmp) == 1, f"expected one floor comparison, got {floor_cmp}"
+    # Counts, not just values: the derivation must stay SINGLE. It was duplicated
+    # once, and the untested copy was the one that failed open. The canonical
+    # single form has exactly one arithmetic derivation, one floor comparison, and
+    # two bare floor assignments (the seed and the clamp's tail).
+    assert len(factor) == 1, f"the derivation must appear exactly once, got {factor}"
+    assert len(floor_cmp) == 1, f"one floor comparison, got {floor_cmp}"
+    assert len(seeds) == 2, f"expected seed + clamp floor assignments, got {seeds}"
 
-    assert int(seed[0]) == CEILING_FLOOR
-    assert int(floor_cmp[0]) == CEILING_FLOOR
     assert int(factor[0]) == CEILING_FACTOR
+    assert int(floor_cmp[0]) == CEILING_FLOOR
+    assert all(int(s) == CEILING_FLOOR for s in seeds), seeds
 
 
 class TestHopCeiling:
