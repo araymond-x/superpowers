@@ -951,11 +951,20 @@ class TestSurfaceTopology:
         assertion in this class forwards a single-token value (`2`), which
         quotes to ITSELF — so dropping `shq` is invisible to all of them.
 
-        VACUITY: the payload appears in both arms, since `shlex.quote` only
-        wraps it. Presence alone therefore proves nothing. The discriminator is
-        the pair — the QUOTED form present AND the bare form absent — asserted
-        against the rendered `send` payload, which is the only place INLINE_ENV
-        appears (the `successor command:` stderr echo carries no env prefix).
+        SUBSTRING TRAP, defeated by the `KNOB=` anchor: the bare payload is a
+        substring of the quoted form, so a bare `in` check on the VALUE alone
+        would be true in both arms and prove nothing. Anchoring each assertion
+        on the `KNOB=` prefix is what makes them discriminate — `KNOB='a b; …'`
+        (quote's leading `'` immediately after the `=`) and `KNOB=a b; …` are
+        mutually exclusive renderings of the same variable.
+
+        BOTH legs independently kill the mutant, and neither is redundant.
+        MEASURED under `$(shq "$v")` → `$v`: the PRESENCE assertion is the one
+        that fired — the quoted form is absent from the mutant output — while
+        the raw output confirms the bare form IS present, so the absence leg
+        would have fired too. Do not delete either as vacuous. Both are asserted
+        against the rendered `send` payload, the only place INLINE_ENV appears
+        (the `successor command:` stderr echo carries no env prefix).
         """
         payload = "a b; touch /tmp/PWNED"
         ctx = setup_worktree(tmp_path)
@@ -1091,17 +1100,31 @@ class TestSurfaceTopology:
         ref flows into `rename-tab --surface ''` and `send --surface ''`, the
         stub answers OK to both, and the run reports success while addressing
         nothing — the exact production failure Task 0 measured.
+
+        DISCRIMINATOR, asserted FIRST: every other leg of that combination —
+        including `rc == 3` — is equally true of any abort EARLIER in
+        `create_workspace_target` (MEASURED: a `return 1` right after the
+        `workspace create` rc check leaves the rest of this test green, and so
+        does `CMUX_WS_CREATE_RC=1`). Only `list-pane-surfaces` having been
+        invoked becomes FALSE in that world, so it is the one assertion proving
+        the run actually reached the gate this test names. It runs before the
+        `returncode` pin so a regression attributes here, not to a bare rc.
         """
         ctx = setup_worktree(tmp_path)
         env = _reach_gate(
             tmp_path, ctx, CMUX_NEW_SURFACE_RC="1", CMUX_LIST_SURFACES_NO_REF="1"
         )
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        verbs = _verbs(tmp_path)
+        assert "list-pane-surfaces" in verbs, (
+            f"never reached the ref-resolve step — this run aborted earlier in "
+            f"create_workspace_target, so the ref-shape gate was never exercised: "
+            f"{verbs!r}"
+        )
         assert r.returncode == 3, r.stderr
         assert "workspace create" in cmux_log_text(tmp_path), (
             "control leg: the fallback workspace must actually have been created"
         )
-        verbs = _verbs(tmp_path)
         assert "rename-tab" not in verbs, "launched against an unresolvable ref"
         assert "send" not in verbs, "launched against an unresolvable ref"
         out = _outcome(ctx)
