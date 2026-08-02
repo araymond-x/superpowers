@@ -1309,3 +1309,258 @@ class TestSurfaceTopology:
         )
         assert "EXPECTED_HOPS" in code, "comment-stripping removed live code"
         assert "new-workspace" not in code, "the deprecated verb must be gone"
+
+
+# --- Task 10: handshake, re-wait, read-screen diagnosis --------------------
+
+SCREENS = FIX / "screens"
+
+
+def _screen(name):
+    return str(SCREENS / name)
+
+
+def _wait_for_lines(tmp_path):
+    """Every logged `wait-for` CALL — one entry per call, in call order.
+
+    Deliberately NOT `_flag(_argv(tmp_path, "wait-for"), "--timeout")`. The
+    `.argv` sidecar is `printf '%s\n' "$@"`, i.e. one line per TOKEN, appended
+    across BOTH calls with no separator, and `_flag` resolves only the FIRST
+    occurrence — so that spelling would assert one value once and leave the
+    re-wait half of "both waits use the same duration" entirely VACUOUS. The
+    flat log is one line per call, and `--timeout 60` contains no spaces, so
+    splitting each line is sound.
+    """
+    return [
+        ln for ln in cmux_log_text(tmp_path).splitlines() if ln.startswith("wait-for ")
+    ]
+
+
+def _timeout_ctx(tmp_path, screen=None, waitfor_rc="1", **knobs):
+    """A spawnable ctx whose handshake times out, optionally showing a screen."""
+    ctx = setup_worktree(tmp_path)
+    extra = {"CMUX_WAITFOR_RC": waitfor_rc}
+    if screen is not None:
+        extra["CMUX_SCREEN_FILE"] = _screen(screen)
+    extra.update(knobs)
+    env = _reach_gate(tmp_path, ctx, **extra)
+    write_manifest(ctx, expected_hops=3, total_tasks=5)
+    _commit(ctx)
+    return ctx, env
+
+
+def _diagnose(tmp_path, screen=None, **knobs):
+    """Run a timing-out spawn against `screen` and return (result, ctx)."""
+    ctx, env = _timeout_ctx(tmp_path, screen=screen, **knobs)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    return r, ctx
+
+
+class TestHandshakeFixtureProvenance:
+    """The derived screen fixtures must keep EQUALLING the frozen captures.
+
+    A fixture authored to agree with the code under test proves only that the
+    same string can be spelled twice; these three are written FROM
+    `cmux-verb-shapes.json` and pinned back to it byte-for-byte so neither side
+    can drift. Comparison is exact — no `.strip()`, which would turn a
+    byte-exact anti-drift pin into a fuzzy one.
+    """
+
+    def test_trust_dialog_fixture_matches_the_frozen_capture(self):
+        d = _verb_shapes()
+        assert (SCREENS / "trust-dialog.txt").read_text(encoding="utf-8") == d[
+            "trust_dialog_screen"
+        ]["screen"]
+
+    def test_banner_fixture_matches_the_frozen_capture(self):
+        # banner.txt is ALSO derived from a live capture, so it needs the same
+        # anti-drift pin as trust-dialog.txt — a derived fixture with no
+        # equality test can drift from the capture it claims to derive from
+        # with every other test still green.
+        d = _verb_shapes()
+        assert (SCREENS / "banner.txt").read_text(encoding="utf-8") == d[
+            "rc_confirmation_screen"
+        ]["rc_screen"]
+
+    def test_noise_fixture_matches_the_frozen_capture(self):
+        # noise.txt is derived from `read_screen_warm` — a LIVE capture of a
+        # plain shell surface — rather than hand-authored. Same pin, same
+        # reason.
+        d = _verb_shapes()
+        assert (SCREENS / "noise.txt").read_text(encoding="utf-8") == d[
+            "read_screen_warm"
+        ]["stdout"]
+
+    def test_synthetic_fixtures_declare_themselves_synthetic(self):
+        # The two un-captured screens must SAY so where they live: an anchor
+        # nobody measured is a hypothesis, not a contract, and the next reader
+        # must not mistake one for the other.
+        for name in ("picker-error.txt", "both-anchors.txt"):
+            text = (SCREENS / name).read_text(encoding="utf-8")
+            assert "SYNTHETIC FIXTURE (not a capture)" in text, name
+
+    def test_derived_fixtures_do_not_claim_to_be_synthetic(self):
+        # Positive control for the assertion above: it must be capable of
+        # telling the two families apart, not merely of finding a string.
+        for name in ("trust-dialog.txt", "banner.txt", "noise.txt"):
+            text = (SCREENS / name).read_text(encoding="utf-8")
+            assert "SYNTHETIC FIXTURE" not in text, name
+
+
+class TestHandshake:
+    def test_token_is_only_success(self, tmp_path):
+        # A full Claude banner on screen with NO token is NOT success. Three
+        # live incidents came from treating "something is visible" as done.
+        r, ctx = _diagnose(tmp_path, screen="banner.txt")
+        assert r.returncode == 3, r.stderr
+        o = _outcome(ctx)
+        assert o["handshake"] == "timeout"
+        assert o["diagnosis"] == "banner"
+
+    def test_token_success_exits_0_handshake_ok(self, tmp_path):
+        ctx, env = _timeout_ctx(tmp_path, waitfor_rc="0")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _outcome(ctx)["handshake"] == "ok"
+        # Success never diagnoses: read-screen is enrichment for FAILURE only.
+        assert "diagnosis" not in _outcome(ctx)
+        assert len(_wait_for_lines(tmp_path)) == 1, "a received token must not re-wait"
+
+    def test_timeout_rewaits_once_same_duration(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="noise.txt")
+        assert r.returncode == 3, r.stderr
+        lines = _wait_for_lines(tmp_path)
+        assert len(lines) == 2, f"expected exactly one re-wait: {lines!r}"
+        timeouts = []
+        for ln in lines:
+            f = ln.split()
+            assert "--timeout" in f, ln
+            timeouts.append(f[f.index("--timeout") + 1])
+        # BOTH values compared, from BOTH calls — see _wait_for_lines' docstring
+        # for why the `.argv` sidecar cannot express this.
+        assert timeouts == ["60", "60"], timeouts
+
+    def test_diagnosis_trust_dialog_names_dialog_and_steers_to_tab(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="trust-dialog.txt")
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "trust-dialog"
+        err = r.stderr
+        assert "trust" in err.lower()
+        assert "surface:7" in err, err
+        # The discriminator vs picker-error/none: trust-dialog and banner steer
+        # the operator to the EXISTING tab, so the fresh-session block (printed
+        # on stdout by print_manual_instructions) must be ABSENT.
+        assert "Manual resume required" not in r.stdout, r.stdout
+
+    def test_real_trust_capture_diagnoses_trust_not_banner(self, tmp_path):
+        # The screen driven here IS the frozen capture (pinned byte-exact
+        # above), so this asserts against measured reality rather than against
+        # a fixture written to agree with the patterns.
+        r, ctx = _diagnose(tmp_path, screen="trust-dialog.txt")
+        assert _outcome(ctx)["diagnosis"] == "trust-dialog", (
+            "the real trust modal must never be classified `banner` — that "
+            "would tell the operator to attach and continue instead of to "
+            "answer the dialog"
+        )
+
+    def test_ordering_trust_beats_banner_on_a_both_anchors_screen(self, tmp_path):
+        # Removing `claude code` from the banner pattern DISSOLVED the overlap
+        # that once made ordering load-bearing on a captured screen, so
+        # "reorder the greps and confirm RED" now yields GREEN against every
+        # capture. Ordering is still correct defense-in-depth — a trust modal
+        # CAN be raised over a pane that already painted a statusline — so it
+        # is pinned here with an explicitly SYNTHETIC screen carrying both
+        # MEASURED anchors. THIS is the test whose positive control goes RED
+        # when the two greps are swapped.
+        r, ctx = _diagnose(tmp_path, screen="both-anchors.txt")
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "trust-dialog"
+
+    def test_diagnosis_banner_steers_to_tab_and_omits_manual_block(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="banner.txt")
+        assert _outcome(ctx)["diagnosis"] == "banner"
+        assert "surface:7" in r.stderr
+        assert "Manual resume required" not in r.stdout, r.stdout
+
+    def test_both_live_session_captures_diagnose_banner(self, tmp_path):
+        # rc_screen AND rename_screen are two live captures of a running Claude
+        # session. Driven verbatim from the fixture, not from banner.txt, so
+        # this covers the capture banner.txt is NOT derived from.
+        d = _verb_shapes()
+        screen = tmp_path / "rename_screen.txt"
+        screen.write_text(
+            d["rc_confirmation_screen"]["rename_screen"], encoding="utf-8"
+        )
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(
+            tmp_path, ctx, CMUX_WAITFOR_RC="1", CMUX_SCREEN_FILE=str(screen)
+        )
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "banner"
+
+    def test_diagnosis_picker_error(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="picker-error.txt")
+        assert _outcome(ctx)["diagnosis"] == "picker-error"
+        # picker-error DOES print the manual block: there is no live session to
+        # attach to, so a manual resume is the correct next move.
+        assert "Manual resume required" in r.stdout, r.stdout
+
+    def test_diagnosis_none_on_noise(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="noise.txt")
+        assert _outcome(ctx)["diagnosis"] == "none"
+        assert "Manual resume required" in r.stdout, r.stdout
+
+    def test_diagnosis_unreadable_when_read_screen_fails_outright(self, tmp_path):
+        # Disjunct (a)+(b) together: the stub's natural failure emits
+        # `internal_error` AND exits 1, and the script reads with 2>&1.
+        r, ctx = _diagnose(tmp_path, screen=None)
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "unreadable"
+
+    def test_diagnosis_unreadable_on_internal_error_text_with_rc_zero(self, tmp_path):
+        # Isolates the SECOND disjunct: rc 0, but the literal in the output.
+        screen = tmp_path / "quiet_internal_error.txt"
+        screen.write_text("internal_error: Failed to read terminal text\n")
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(
+            tmp_path, ctx, CMUX_WAITFOR_RC="1", CMUX_SCREEN_FILE=str(screen)
+        )
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "unreadable"
+
+    def test_diagnosis_unreadable_on_nonzero_rc_with_clean_output(self, tmp_path):
+        # Isolates the FIRST disjunct, which NOTHING else can reach: a non-zero
+        # read-screen rc whose output carries no `internal_error` at all. The
+        # screen is `noise.txt`, which diagnoses `none` at rc 0 — so if the rc
+        # test were deleted this would fall through to `none` and go RED.
+        r, ctx = _diagnose(tmp_path, screen="noise.txt", CMUX_READ_SCREEN_RC="3")
+        assert r.returncode == 3, r.stderr
+        assert _outcome(ctx)["diagnosis"] == "unreadable", (
+            "a non-zero read-screen rc must diagnose `unreadable` on its own, "
+            "independently of the `internal_error` literal"
+        )
+
+    def test_timeout_notifies_and_keeps_hop(self, tmp_path):
+        r, ctx = _diagnose(tmp_path, screen="banner.txt")
+        assert r.returncode == 3, r.stderr
+        # The hop stays consumed: a successor WAS launched.
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+        assert "notify" in _verbs(tmp_path)
+        notify = _argv(tmp_path, "notify")
+        body = " ".join(notify)
+        assert "banner" in body, body
+        # Positive content, not merely an absence: the operator must be told
+        # WHERE the successor is and that the hop was spent. Without these the
+        # "never claims nothing was spawned" assertion below would still pass
+        # if the whole branch were deleted.
+        assert "surface:7" in r.stderr
+        assert "hop 1 consumed" in r.stderr, r.stderr
+        combined = r.stdout + r.stderr
+        for lie in ("nothing was spawned", "no spawn attempted", "nothing spawned"):
+            assert lie not in combined, lie

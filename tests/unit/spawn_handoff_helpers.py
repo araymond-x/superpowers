@@ -123,6 +123,17 @@ def cmux_log_text(tmp_path):
 #   CMUX_NOTIFY_RC        `notify` exits with this rc
 #   CMUX_WAITFOR_RC       `wait-for` exit code (default 0 = token received)
 #   CMUX_SCREEN_FILE      `read-screen` cats this file instead of erroring
+#   CMUX_READ_SCREEN_RC   `read-screen` exits with this rc while still emitting
+#                         CMUX_SCREEN_FILE's content (or nothing). This is the
+#                         ONLY way to isolate `diagnose_target`'s FIRST
+#                         `unreadable` disjunct — the non-zero rc — from its
+#                         second, the literal `internal_error` in the output.
+#                         Without it the two disjuncts cannot be told apart: the
+#                         stub's natural failure path emits `internal_error` AND
+#                         exits 1, and the script reads with `2>&1`, so both
+#                         disjuncts fire together and deleting the rc test leaves
+#                         every `unreadable` assertion green. Point it at a clean
+#                         screen (e.g. noise.txt) for a rc-only failure.
 #   CMUX_LIST_SURFACES_NO_REF   `list-pane-surfaces` emits a row carrying NO
 #                         `surface:N` token, so the awk parser resolves nothing.
 #                         The ONLY way to reach `create_workspace_target`'s
@@ -170,7 +181,11 @@ case "$1" in
                  echo "OK surface:7 workspace:5"; exit 0 ;;
   send-key)      echo "OK surface:7 workspace:5"; exit 0 ;;
   wait-for)      exit "${CMUX_WAITFOR_RC:-0}" ;;
-  read-screen)   [ -n "$CMUX_SCREEN_FILE" ] && { cat "$CMUX_SCREEN_FILE"; exit 0; }
+  read-screen)   if [ -n "$CMUX_READ_SCREEN_RC" ]; then
+                   [ -n "$CMUX_SCREEN_FILE" ] && cat "$CMUX_SCREEN_FILE"
+                   exit "$CMUX_READ_SCREEN_RC"
+                 fi
+                 [ -n "$CMUX_SCREEN_FILE" ] && { cat "$CMUX_SCREEN_FILE"; exit 0; }
                  echo "internal_error: Failed to read terminal text" >&2; exit 1 ;;
   notify)        [ -n "$CMUX_NOTIFY_RC" ] && exit "$CMUX_NOTIFY_RC"
                  echo OK; exit 0 ;;

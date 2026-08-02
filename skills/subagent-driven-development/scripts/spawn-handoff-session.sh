@@ -681,6 +681,72 @@ launch_into_target() {   # shared by BOTH topologies (Decision 2)
   cmux send --surface "$SPAWN_SURFACE_REF" "$SENT_CMD\n"
 }
 
+wait_for_token() {   # ONE bounded wait; the caller decides whether to re-wait
+  cmux wait-for "sdd-hop-$SPAWN_ID" --timeout "$SPAWN_WAIT_TIMEOUT"
+}
+
+diagnose_target() {
+  # ENRICHMENT ONLY — this function NEVER selects the exit code (Decision 5).
+  # A screen is not a handshake: the readiness token is the only success
+  # signal, and treating "a session is visible" as done caused three live
+  # incidents. Everything below only decides what the operator is TOLD.
+  #
+  # ANCHOR PROVENANCE IS PER ANCHOR, NOT PER BRANCH — the `banner` branch alone
+  # holds two anchors of different provenance, and labelling it wholesale would
+  # silently launder an inference into a measurement.
+  #   MEASURED = quoted from a Task 0 live capture (key named)
+  #   INFERRED = reasoned from a state no capture exercises
+  #   INVENTED = a hypothesis nobody has observed
+  local screen rc
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>&1)"
+  rc=$?
+  # `unreadable`, both disjuncts MEASURED from `read_screen_cold`: that capture
+  # is the direct source, exiting 1 (rc disjunct) with stderr
+  # `Error: internal_error: Failed to read terminal text` (literal disjunct).
+  # Both are kept because they are separable in principle — a non-zero rc with
+  # clean output, or the literal on a zero rc.
+  if [ $rc -ne 0 ] || grep -qi "internal_error" <<< "$screen"; then
+    printf 'unreadable'; return 0
+  fi
+  # `trust-dialog`, BOTH anchors MEASURED — verbatim from
+  # cmux-verb-shapes.json `trust_dialog_screen.candidate_anchors`.
+  # Tested BEFORE `banner` as defense in depth. Be precise about why: the
+  # PRE-FIX banner regex matched the real trust screen (its `claude code` anchor
+  # scores 2 there), which is what made ordering load-bearing. The fixed pattern
+  # scores ZERO on that capture, so ordering now changes no CAPTURED screen's
+  # diagnosis. It is retained because a screen CAN carry both — a trust modal
+  # raised over a pane that has already painted a statusline — and that case is
+  # pinned by a SYNTHETIC both-anchors fixture, not by any capture.
+  if grep -qiE "quick safety check|yes, i trust this folder" <<< "$screen"; then
+    printf 'trust-dialog'; return 0
+  fi
+  # `picker-error`, BOTH anchors INVENTED. Task 0 captured no picker failure, so
+  # this is a hypothesis, not a contract. Falsified by any real picker failure
+  # screen whose wording differs — in which case this branch silently degrades
+  # to `none`, which is honest (it never misreports another diagnosis).
+  if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then
+    printf 'picker-error'; return 0
+  fi
+  # `banner` — TWO anchors, DIFFERENT provenance:
+  #   `shift+tab to cycle` is MEASURED: present in BOTH live running-session
+  #     captures (rc_confirmation_screen.rc_screen and .rename_screen) and
+  #     absent from trust_dialog_screen. Scope it honestly — both captures carry
+  #     the SAME session id and statusline, so n = ONE session captured twice,
+  #     and it was a long-running interactive session rather than a freshly
+  #     spawned successor. The anchor is measured; generalizing it to "any
+  #     running Claude session" is an inference the fixture cannot settle.
+  #   `esc to interrupt` is INFERRED: it occurs ZERO times in the entire
+  #     fixture, because both live captures are IDLE and that string only
+  #     appears while Claude is generating. It covers the busy state no capture
+  #     exercises. Falsified by a busy-state capture that does not contain it.
+  # `claude code` was REMOVED: measured to match ONLY the trust screen and
+  # NEITHER running session — an anchor that fired on the wrong screen.
+  if grep -qiE "shift\+tab to cycle|esc to interrupt" <<< "$screen"; then
+    printf 'banner'; return 0
+  fi
+  printf 'none'
+}
+
 # --- Dry-run short-circuit: preconditions + preflight done, spawn nothing ---
 if [ "$DRY_RUN" = "1" ]; then
   echo "[spawn-handoff] --dry-run: would spawn surface in $CMUX_WORKSPACE_ID (workspace fallback armed) — quota=$QUOTA_STATUS launch=$LAUNCH_MODE policy=$SPAWN_POLICY tasks_done=$TASKS_DONE" >&2
@@ -755,24 +821,46 @@ if [ "$LAUNCH_ACCEPTED" != "1" ]; then
   print_manual_instructions
   exit 3
 fi
-# 3. Handshake (Task 10 expands this): the token, or nothing. A launched
-# successor that never signals is NOT a success — it may be sitting on a trust
-# modal or a dead picker — so the token is the only exit-0 path.
-if cmux wait-for "sdd-hop-$SPAWN_ID" --timeout "$SPAWN_WAIT_TIMEOUT"; then
-  printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s\n' \
-    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
-  cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
-    echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
-  echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
-  exit 0
+# 3. Handshake: the token, or nothing. A launched successor that never signals
+# is NOT a success — it may be sitting on a trust modal or a dead picker — so
+# the token is the only exit-0 path. NO second spawn is ever attempted from
+# here: the command was accepted, so the target exists and a human can drive it.
+if ! wait_for_token; then
+  # Exactly ONE re-wait, at the SAME duration. A cold start that merely ran
+  # long is the common benign cause, and a second bounded wait costs one
+  # timeout while removing most of that false-positive class. It is not a
+  # retry loop: two waits, then a decision.
+  echo "[spawn-handoff] no readiness token after ${SPAWN_WAIT_TIMEOUT}s — one re-wait." >&2
+  if ! wait_for_token; then
+    # Enrichment happens ONLY here, after the outcome is already decided.
+    DIAG="$(diagnose_target)"
+    printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout diagnosis=%s%s%s\n' \
+      "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$DIAG" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
+    cmux notify --title "SDD handoff" --body "Successor in $SPAWN_SURFACE_REF spawned but NOT confirmed (diagnosis=$DIAG) — check that tab" 2>/dev/null || true
+    # Every arm states that a spawn WAS attempted and that the hop is spent.
+    # None may suggest nothing was spawned: that is what invites a second
+    # session for one hop — the runaway this whole script exists to bound.
+    case "$DIAG" in
+      trust-dialog)
+        # Steer to the tab: one keystroke finishes the handoff. Printing the
+        # fresh-session block here would be actively wrong.
+        echo "[spawn-handoff] handshake=timeout (hop $SP_HOP consumed): the successor in $SPAWN_SURFACE_REF is sitting on Claude's FOLDER-TRUST PROMPT ('Quick safety check: ... 1. Yes, I trust this folder'). Go to that tab and answer it — do NOT start a fresh session (a successor was spawned; a second one is a double-spawn)." >&2 ;;
+      banner)
+        echo "[spawn-handoff] handshake=timeout (hop $SP_HOP consumed): a Claude session IS visible in $SPAWN_SURFACE_REF but no readiness token arrived. Attach to that tab and continue there — do NOT start a fresh session." >&2 ;;
+      picker-error)
+        echo "[spawn-handoff] handshake=timeout: the picker errored in $SPAWN_SURFACE_REF (hop $SP_HOP consumed). Inspect that tab; a spawn WAS attempted — check the tab before any manual resume." >&2
+        print_manual_instructions ;;
+      *)
+        echo "[spawn-handoff] handshake=timeout (diagnosis=$DIAG, hop $SP_HOP consumed). A spawn WAS attempted in $SPAWN_SURFACE_REF — check that tab first; only then resume manually." >&2
+        print_manual_instructions ;;
+    esac
+    exit 3
+  fi
 fi
-# Timeout. Task 10 replaces this stanza with the bounded re-wait + read-screen
-# diagnosis; until then it records the honest outcome and refuses. NO second
-# spawn is attempted — the command was accepted, so the target exists and a
-# human can drive it.
-printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout%s%s\n' \
+# Token received.
+printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s\n' \
   "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
-cmux notify --title "SDD handoff" --body "Successor never signalled (hop $SP_HOP, $SPAWN_SURFACE_REF) — check it manually" 2>/dev/null || true
-echo "[spawn-handoff] launched into $SPAWN_SURFACE_REF but no handshake within ${SPAWN_WAIT_TIMEOUT}s (handshake=timeout, hop $SP_HOP consumed). The successor may be waiting on a prompt — inspect $SPAWN_SURFACE_REF before resuming manually." >&2
-print_manual_instructions
-exit 3
+cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
+  echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
+exit 0

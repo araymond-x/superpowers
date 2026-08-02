@@ -1,0 +1,6 @@
+SYNTHETIC FIXTURE (not a capture). The anchor below is an INVENTED hypothesis:
+Task 0 captured no picker failure, so nothing here is a measured contract.
+Falsified by any real picker failure screen whose wording differs.
+araymond@Aarons-MacBook-Pro-3 wt % claude-picker --pick-version 9.9.999
+claude-picker: error: no matching version 9.9.999 installed
+araymond@Aarons-MacBook-Pro-3 wt % 

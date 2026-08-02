@@ -1,0 +1,7 @@
+SYNTHETIC FIXTURE (not a capture). No captured screen carries both anchor
+families at once; this composes the two MEASURED ones to pin grep ORDERING.
+ Quick safety check: Is this a project you created or
+ one you trust?
+ ❯ 1. Yes, I trust this folder
+   2. No, exit
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← f…
