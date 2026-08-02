@@ -71,9 +71,10 @@ session, not inherited. The delta is exactly the 19 tests added.
 
 Every factual claim in the plan's `AMENDED` notes was re-measured against the frozen
 capture before being built on, with positive and negative controls. All of them held.
-Two claims that were *not* in the plan turned out to be wrong, and both are declared
-as deviations below: the plan's inventory of which fixtures are synthetic, and the
-plan's prescribed `unreadable` test pair, which could not pin the branch it guarded.
+Two plan claims did not survive measurement, and both are declared as deviations
+below: the plan's inventory of which fixtures are synthetic, and the plan's prescribed
+`unreadable` test pair, which could not pin the branch it guarded. A third, minor
+fence departure is recorded alongside them.
 
 ### Implementation detail
 
@@ -94,8 +95,11 @@ The three derived files carry byte-exact equality pins back to the capture. No
 `.strip()` anywhere in those comparisons — that would convert a byte-exact anti-drift
 pin into a fuzzy one, which is a dead pin wearing a live name.
 
-**Step 2 — tests** (19, all initially RED except the two that pin already-correct
-behavior). **Step 3 — implementation**: `wait_for_token()` and `diagnose_target()`
+**Step 2 — tests** (19 written; the pre-implementation run measured **13 failed, 62
+passed** in this file — the 6 that were green from the start are the 5 fixture-
+provenance pins, which test fixtures rather than the new code, plus
+`test_token_success_exits_0_handshake_ok`, which pins Task 9's already-correct success
+path). **Step 3 — implementation**: `wait_for_token()` and `diagnose_target()`
 added beside the other spawn functions; the tail rewritten to
 `if ! wait_for_token → message → if ! wait_for_token → diagnose → record → notify →
 case → exit 3`, with the `handshake=ok` stanza relocated below the block.
@@ -139,7 +143,7 @@ Every plan claim held. Controls: `trust` appears 2× in the trust screen and `Op
 in `rc_screen` (instrument works); `zzq-not-present` appears 0× (instrument can also
 return zero honestly).
 
-**Four mutation positive controls, all RED, all restored by file copy with `diff -q`
+**Five mutation positive controls, all RED, all restored by file copy with `diff -q`
 verified identical** (never `git checkout --`, never `git stash`). Each anchor was
 asserted to occur exactly once before mutating:
 
@@ -148,8 +152,13 @@ asserted to occur exactly once before mutating:
    manufactures a false finding). `test_timeout_rewaits_once_same_duration` → RED.
 2. Grep ordering — physically swapped the trust and banner blocks.
    `test_ordering_trust_beats_banner_on_a_both_anchors_screen` → RED.
-3. Deleted `[ $rc -ne 0 ] ||`.
+3. Deleted the rc disjunct (`[ $rc -ne 0 ] ||`).
    `test_diagnosis_unreadable_on_nonzero_rc_with_clean_output` → RED.
+   And symmetrically, deleted the grep disjunct (leaving `if [ $rc -ne 0 ]`):
+   `test_diagnosis_unreadable_on_internal_error_text_with_rc_zero` → RED, while case
+   (a) correctly stayed green (it is driven by the rc, which survives that mutation).
+   Both disjuncts are therefore independently pinned — the twin of the hole I found in
+   the plan's own pair, checked rather than assumed.
 4. Reverted the banner pattern to the pre-fix `claude code|esc to interrupt`.
    `test_both_live_session_captures_diagnose_banner` → RED.
 
