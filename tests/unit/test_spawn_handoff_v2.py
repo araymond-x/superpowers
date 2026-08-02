@@ -19,17 +19,33 @@ from spawn_handoff_helpers import (
     _commit,
     _spawn_log_text_or_empty,
     append_outcome,
+    cmux_v2_stub,
     encode_args,
     install_bundle,
     install_version,
     make_stub,
-    run_spawn,
     setup_worktree,
     write_done_report,
     write_manifest,
 )
+from spawn_handoff_helpers import run_spawn as _run_spawn_raw
 
 FIX = Path(__file__).parent / "fixtures" / "spawn-handoff"
+
+
+def run_spawn(ctx, tmp_path, *args, **kw):
+    """Every spawn in THIS file drives the v2-topology cmux stub by default.
+
+    Deliberately shadows the harness import rather than being threaded through
+    ~16 call sites by hand: the harness's DEFAULT stub emits no `OK surface:`
+    line, so after Task 9's ref-shape check both topologies fail before launch
+    and every real-spawn test in this file would exit 3 for a reason that has
+    nothing to do with what it is testing. A per-site edit is a per-site chance
+    to miss one. A test that needs a different body still passes `cmux_body=`
+    explicitly and wins.
+    """
+    kw.setdefault("cmux_body", cmux_v2_stub())
+    return _run_spawn_raw(ctx, tmp_path, *args, **kw)
 
 
 def _reach_gate(tmp_path, ctx, **knobs):
@@ -118,7 +134,10 @@ def test_selected_row_marker_shape():
     multi = d["list_pane_surfaces_multi"]
     assert multi["exit"] == 0
     rows = multi["stdout"].splitlines()
-    assert len(rows) == 2, "the multi fixture must retain both rows"
+    # `>= 2`, not `== 2`: two is an accidental property of the capture, so a
+    # future re-capture with a third surface would go RED for the wrong reason.
+    # What must hold is "at least one marker row and at least one plain row".
+    assert len(rows) >= 2, "the multi fixture must retain a selected and a plain row"
     assert rows[0].startswith("* "), (
         "row 1 is the selected row and carries the `* ` marker"
     )
@@ -130,6 +149,30 @@ def test_selected_row_marker_shape():
     assert rows[1].split()[0].startswith("surface:"), (
         "awk $1 on a non-selected row IS the ref"
     )
+
+    # The marker <-> `[selected]` CORRELATION — the semantic content of finding 4,
+    # and previously unpinned: 5 inversion mutations survived, i.e. the `* ` marker
+    # and the `[selected]` token could be moved onto DIFFERENT rows unnoticed. Row
+    # shape alone cannot see that; assert the two travel together, in both
+    # directions, on every row of both captures.
+    for shape, text in (
+        ("single", single),
+        ("multi", multi["stdout"]),
+        (
+            "marker.single_row_state",
+            d["selected_row_marker"]["single_row_state_same_session"],
+        ),
+    ):
+        for row in text.splitlines():
+            marked = row.startswith("* ")
+            selected = "[selected]" in row
+            assert marked == selected, (
+                f"{shape}: the `* ` marker and `[selected]` must name the SAME row "
+                f"(marker={marked}, selected={selected}): {row!r}"
+            )
+        assert sum(1 for row in text.splitlines() if row.startswith("* ")) == 1, (
+            f"{shape}: exactly one row is selected"
+        )
 
     marker = d["selected_row_marker"]
     assert marker["production_shape"].startswith("SINGLE-ROW"), (
@@ -214,18 +257,24 @@ def test_audit_ordered_probe_keys_present():
     solely inside Task 0's live-cmux window. An absent key is indistinguishable
     from an unrun probe, so presence is asserted even when the answer is "no".
 
-    Values are asserted too, not just presence: Module 1 Step 2c makes
-    `latching: false` and `available: false` STOP-and-escalate outcomes, and an
-    unrun probe recorded as `false` with blank evidence must not be able to
-    masquerade as a run one.
+    Values are asserted too, not just presence: an unrun probe recorded as
+    `false` with blank evidence must not be able to masquerade as a run one.
+    The two fields are pinned for DIFFERENT reasons, and an earlier version of
+    this docstring collapsed them: `wait_for_latching.latching` is a Step 2c
+    STOP-and-escalate outcome, whereas `surface_uuid_source.available` is
+    defined by Step **2b**, which calls `false` a LEGITIMATE documented outcome
+    rather than an escalation.
     """
     d = _verb_shapes()
 
     assert "surface_uuid_source" in d
     uuid_src = d["surface_uuid_source"]
     assert uuid_src.get("available") is True, (
-        "Step 2c escalation trigger: available=false converts operator addendum #1 "
-        "into a recorded refusal and must reach the controller, not pass silently"
+        "Step 2b field: this run MEASURED available=true, which is what makes "
+        "operator addendum #1 buildable (deferred order B3 -> IMPLEMENT). A "
+        "silent flip to false would retire that decision without a record. "
+        "(`false` is itself a legitimate Step 2b outcome — it is the undocumented "
+        "flip that is not.)"
     )
     assert uuid_src.get("transcript", "").strip(), (
         "an escalation-bearing probe result requires its transcript as evidence"
@@ -448,7 +497,13 @@ class TestStallAndCeiling:
         # the whole suite while printing an invalid-knob WARNING on EVERY run —
         # noise in the same diagnostic channel this file treats as load-bearing
         # elsewhere (the stall and tasks_done assertions bite on the message).
-        assert "WARNING:" not in r.stderr, (
+        #
+        # M3: narrowed from a bare `"WARNING:" not in r.stderr`, which was
+        # fail-closed but MISATTRIBUTING — any future warning on the no-knob path
+        # would trip it and blame the knob. Narrowing risks vacuousness, so this
+        # form was positive-controlled against the `if true` mutation and
+        # confirmed still RED (Task 9 report, Step 1b/M3).
+        assert "invalid SUPERPOWERS_CMUX_MAX_HOPS" not in r.stderr, (
             f"no knob is set — nothing may warn about one: {r.stderr}"
         )
 
@@ -491,6 +546,12 @@ class TestStallAndCeiling:
         assert r.returncode == 0, r.stderr
         assert "budget=over-expected" in r.stderr
         assert "expected" in _cmux_log(tmp_path)
+        # BUDGET_FLAG's CONSUMER. Task 8 set the variable with nothing reading it
+        # (a recorded SC2034, deferred to this task on the understanding that
+        # Task 9's outcome printf would consume it). Landing Task 9 without this
+        # assertion would leave the flag consumed-but-unpinned, which is how a
+        # field silently stops being emitted.
+        assert " budget=over-expected" in _spawn_log_text_or_empty(ctx)
 
     def test_intent_record_carries_tasks_done(self, tmp_path):
         ctx = setup_worktree(tmp_path)
@@ -755,3 +816,352 @@ class TestTasksDoneFallbackAndDenominator:
             f"the denominator placeholder must survive an unreadable manifest: "
             f"{r.stderr}"
         )
+
+
+# ══ Task 9: surface topology, shared launch wrapper, workspace fallback ═══════
+
+
+def _argv(tmp_path, subcmd):
+    """Recorded argv of `cmux <subcmd>`, ONE ELEMENT PER LINE.
+
+    The flat log's `echo "$@"` cannot tell a flag's VALUE from the next token,
+    and every value here carries spaces or colons. Keyed on `$1`, so
+    `cmux workspace create …` lives under `workspace` with `create` at argv[1].
+    """
+    p = Path(str(tmp_path / "cmux.log") + f".{subcmd}.argv")
+    assert p.exists(), f"cmux stub recorded no `{subcmd}` call"
+    return p.read_text().splitlines()
+
+
+def _flag(argv, flag):
+    assert flag in argv, f"{flag} absent from argv: {argv!r}"
+    i = argv.index(flag)
+    assert i + 1 < len(argv), f"{flag} has no value in argv: {argv!r}"
+    return argv[i + 1]
+
+
+def _verbs(tmp_path):
+    """First token of every logged cmux call, in call order."""
+    return [ln.split()[0] for ln in _cmux_log(tmp_path).splitlines() if ln.split()]
+
+
+def _outcome(ctx):
+    """Fields of the single outcome record."""
+    for ln in _spawn_log_text_or_empty(ctx).splitlines():
+        f = ln.split()
+        if len(f) > 2 and f[2] == "outcome":
+            return dict(p.split("=", 1) for p in f[3:] if "=" in p)
+    raise AssertionError(f"no outcome record: {_spawn_log_text_or_empty(ctx)!r}")
+
+
+def _intent_spawn_id(ctx):
+    for ln in _spawn_log_text_or_empty(ctx).splitlines():
+        f = ln.split()
+        if len(f) > 2 and f[2] == "intent":
+            return f[1]
+    raise AssertionError("no intent record")
+
+
+def _sent_text(tmp_path):
+    """The text `cmux send` delivered (argv element after the surface ref)."""
+    argv = _argv(tmp_path, "send")
+    return argv[-1]
+
+
+class TestSurfaceTopology:
+    def test_surface_happy_path(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        _commit(ctx)  # the manifest is new content; Precondition 1 wants it clean
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+
+        # ORDER is the contract, not mere presence: renaming after the launch, or
+        # waiting before it, would each pass a presence-only check.
+        verbs = [v for v in _verbs(tmp_path) if v != "notify"]
+        assert verbs == ["new-surface", "rename-tab", "send", "wait-for"], verbs
+
+        ns = _argv(tmp_path, "new-surface")
+        assert _flag(ns, "--workspace") == "TEST-WS"  # the CALLER's workspace
+        assert _flag(ns, "--type") == "terminal"
+        assert _flag(ns, "--focus") == "false"  # never steal the user's attention
+
+        rt = _argv(tmp_path, "rename-tab")
+        assert _flag(rt, "--workspace") == "TEST-WS"
+        assert _flag(rt, "--surface") == "surface:7"
+
+        sd = _argv(tmp_path, "send")
+        assert _flag(sd, "--surface") == "surface:7"
+
+        out = _outcome(ctx)
+        assert out["workspace"] == "TEST-WS"
+        assert out["surface"] == "surface:7"
+        assert out["handshake"] == "ok"
+        assert "topology" not in out, "the surface path is the default, not a variant"
+
+    def test_sent_command_ends_with_the_successor_command(self, tmp_path):
+        # The launch payload must actually carry the composed command: an inline
+        # env prefix with nothing after it would `send` a no-op and still leave
+        # every env assertion below green.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        marker = "[spawn-handoff] successor command: "
+        composed = [
+            ln[len(marker) :] for ln in r.stderr.splitlines() if ln.startswith(marker)
+        ]
+        assert composed, "no composed successor command emitted"
+        sent = _sent_text(tmp_path)
+        assert sent.endswith(composed[0] + "\\n"), (
+            f"sent text must END with the composed command plus the Enter "
+            f"escape: sent={sent!r} composed={composed[0]!r}"
+        )
+
+    def test_sent_command_carries_inline_env(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_MAX_STALL_HOPS="2")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        sent = _sent_text(tmp_path)
+        assert sent.startswith("export SUPERPOWERS_SPAWN_ID=")
+        # IDENTITY, not shape. `startswith("export SUPERPOWERS_SPAWN_ID=")` is
+        # satisfied by an EMPTY value — which is exactly what composing
+        # INLINE_ENV before SPAWN_ID is generated would produce. The id the
+        # successor exports must be the id this hop recorded.
+        assert f"export SUPERPOWERS_SPAWN_ID={_intent_spawn_id(ctx)}" in sent
+        # A knob set on the parent reaches the child inline; settings files are
+        # not read by an already-running session, so this is the only channel.
+        assert "SUPERPOWERS_CMUX_MAX_STALL_HOPS=2" in sent
+
+    def test_unset_knobs_are_not_forwarded_as_empty(self, tmp_path):
+        # Positive control's mirror: without this, an INLINE_ENV that forwarded
+        # every knob unconditionally (`KNOB=` with an empty value) would satisfy
+        # the test above and silently override the child's own defaults with
+        # empty strings.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "SUPERPOWERS_CMUX_MAX_STALL_HOPS" not in _sent_text(tmp_path)
+
+    def test_tab_title_renders_hop_and_feature(self, tmp_path):
+        # rename-tab failure is warn-and-continue, so a title rendered as
+        # `hop SDD feat` (TAB_TITLE composed before SP_HOP exists) or a literal
+        # `hop{hop} SDD {feature}` would never fail anything. Pin the VALUE.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _argv(tmp_path, "rename-tab")[-1] == "hop1 SDD feat"
+
+    def test_tab_title_format_knob_is_read(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(
+            tmp_path, ctx, SUPERPOWERS_CMUX_TITLE_FORMAT="X{feature}/{hop}"
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _argv(tmp_path, "rename-tab")[-1] == "Xfeat/1"
+
+    def test_rename_failure_still_launches(self, tmp_path):
+        # A missing tab title is cosmetic; it must never cost the handoff.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_RENAME_RC="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "rename-tab failed" in r.stderr
+        assert "send" in _verbs(tmp_path), "a cosmetic failure blocked the launch"
+        assert _outcome(ctx)["handshake"] == "ok"
+        # Still the SURFACE path: a rename failure must not trigger the fallback.
+        assert "workspace create" not in _cmux_log(tmp_path)
+
+    def test_rename_tab_carries_workspace_on_both_topologies(self, tmp_path):
+        """deviations.md:17 — rename-tab resolves refs ONLY in the caller's
+        workspace unless --workspace is passed (MEASURED: `not_found: Tab not
+        found`, exit 1). On the fallback path its absence is fatal to the rename:
+        the successor surface is BY DEFINITION not in the caller's workspace.
+        And because rename failure is warn-and-continue, a permanently-failing
+        rename would stay green forever without this pin.
+        """
+        # Consume the frozen fixture rather than restating the flag.
+        rename_argv = _verb_shapes()["rename_tab"]["argv"]
+        assert "--workspace" in rename_argv, "frozen contract lost the flag"
+
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        assert run_spawn(ctx, tmp_path, "b1", env_extra=env).returncode == 0
+        assert _flag(_argv(tmp_path, "rename-tab"), "--workspace") == "TEST-WS"
+
+    def test_rename_tab_carries_workspace_on_the_fallback(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        # The created workspace's ref, NOT the caller's — this is the leg where
+        # a bare rename-tab was measured to fail outright.
+        assert _flag(_argv(tmp_path, "rename-tab"), "--workspace") == "workspace:9"
+
+    def test_rename_tab_success_is_never_ref_parsed(self, tmp_path):
+        # Shared Contract §1: rename-tab's field 2 is `action=rename`, NOT a ref.
+        # Parsing it back would poison the surface ref the send then addresses.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _flag(_argv(tmp_path, "send"), "--surface") == "surface:7"
+        assert _outcome(ctx)["surface"] == "surface:7"
+        assert "action=rename" not in _spawn_log_text_or_empty(ctx)
+
+    def test_new_surface_failure_falls_back_to_workspace_once(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        log = _cmux_log(tmp_path)
+        # The CANONICAL verb (Decision 19), never the deprecated alias.
+        assert "workspace create" in log
+        assert "new-workspace" not in log
+        wc = _argv(tmp_path, "workspace")
+        assert wc[:2] == ["workspace", "create"]
+        assert _flag(wc, "--focus") == "false"
+        assert _flag(wc, "--name") == "SDD resume: feat"
+        out = _outcome(ctx)
+        assert out["topology"] == "workspace-fallback"
+        assert out["workspace"] == "workspace:9"
+        # Resolved from the marker-bearing `* surface:11 … [selected]` row: a
+        # parser reading awk's $1 gets `*` and fails the ref-shape gate.
+        assert out["surface"] == "surface:11"
+        assert out["handshake"] == "ok"
+
+    def test_fallback_is_attempted_exactly_once(self, tmp_path):
+        # "One-shot" is the containment property: a retry loop around a broken
+        # cmux would create a workspace per attempt.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1", CMUX_WS_CREATE_RC="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert _verbs(tmp_path).count("workspace") == 1
+        assert _outcome(ctx)["workspace"] == "spawn-failed"
+        assert _outcome(ctx)["handshake"] == "none"
+        assert _outcome(ctx)["topology"] == "workspace-fallback"
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+    def test_send_failure_on_surface_falls_back(self, tmp_path):
+        # The launch command is not "accepted" until `cmux send` returns 0, so a
+        # failure THERE is still before the point of no return.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_SEND_FAIL_COUNT="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "workspace create" in _cmux_log(tmp_path)
+        assert _outcome(ctx)["topology"] == "workspace-fallback"
+        assert _verbs(tmp_path).count("send") == 2
+
+    def test_second_send_failure_is_spawn_failed(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_SEND_FAIL_COUNT="2")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        out = _outcome(ctx)
+        assert out["workspace"] == "spawn-failed"
+        assert out["handshake"] == "none"
+        assert out["surface"] == "surface:11"  # the fallback target is still named
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+        assert "Manual resume required" in r.stdout
+
+    def test_no_double_spawn_after_accepted_send(self, tmp_path):
+        # THE containment invariant: `cmux send` rc 0 means the command is
+        # accepted. After that, a handshake timeout is a DIAGNOSIS problem, never
+        # a reason to create a second target — that is how a runaway chain starts.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_WAITFOR_RC="1")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        verbs = _verbs(tmp_path)
+        assert verbs.count("new-surface") == 1
+        assert "workspace create" not in _cmux_log(tmp_path)
+        assert _outcome(ctx)["handshake"] == "timeout"
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+    def test_token_is_the_only_exit_zero_path(self, tmp_path):
+        # The wait-for name must be derived from THIS hop's spawn id, or the
+        # handshake would latch on some other session's token.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        wf = _argv(tmp_path, "wait-for")
+        assert wf[1] == f"sdd-hop-{_intent_spawn_id(ctx)}"
+        assert _flag(wf, "--timeout") == "60"
+
+    def test_wait_timeout_knob_is_read_and_validated(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT="7")
+        assert run_spawn(ctx, tmp_path, "b1", env_extra=env).returncode == 0
+        assert _flag(_argv(tmp_path, "wait-for"), "--timeout") == "7"
+
+    def test_invalid_wait_timeout_warns_and_reverts(self, tmp_path):
+        # Validate-warn-revert, like every other knob. Unvalidated, the value
+        # reaches `cmux wait-for --timeout` as garbage.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT="abc")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert any(
+            ln.startswith("WARNING:") and "SPAWN_WAIT_TIMEOUT" in ln
+            for ln in r.stderr.splitlines()
+        ), r.stderr
+        assert _flag(_argv(tmp_path, "wait-for"), "--timeout") == "60"
+
+    def test_wait_timeout_default_matches_the_frozen_fixture(self):
+        # Consistency check against Task 0's measurement record. NOTE the 60 is
+        # the SPEC FLOOR, not a measured cold start — `max(60, 2 x 11) = 60`.
+        d = json.loads((FIX / "cold-start-timing.json").read_text())
+        src = (
+            Path(__file__).resolve().parent.parent.parent
+            / "skills"
+            / "subagent-driven-development"
+            / "scripts"
+            / "spawn-handoff-session.sh"
+        ).read_text()
+        m = re.search(r"^SPAWN_WAIT_TIMEOUT_DEFAULT=(\d+)$", src, re.M)
+        assert m, "SPAWN_WAIT_TIMEOUT_DEFAULT must be a column-0 literal assignment"
+        assert int(m.group(1)) == d["default_seconds"]
+
+    def test_dry_run_names_the_surface_topology_and_spawns_nothing(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx)
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        write_done_report(ctx, 0)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", "--dry-run", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        out = r.stdout + r.stderr
+        assert "would spawn surface in TEST-WS" in out
+        assert "workspace fallback armed" in out
+        assert "policy=auto" in out and "tasks_done=1" in out
+        assert "new-surface" not in _cmux_log(tmp_path)
+        assert not (ctx["reports"] / ".handoff-hops").exists()
+
+    def test_spawn_claude_workspace_is_gone(self):
+        # The old workspace-only core is superseded by create_workspace_target +
+        # the shared launch wrapper. A dead copy would be a second, untested
+        # spawn path in a script whose whole risk is spawning twice.
+        src = (
+            Path(__file__).resolve().parent.parent.parent
+            / "skills"
+            / "subagent-driven-development"
+            / "scripts"
+            / "spawn-handoff-session.sh"
+        ).read_text()
+        assert "spawn_claude_workspace" not in src
+        # Comment lines are stripped: the rationale comment legitimately NAMES
+        # the deprecated alias to explain why it is gone. What must not survive
+        # is an executable reference to it.
+        code = "\n".join(
+            ln for ln in src.splitlines() if not ln.lstrip().startswith("#")
+        )
+        assert "EXPECTED_HOPS" in code, "comment-stripping removed live code"
+        assert "new-workspace" not in code, "the deprecated verb must be gone"
