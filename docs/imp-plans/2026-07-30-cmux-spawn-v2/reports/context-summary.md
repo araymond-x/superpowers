@@ -185,3 +185,61 @@ Task 8 landed across `239532a` (feature), `43ff224` (seam imports), `2f677e6` (q
 - **Every propagation sweep undercounted**, including one written to correct an undercount. Treat any enumerated site list as a lower bound and require the sweep as a deliverable.
 - **Walk module acceptance criteria by hand** — `validate_module_completion` polices per-task reports and provenance, **not** the AC list. One AC here was a live `cmux list-workspaces` check nobody had run in four sessions.
 - **Dispatch-description trap**: the hook matches `(spec.compliance|spec.review)` and `(code.quality|quality.review)`. The SDD skill's own `[task N re-review:quality]` marker matches **neither** → `type=unknown` → hard-blocks the next task. Include a classifiable phrase alongside the marker; check `.dispatch-log` after every review dispatch.
+
+---
+
+## Task 9 — Surface topology + shared launch wrapper + workspace fallback (SESSION 11, 2026-08-02)
+
+**State: IMPLEMENTED AND COMMITTED; NOT CLOSED.** Quality review returned
+CHANGES_REQUESTED. Suite 748 → 773 green. Commits `b3ca14f` (code), `61ba1f4`
+(register), `7080521` (spec-FAIL fix), plus review/plan commits.
+
+### What landed
+
+The spawn core was rewritten: the successor is now a **surface in the caller's
+own cmux workspace**, with `cmux workspace create` demoted to a one-shot
+fallback. `cmux new-workspace` and `spawn_claude_workspace()` are gone from
+executable text. Both topologies converge on one `launch_into_target` wrapper
+(rename-tab → send); `capture_cmux_ref` is the single ref-capture path.
+
+**The ref is now load-bearing** — the old core degraded an empty capture to a
+`(spawned)` placeholder, but rename and send both *address* the ref, so a
+fabricated one creates a target nobody can drive while the run reports
+success. Empty/garbled ref or `mktemp` failure is now a failure: one fallback
+attempt, then `spawn-failed` with the hop consumed.
+
+### Pre-dispatch: three partner rounds, ten findings
+
+The controller's own obligation audit found THREE producer-less obligations
+(work the write-scope table or register assigned to Task 9 that no step
+commanded) → Steps 1c, 1d and the Step 4/5 corrections. **The partner then
+found FIVE more plus a routing gap** (F1 `rename-tab --workspace`; F2 two
+breaking hardening tests; F3 three assertions going silently vacuous; F4 a
+test surviving its own deletion; F5 a prescribed provenance comment). **Round
+2 found four defects in round 1's fixes, two introduced by the controller
+while fixing that very class.** Round 3 approved.
+
+### Open — the Task 9 fix round is the next action
+
+- **I2 (security-adjacent):** `shq` on forwarded knob values has ZERO
+  coverage — mutation survived all 139 spawn tests. Unexercised BY
+  CONSTRUCTION (every assertion uses a single-token value). Code correct, pin
+  missing.
+- **I1:** `assert _did_not_spawn.__module__` is vacuous in the file whose whole
+  subject is a fail-open. Positive-controlled replacement supplied; pin
+  DELEGATION, not provenance.
+- **I3:** the fallback's ref-shape gate is untestable BY CONSTRUCTION — the fix
+  is a stub KNOB, not another assertion.
+- **M1–M5**, and **I4 [NEEDS_CONTEXT]** which cannot be closed in-sprint: the
+  runaway-chain bound rests on `cmux send`'s rc being a reliable accept/reject
+  signal and nothing measures that.
+
+### Also closed this session
+
+Task 8 CLOSED (quality re-review round 3 APPROVED; M1/M2 fixed, M3/M4 routed to
+Task 9 as commanded Step 1b). **Module 2's held `[~]` acceptance checkbox
+flipped to `[x]` on MEASUREMENT** — P7-3/P7-6/P7-8 each re-run against the
+shipped CLI, which surfaced instrument failure #19 (system `python3` HAS
+PyYAML 6.0.3, so the "no PyYAML" arm never existed until the import was
+blocked and the blocker positive-controlled; that reversed the reading from
+"still broken" to "fixed").
