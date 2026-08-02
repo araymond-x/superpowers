@@ -233,6 +233,17 @@ def test_shared_constants_are_the_ssot_the_shell_mirrors():
     of this assertion. Match the CONSTRUCT anywhere in executable text, not a line
     layout, and do not key on the target variable's name.
 
+    It was got wrong a SECOND time, and the correction is the arithmetic-site
+    count below. The per-literal patterns were still shape-SENSITIVE in three
+    independent ways at once — `factor` byte-exact on spacing, `floor_cmp` on the
+    `-lt N ]` bracket form, `seeds` on the two names it knew — and a copy escapes
+    by clearing all three, which two ordinary-bash shapes did:
+    `CEIL=$(( EXPECTED_HOPS*2 ))` with an `(( CEIL < 6 ))` clamp, and
+    `CEIL=$(( EXPECTED_HOPS * 2 ))` with a `-gt`-form clamp. Enumerating shapes
+    loses this race; counting the CONTEXT (any arithmetic mentioning
+    EXPECTED_HOPS) does not. What that still cannot see is stated at the
+    assertion itself rather than claimed away.
+
     Asserting on the imported names also keeps them load-bearing: an unused-import
     remover has stripped HOP_DIVISOR/CEILING_FACTOR from this file four times
     (deviations.md, Task 7 EnvironmentChange).
@@ -249,17 +260,75 @@ def test_shared_constants_are_the_ssot_the_shell_mirrors():
     assert "EXPECTED_HOPS" in code, "comment-stripping removed the derivation itself"
 
     # Any target variable: the two historical copies derived into DIFFERENT names.
-    factor = re.findall(r"=\$\(\(EXPECTED_HOPS \* (\d+)\)\)", code)
+    # Whitespace-TOLERANT: `$(( EXPECTED_HOPS * 2 ))` is the same construct as
+    # `$((EXPECTED_HOPS * 2))`, and a byte-exact pattern let a padded second copy
+    # through (re-review round 2, escape D5).
+    factor = re.findall(r"\$\(\(\s*EXPECTED_HOPS\s*\*\s*(\d+)\s*\)\)", code)
     floor_cmp = re.findall(r"-lt (\d+) \]", code)
     seeds = re.findall(r"\b(?:DERIVED|MAX_HOPS)=(\d+)\b", code)
+
+    # The shape-INDEPENDENT backstop, and the one to trust when they disagree:
+    # every arithmetic context — `$(( ))` or bare `(( ))` — that mentions
+    # EXPECTED_HOPS, regardless of operator, operand order, spacing, or target
+    # name. `factor` above still earns its place because it is what pins the
+    # LITERAL against CEILING_FACTOR; this one is what makes "exactly one
+    # derivation" hold for shapes nobody enumerated.
+    #
+    # SCOPE, stated precisely because a whole-test RED does not tell you which
+    # assertion produced it: this count closes shapes that NAME EXPECTED_HOPS
+    # inside `$(( ))` or `(( ))`. A derivation that reads the value into another
+    # variable first is invisible to it — `$((E * 2))` names no EXPECTED_HOPS —
+    # and is caught only by `floor_cmp` above, i.e. by one of the shape-sensitive
+    # patterns, not by this one. Measured per-assertion, not inferred.
+    #
+    # KNOWN RESIDUAL ESCAPES — constructed and MEASURED to survive, not assumed
+    # absent. A second derivation still passes if it BOTH avoids an arithmetic
+    # context naming EXPECTED_HOPS **and** clamps without the `-lt N ]` bracket
+    # form; three shapes do: `E="$EXPECTED_HOPS"; CEIL=$((E * 2))` (indirection),
+    # `CEIL=$(expr "$EXPECTED_HOPS" \* 2)`, and `let "CEIL = EXPECTED_HOPS * 2"`,
+    # each with a `(( CEIL < 6 ))` clamp. Left open deliberately: none is
+    # ordinary bash in a file that uses `$(( ))` and `[ ]` throughout, so each is
+    # a deliberate act rather than a drift, and closing them costs more
+    # brittleness than the escape is worth. Stated so the next reader can weigh
+    # it — an unqualified "re-duplication fails" is what this test got wrong
+    # twice already.
+    arith_sites = re.findall(
+        r"\$\(\((?:[^()]|\([^()]*\))*\)\)|(?<!\$)\(\((?:[^()]|\([^()]*\))*\)\)", code
+    )
+    # Positive control on the arithmetic scanner: the script has other arithmetic
+    # (`$((HOPS + 1))`). A pattern that matched nothing would make the count below
+    # fail loudly rather than pass vacuously, but a pattern that matched nothing
+    # ANYWHERE means the scanner is broken, not the code.
+    assert arith_sites, "arithmetic scanner matched nothing — the pattern is broken"
+    derivations = [a for a in arith_sites if "EXPECTED_HOPS" in a]
 
     # Counts, not just values: the derivation must stay SINGLE. It was duplicated
     # once, and the untested copy was the one that failed open. The canonical
     # single form has exactly one arithmetic derivation, one floor comparison, and
     # two bare floor assignments (the seed and the clamp's tail).
-    assert len(factor) == 1, f"the derivation must appear exactly once, got {factor}"
-    assert len(floor_cmp) == 1, f"one floor comparison, got {floor_cmp}"
-    assert len(seeds) == 2, f"expected seed + clamp floor assignments, got {seeds}"
+    #
+    # ALL THREE SCANS ARE WHOLE-FILE, DELIBERATELY: a second derivation can be
+    # placed anywhere, so a slice to "the derivation block" would only guard the
+    # block a re-duplicator was not obliged to stay inside. The cost is
+    # misattribution — an unrelated `-lt N ]` or `MAX_HOPS=<digits>` elsewhere in
+    # the script trips these too. That is fail-CLOSED; read the failure as "the
+    # scan found an extra site somewhere in the file", not necessarily as a
+    # ceiling regression.
+    assert len(derivations) == 1, (
+        "exactly one arithmetic derivation from EXPECTED_HOPS must exist anywhere "
+        f"in the file (whole-file scan), got {derivations}"
+    )
+    assert len(factor) == 1, (
+        f"the derivation must appear exactly once (whole-file scan), got {factor}"
+    )
+    assert len(floor_cmp) == 1, (
+        "one floor comparison (whole-file scan — an unrelated `-lt N ]` anywhere "
+        f"in the script also trips this), got {floor_cmp}"
+    )
+    assert len(seeds) == 2, (
+        "expected seed + clamp floor assignments (whole-file scan — any other "
+        f"DERIVED=/MAX_HOPS= digit assignment also trips this), got {seeds}"
+    )
 
     assert int(factor[0]) == CEILING_FACTOR
     assert int(floor_cmp[0]) == CEILING_FLOOR

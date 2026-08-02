@@ -442,6 +442,15 @@ class TestStallAndCeiling:
         assert r.returncode == 0, (
             f"hop 9 must proceed under a derived ceiling of 10: {r.stderr}"
         )
+        # No knob is set here, so the invalid-knob branch must stay silent. The
+        # outer `[ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]` guard was otherwise
+        # unpinned: replacing it with `if true` kept MAX_HOPS correct and passed
+        # the whole suite while printing an invalid-knob WARNING on EVERY run —
+        # noise in the same diagnostic channel this file treats as load-bearing
+        # elsewhere (the stall and tasks_done assertions bite on the message).
+        assert "WARNING:" not in r.stderr, (
+            f"no knob is set — nothing may warn about one: {r.stderr}"
+        )
 
     def test_ceiling_derived_from_expected_hops_refuses_at_the_ceiling(self, tmp_path):
         # The refusing half of the pair above (separate tmp_path: the proceeding
@@ -469,8 +478,14 @@ class TestStallAndCeiling:
     def test_over_expected_notifies_never_refuses(self, tmp_path):
         ctx = setup_worktree(tmp_path)
         env = _reach_gate(tmp_path, ctx)
-        write_manifest(ctx, expected_hops=1, total_tasks=1)  # ceiling floors to 6
-        _hops(ctx, 1)
+        # expected_hops=1 would derive a ceiling of 2; the floor clamp lifts it
+        # to 6. Hop 5 is chosen DELIBERATELY: it proceeds only because the floor
+        # applied. This is the sole behavioural pin on the clamp — the previous
+        # version used hop 1, which passes at a ceiling of 2 just as well, under
+        # a comment that claimed "ceiling floors to 6". Deleting the clamp now
+        # makes this refuse with exit 3 instead of spawning.
+        write_manifest(ctx, expected_hops=1, total_tasks=1)
+        _hops(ctx, 5)
         _commit(ctx)
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr

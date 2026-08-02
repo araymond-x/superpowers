@@ -233,9 +233,17 @@ fi
 # coverage in a way per-guard review cannot see. Keep this single.
 # SSOT: the floor and factor literals below MIRROR CEILING_FLOOR / CEILING_FACTOR
 # in _handoff_support.py — shell cannot import them, so this is a deliberate,
-# NAMED duplication. It is enforced: test_handoff_support.py::
+# NAMED duplication. test_handoff_support.py::
 # test_shared_constants_are_the_ssot_the_shell_mirrors READS THIS FILE and
-# compares the literals. Change both or neither.
+# compares the literals, so changing one side alone FAILs — change both or
+# neither. That same test also counts arithmetic derivations from EXPECTED_HOPS
+# and requires exactly ONE, so a second copy in any `$(( ))` or `(( ))` shape
+# fails too. It is NOT an unconditional bar on re-duplication, and an earlier
+# version of this comment wrongly implied it was: a copy that avoids arithmetic
+# entirely (`expr`, `let`) or derives from an intermediate variable, AND clamps
+# without the `[ … -lt N ]` form, still passes. Those escapes are enumerated at
+# the test itself. Keep the derivation single because the comment above explains
+# why, not because a test will always catch you.
 # Deliberately NOT clamped from above: expected_hops is plan-author-declared and
 # schema-validated, so an author who writes expected_hops=500 has declared a
 # 500-hop plan and the ceiling is elastic in it BY DESIGN. The backstop against a
