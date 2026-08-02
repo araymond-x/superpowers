@@ -560,7 +560,7 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
   **Measured, with controls, against those two captures and the trust capture:** `shift+tab to cycle` is present in BOTH live sessions and ABSENT from the trust screen — it is the one usable MEASURED banner anchor. **Scope that measurement honestly (partner round 3, MEDIUM K): both captures carry the SAME session id and the same `bypass permissions` statusline, so n = ONE session captured twice**, and it was a long-running interactive session rather than a freshly-spawned successor — which is the population this feature actually cares about. The anchor IS measured; the generalization to "any running Claude session" is INFERRED and the fixture cannot settle it. Do not launder the one into the other. `esc to interrupt` occurs **zero times in the entire fixture** (both live captures are IDLE sessions; that string only appears while Claude is generating), so it is an INFERENCE covering the busy state. `claude code` matches **only the trust screen** and NEITHER running session — an anchor that fires on the wrong screen; it is REMOVED from the banner pattern.
 
-  The remaining two ARE synthetic — `picker-error.txt` (`claude-picker: error: no matching version`) and `noise.txt` (shell prompt + scrollback junk) — and that limitation must be stated in each file or its loader comment. **For those two, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
+  The remaining THREE are synthetic *(AMENDED — partner round 4, MEDIUM O: the count was two until MEDIUM L's remedy required a fifth fixture, and this inventory line was the twin that did not get updated)*: `picker-error.txt` (`claude-picker: error: no matching version`), `noise.txt` (shell prompt + scrollback junk), and **`both-anchors.txt`** — a screen carrying BOTH a trust anchor and a banner anchor, which no capture does, needed to pin the `diagnose_target` ordering now that the fixed banner pattern no longer overlaps the trust capture. Their synthetic status must be stated in each file or its loader comment. **For these three, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
 
 - [ ] **Step 2: Failing tests:**
 
@@ -668,8 +668,15 @@ diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision
   fi
   # AMENDED 2026-08-02 (partner BLOCKER 1): anchors come from the FROZEN capture
   # (cmux-verb-shapes.json trust_dialog_screen.candidate_anchors), NOT invented.
-  # The trust test MUST precede the banner test: the banner regex MATCHES the real
-  # trust screen, so reordering these silently misroutes a trust modal to "banner".
+  # The trust test precedes the banner test as DEFENSE IN DEPTH. Be precise about
+  # why (partner round 4, BLOCKER N -- the earlier wording here asserted the OLD
+  # pattern's behaviour and became false the moment `claude code` was removed):
+  # the pre-fix banner regex DID match the real trust screen, which is what made
+  # ordering load-bearing. The fixed pattern scores ZERO on it (re-derived with a
+  # control: the deleted `claude code` still scores 2), so ordering now changes no
+  # CAPTURED screen's diagnosis. It is retained because a screen CAN carry both
+  # anchors -- a trust modal raised over a pane that already painted a statusline --
+  # and that case is pinned by a SYNTHETIC both-anchors fixture, not by any capture.
   if grep -qiE "quick safety check|yes, i trust this folder" <<< "$screen"; then printf 'trust-dialog'; return 0; fi
   if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then printf 'picker-error'; return 0; fi
   # AMENDED 2026-08-02 (partner round 2, BLOCKER A). `shift+tab to cycle` is
