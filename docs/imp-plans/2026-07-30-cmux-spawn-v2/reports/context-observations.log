@@ -72,3 +72,5 @@
 2026-08-01T22:25:00Z task= type=other tokens=203404 source=probe tier=below action=allow
 2026-08-01T22:35:01Z task= type=other tokens=225410 source=probe tier=below action=allow
 2026-08-01T22:46:07Z task= type=other tokens=260867 source=probe tier=below action=allow
+2026-08-01T23:39:27Z task= type=spec-review tokens=279207 source=probe tier=below action=allow
+2026-08-01T23:51:05Z task= type=quality-review tokens=291474 source=probe tier=below action=allow
