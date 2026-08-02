@@ -282,12 +282,26 @@ def test_shared_constants_are_the_ssot_the_shell_mirrors():
     # patterns, not by this one. Measured per-assertion, not inferred.
     #
     # KNOWN RESIDUAL ESCAPES — constructed and MEASURED to survive, not assumed
-    # absent. A second derivation still passes if it BOTH avoids an arithmetic
-    # context naming EXPECTED_HOPS **and** clamps without the `-lt N ]` bracket
-    # form; three shapes do: `E="$EXPECTED_HOPS"; CEIL=$((E * 2))` (indirection),
-    # `CEIL=$(expr "$EXPECTED_HOPS" \* 2)`, and `let "CEIL = EXPECTED_HOPS * 2"`,
-    # each with a `(( CEIL < 6 ))` clamp. Left open deliberately: none is
-    # ordinary bash in a file that uses `$(( ))` and `[ ]` throughout, so each is
+    # absent. The scan below enumerates exactly TWO syntaxes, `$(( ))` and bare
+    # `(( ))`, so its shape-independence holds only WITHIN them: naming
+    # EXPECTED_HOPS in an arithmetic context is NOT by itself enough to be
+    # caught, because bash has arithmetic contexts outside those two spellings.
+    # Each shape below was inserted as a second ceiling derivation and survived
+    # a real pytest run. They clear this count by using a syntax or an operand
+    # it cannot see, clear `floor_cmp` by clamping with `(( CEIL < 6 ))` instead
+    # of the `-lt N ]` bracket form, and clear `seeds` by deriving into a fresh
+    # target name:
+    #   - `E="$EXPECTED_HOPS"; CEIL=$((E * 2))` — indirection; the parens name
+    #     no EXPECTED_HOPS
+    #   - `CEIL=$(expr "$EXPECTED_HOPS" \* 2)` — a command, not arithmetic
+    #   - `let "CEIL = EXPECTED_HOPS * 2"` — arithmetic, but not `(( ))`
+    #   - `CEIL=$[EXPECTED_HOPS * 2]` — legacy `$[ ]` arithmetic
+    #   - `declare -i CEIL` then `CEIL=EXPECTED_HOPS*2` — the integer attribute
+    #     makes a plain assignment an arithmetic context; `typeset -i` is the
+    #     same
+    # Left open deliberately: none is ordinary bash in a file that uses `$(( ))`
+    # and `[ ]` throughout — `$[ ]` is deprecated legacy syntax, and neither
+    # `declare -i` nor `typeset -i` appears anywhere in this script — so each is
     # a deliberate act rather than a drift, and closing them costs more
     # brittleness than the escape is worth. Stated so the next reader can weigh
     # it — an unqualified "re-duplication fails" is what this test got wrong

@@ -78,3 +78,5 @@
 2026-08-02T00:38:23Z task= type=other tokens=325063 source=probe tier=soft action=allow
 2026-08-02T00:52:28Z task= type=other tokens=341646 source=probe tier=soft action=allow
 2026-08-02T01:21:49Z task=8 type=other tokens=361535 source=probe tier=soft action=allow
+2026-08-02T04:12:01Z task= type=other tokens=117072 source=probe tier=below action=allow
+2026-08-02T04:30:52Z task=8 type=other tokens=150453 source=probe tier=below action=allow
