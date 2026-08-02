@@ -866,11 +866,11 @@ run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contrac
 
 ## Module 3 Acceptance Criteria
 
-- [ ] `handoff_spawn: off` / un-approved `ask` refuse pre-reservation (no hop consumed, retryable message).
-- [ ] Two consecutive zero-progress hops refuse with `tasks X/Y, hops N` + the inline-env raise instruction; progress chains are never refused below the ceiling; first hop and indeterminate history SKIP.
-- [ ] Ceiling defaults to `max(6, 2×expected_hops)`; explicit env wins absolutely; `.handoff-hops` fail-closed guard untouched.
-- [ ] Success path: `new-surface --focus false` in the caller's workspace → `rename-tab` → `send` (inline `export` env prefix) → token → `handshake=ok` → exit 0. Outcome carries `workspace=`, `surface=`, `tasks_done=`.
-- [ ] Surface-path failure BEFORE an accepted send falls back ONCE through the SAME wrapper via `workspace create` (`topology=workspace-fallback`); an accepted send NEVER spawns twice.
-- [ ] Timeout → one re-wait → exit 3 `handshake=timeout` with `diagnosis=` enrichment; a stubbed banner with no token is NOT success; trust-dialog/banner instructions steer to the existing tab; every timeout notifies; no message claims nothing was spawned.
-- [ ] Post-spawn `/rename` + `/rc` verified by read-screen against anchors the sent line cannot itself contain (echo-proof); failures are `post_spawn=partial:<step>` WARNINGs, never spawn failures; `SUPERPOWERS_CMUX_POST_SPAWN=""` disables; ordering always resolves to `/rc` LAST (operator addendum #3 — `rc,rename` is reordered, not rejected).
-- [ ] `tests/unit/test_spawn_handoff.py` fully migrated in the same tasks that changed the behavior; the FULL unit suite green after every task (**not "both unit files"** — Task 9 writes three test files, and its Step 3 rewrites the spawn core other suites exercise).
+- [x] `handoff_spawn: off` / un-approved `ask` refuse pre-reservation (no hop consumed, retryable message).
+- [x] Two consecutive zero-progress hops refuse with `tasks X/Y, hops N` + the inline-env raise instruction; progress chains are never refused below the ceiling; first hop and indeterminate history SKIP.
+- [x] Ceiling defaults to `max(6, 2×expected_hops)`; explicit env wins absolutely; `.handoff-hops` fail-closed guard untouched.
+- [x] Success path: `new-surface --focus false` in the caller's workspace → `rename-tab` → `send` (inline `export` env prefix) → token → `handshake=ok` → exit 0. Outcome carries `workspace=`, `surface=`, `tasks_done=`.
+- [x] Surface-path failure BEFORE an accepted send falls back ONCE through the SAME wrapper via `workspace create` (`topology=workspace-fallback`); an accepted send NEVER spawns twice.
+- [x] Timeout → one re-wait → exit 3 `handshake=timeout` with `diagnosis=` enrichment; a stubbed banner with no token is NOT success; trust-dialog/banner instructions steer to the existing tab; every timeout notifies; no message claims nothing was spawned.
+- [x] Post-spawn `/rename` + `/rc` verified by read-screen against anchors the sent line cannot itself contain (echo-proof); failures are `post_spawn=partial:<step>` WARNINGs, never spawn failures; `SUPERPOWERS_CMUX_POST_SPAWN=""` disables; ordering always resolves to `/rc` LAST (operator addendum #3 — `rc,rename` is reordered, not rejected).
+- [x] `tests/unit/test_spawn_handoff.py` fully migrated in the same tasks that changed the behavior; the FULL unit suite green after every task (**not "both unit files"** — Task 9 writes three test files, and its Step 3 rewrites the spawn core other suites exercise).
