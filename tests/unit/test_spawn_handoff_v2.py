@@ -19,6 +19,7 @@ from spawn_handoff_helpers import (
     _commit,
     _spawn_log_text_or_empty,
     append_outcome,
+    cmux_log_text,
     cmux_v2_stub,
     encode_args,
     install_bundle,
@@ -68,11 +69,6 @@ def _reach_gate(tmp_path, ctx, **knobs):
 
 def _hops(ctx, value):
     (ctx["reports"] / ".handoff-hops").write_text(f"{value}\n")
-
-
-def _cmux_log(tmp_path):
-    p = tmp_path / "cmux.log"
-    return p.read_text() if p.exists() else ""
 
 
 def _verb_shapes():
@@ -545,7 +541,7 @@ class TestStallAndCeiling:
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
         assert "budget=over-expected" in r.stderr
-        assert "expected" in _cmux_log(tmp_path)
+        assert "expected" in cmux_log_text(tmp_path)
         # BUDGET_FLAG's CONSUMER. Task 8 set the variable with nothing reading it
         # (a recorded SC2034, deferred to this task on the understanding that
         # Task 9's outcome printf would consume it). Landing Task 9 without this
@@ -842,7 +838,7 @@ def _flag(argv, flag):
 
 def _verbs(tmp_path):
     """First token of every logged cmux call, in call order."""
-    return [ln.split()[0] for ln in _cmux_log(tmp_path).splitlines() if ln.split()]
+    return [ln.split()[0] for ln in cmux_log_text(tmp_path).splitlines() if ln.split()]
 
 
 def _outcome(ctx):
@@ -975,7 +971,7 @@ class TestSurfaceTopology:
         assert "send" in _verbs(tmp_path), "a cosmetic failure blocked the launch"
         assert _outcome(ctx)["handshake"] == "ok"
         # Still the SURFACE path: a rename failure must not trigger the fallback.
-        assert "workspace create" not in _cmux_log(tmp_path)
+        assert "workspace create" not in cmux_log_text(tmp_path)
 
     def test_rename_tab_carries_workspace_on_both_topologies(self, tmp_path):
         """deviations.md:17 — rename-tab resolves refs ONLY in the caller's
@@ -1019,7 +1015,7 @@ class TestSurfaceTopology:
         env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1")
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
-        log = _cmux_log(tmp_path)
+        log = cmux_log_text(tmp_path)
         # The CANONICAL verb (Decision 19), never the deprecated alias.
         assert "workspace create" in log
         assert "new-workspace" not in log
@@ -1055,7 +1051,7 @@ class TestSurfaceTopology:
         env = _reach_gate(tmp_path, ctx, CMUX_SEND_FAIL_COUNT="1")
         r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
         assert r.returncode == 0, r.stderr
-        assert "workspace create" in _cmux_log(tmp_path)
+        assert "workspace create" in cmux_log_text(tmp_path)
         assert _outcome(ctx)["topology"] == "workspace-fallback"
         assert _verbs(tmp_path).count("send") == 2
 
@@ -1081,7 +1077,7 @@ class TestSurfaceTopology:
         assert r.returncode == 3, r.stderr
         verbs = _verbs(tmp_path)
         assert verbs.count("new-surface") == 1
-        assert "workspace create" not in _cmux_log(tmp_path)
+        assert "workspace create" not in cmux_log_text(tmp_path)
         assert _outcome(ctx)["handshake"] == "timeout"
         assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
 
@@ -1142,7 +1138,7 @@ class TestSurfaceTopology:
         assert "would spawn surface in TEST-WS" in out
         assert "workspace fallback armed" in out
         assert "policy=auto" in out and "tasks_done=1" in out
-        assert "new-surface" not in _cmux_log(tmp_path)
+        assert "new-surface" not in cmux_log_text(tmp_path)
         assert not (ctx["reports"] / ".handoff-hops").exists()
 
     def test_spawn_claude_workspace_is_gone(self):

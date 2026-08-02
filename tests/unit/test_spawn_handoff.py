@@ -1215,12 +1215,6 @@ def test_invalid_quota_timeout_warns_and_quota_gate_stays_live(tmp_path):
 
 from spawn_handoff_helpers import make_stub
 
-
-def _cmux_log_text(tmp_path):
-    p = tmp_path / "cmux.log"
-    return p.read_text() if p.exists() else ""
-
-
 RESERVATION_WARN = "[spawn-handoff] reservation write failed:"
 DECODE_WARN = "[spawn-handoff] warn: forwarded-args decode failed"
 
@@ -1282,7 +1276,7 @@ def test_hops_write_failure_exits_3_without_spawning(tmp_path):
     # only if this guard's own `exit 3` runs: with it removed the intent write
     # succeeds and the spawn proceeds to rc 0.
     assert r.returncode == 3
-    assert did_not_spawn(_cmux_log_text(tmp_path))
+    assert did_not_spawn(cmux_log_text(tmp_path))
     # Leg A's distinguishing signature: NOTHING was reserved. (Leg B's mirror is
     # `.handoff-hops == "1"` — there the hop IS consumed before its write fails.)
     assert "intent" not in _spawn_log_text(ctx)
@@ -1309,7 +1303,7 @@ def test_intent_write_failure_exits_3_without_spawning(tmp_path):
     # `.handoff-hops == "1"` does NOT — the hop is consumed on the reservation
     # path whether or not a spawn followed — so once the verb leg went vacuous,
     # this test's only remaining spawn evidence was `rc == 3`.
-    assert did_not_spawn(_cmux_log_text(tmp_path))
+    assert did_not_spawn(cmux_log_text(tmp_path))
     # Discriminates this leg from the hops-write leg: the hop IS consumed here.
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
     assert "Manual resume required" in r.stdout
@@ -1356,10 +1350,10 @@ def test_mktemp_failure_never_runs_the_spawn_verb(tmp_path):
     _install_failing_mktemp(tmp_path)
     r = run_spawn(ctx, tmp_path, "b1", cmux_body=cmux_v2_stub())
     assert r.returncode == 3
-    assert did_not_spawn(_cmux_log_text(tmp_path)), (
+    assert did_not_spawn(cmux_log_text(tmp_path)), (
         "mktemp failure must abort before the create verb runs, not after"
     )
-    assert "send " not in _cmux_log_text(tmp_path)
+    assert "send " not in cmux_log_text(tmp_path)
 
 
 def test_version_installed_as_directory_degrades_to_picker_manual(tmp_path):

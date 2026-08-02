@@ -20,6 +20,7 @@ import subprocess
 
 from spawn_handoff_helpers import (
     SPAWN_VERBS,
+    cmux_log_text,
     cmux_v2_stub,
     did_not_spawn,
     encode_args,
@@ -53,11 +54,6 @@ def _commit_all(ctx, msg):
     subprocess.run(["git", "commit", "-qm", msg], cwd=ctx["wt"], check=True)
 
 
-def _cmux_log(tmp_path):
-    p = tmp_path / "cmux.log"
-    return p.read_text() if p.exists() else ""
-
-
 def _did_not_spawn(tmp_path):
     """Absence of EVERY spawn verb, not just the legacy one.
 
@@ -69,7 +65,7 @@ def _did_not_spawn(tmp_path):
     (`spawn_handoff_helpers.SPAWN_VERBS`); a second copy here would be the drift
     shape deviations.md:127 already caught once this sprint.
     """
-    return did_not_spawn(_cmux_log(tmp_path))
+    return did_not_spawn(cmux_log_text(tmp_path))
 
 
 def test_did_not_spawn_is_false_on_a_real_surface_spawn(tmp_path):
@@ -83,13 +79,13 @@ def test_did_not_spawn_is_false_on_a_real_surface_spawn(tmp_path):
     env = _reach_hop_gate(tmp_path, ctx)
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0, r.stderr
-    assert "new-surface" in _cmux_log(tmp_path), "control leg never reached the verb"
+    assert "new-surface" in cmux_log_text(tmp_path), "control leg never reached the verb"
     assert not _did_not_spawn(tmp_path), "a real surface spawn read as 'did not spawn'"
     # The regression itself, made permanent: the PRE-Task-9 predicate is True on
     # this very log — i.e. it would have reported "did not spawn" about a run
     # that spawned. Keeping the demonstration here means a revert to the old
     # spelling cannot pass quietly.
-    assert "new-workspace" not in _cmux_log(tmp_path), (
+    assert "new-workspace" not in cmux_log_text(tmp_path), (
         "the old predicate must be demonstrably fail-open here"
     )
 
@@ -108,7 +104,7 @@ def test_did_not_spawn_is_false_on_a_workspace_fallback_spawn(tmp_path):
     env["CMUX_NEW_SURFACE_RC"] = "1"
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0, r.stderr
-    log = _cmux_log(tmp_path)
+    log = cmux_log_text(tmp_path)
     assert "workspace create" in log, "control leg never reached the fallback verb"
     assert not _did_not_spawn(tmp_path), "a fallback spawn read as 'did not spawn'"
 
