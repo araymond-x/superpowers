@@ -65,7 +65,7 @@ All four tasks write the same files — strictly serialized, never parallel.
 
 `_handoff_support.py` was read-only for Module 3 as first written, but **EIGHT** scheduled rows are production/test edits to it and its test file — P7-1(ii), P7-2, P7-3, P7-5, P7-6, P7-7, P7-8, P7-9 (**executed by Step 2b, which is authoritative; this paragraph only justifies the scope. An earlier version said "seven" and omitted P7-2**), and the register routes them here — Task 8 consumes `spawn-policy`, `tasks-done` and `stall-streak`, so it owns their supply side. Scope widened for Task 8 ONLY; it reverts to read-only for Tasks 9–11. **B7 inverts by directory: `_handoff_support.py` is scanned by `check_python39_compat`, so use `Optional[X]`/`Dict[str,int]`, never `X | None`/`dict[str,int]`.**
 
-- [ ] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
+- [x] **Step 1: Helper + fixtures.** In `spawn_handoff_helpers.py` add a manifest writer; in `fixtures/spawn-handoff/` nothing new is needed yet (manifests are written per-test):
 
 ```python
 def write_manifest(ctx, expected_hops=2, spawn_policy="auto", total_tasks=5,
@@ -109,7 +109,7 @@ Ceiling/stall tests must pop ambient `SUPERPOWERS_CMUX_*` vars (run_spawn copies
 
 Note: these reports/manifests must be **committed** inside the fixture worktree (the script's clean-tree precondition runs first) — add `git add -A && git commit` after writing, mirroring `setup_worktree`.
 
-- [ ] **Step 2: Failing tests** (in `test_spawn_handoff_v2.py`; use `run_spawn` throughout):
+- [x] **Step 2: Failing tests** (in `test_spawn_handoff_v2.py`; use `run_spawn` throughout):
 
 ```python
 class TestPolicyDial:
@@ -188,7 +188,7 @@ class TestStallAndCeiling:
 - `test_spawn_handoff.py::test_new_workspace_and_notify_argv_values_match_spec` — asserts `startswith("Hop 1/3 ")`, rendered from `Hop $SP_HOP/$MAX_HOPS`; no manifest → ceiling 6 → must become `"Hop 1/6 "`.
 - `test_spawn_handoff.py::test_spawn_log_record_fields_match_spec_log_format` — asserts `_spawn_log_fields(ctx, "intent") == {"hop": "1"}` by EXACT equality; step (f) adds `tasks_done=`. Before fixing it, sweep for OTHER exact-equality field-set assertions — step (f) and Tasks 9–10 also grow `outcome` records; do not assume this is the only one.
 
-- [ ] **Step 2b: The EIGHT `_handoff_support.py` / `test_handoff_support.py` rows — these are STEPS, not background reading.** Every path Step 6 stages must have a step that writes it; these two had none. (The scope paragraph above said "seven" and omitted **P7-2**, which is explicitly a `test_handoff_support.py` edit — a count inherited and never enumerated, the same defect that BLOCKED an earlier round of this dispatch. Count them yourself.) Each bullet is a required edit with its row id. Production edits in `_handoff_support.py`, tests in `test_handoff_support.py`:
+- [x] **Step 2b: The EIGHT `_handoff_support.py` / `test_handoff_support.py` rows — these are STEPS, not background reading.** Every path Step 6 stages must have a step that writes it; these two had none. (The scope paragraph above said "seven" and omitted **P7-2**, which is explicitly a `test_handoff_support.py` edit — a count inherited and never enumerated, the same defect that BLOCKED an earlier round of this dispatch. Count them yourself.) Each bullet is a required edit with its row id. Production edits in `_handoff_support.py`, tests in `test_handoff_support.py`:
   - **P7-1(ii)** — a readable manifest with a present-but-INVALID `spawn_policy` (`"OFF"`, `"Off"`, JSON `false`, `null`, non-dict `handoff`) currently prints `auto`. **Fail closed to `ask`.** The shell's `*)` arm cannot cover this: `auto` is a recognized value matching its own case arm. **This is the ONLY bullet here that changes production behavior on the SOLE consent gate, so pin it explicitly: assert each of `"OFF"`, JSON `false`, `null` and a non-dict `handoff` prints `ask`. Required positive control — the existing no-`handoff`-block case (in `test_handoff_support.py::test_expected_hops_and_policy_cli_on_legacy_and_garbage`, `{"total_tasks":5,"tier":"standard"}` → `auto`) must STAY `auto`**, which is what forbids a blanket fail-closed. Without that pair the fix that creates new consent behavior ships unpinned while P7-5 pins an adjacent already-correct branch.
   - **P7-3** — `count_tasks_done` reaches its lazy `import yaml` only INSIDE the glob loop, so zero matches ⇒ the `ImportError` never fires ⇒ a fake `0`, which manufactures a stall. **Probe the import once before the glob**, keeping the stdlib-only-at-import property (P7-9(B)). **Pin it on an EMPTY (or absent) reports dir with yaml unimportable: it prints `0` today and must print `unknown`.** Measured: a POPULATED dir already prints `unknown` today, so a test built on one passes BEFORE and AFTER this fix — revert the probe and it stays green. That case is P7-7's positive control, not P7-3's pin. **Two fixtures, one battery.**
   - **P7-6** — `UnicodeDecodeError` subclasses `ValueError`, not the `OSError` `count_tasks_done` catches, so one non-UTF-8 byte in any report exits 1 with empty stdout (violates Module 2 AC-5). Use `errors="replace"` or widen the except. Fixture with invalid bytes; assert `returncode == 0`.
@@ -198,7 +198,7 @@ class TestStallAndCeiling:
   - **P7-7** — the `except ImportError: print("unknown")` mitigation (the designated mitigation for P7-3) has NO test; the mutation `print("unknown")` → `print(0)` SURVIVED. Technique: an `ImportError`-raising `yaml.py` on `PYTHONPATH`. **Positive-control it** — `/usr/bin/python3` on this machine DOES ship PyYAML, so the naive probe passes for the wrong reason. **Its fixture is the POPULATED reports dir — the already-correct case — which makes it the positive control paired with P7-3's empty-dir pin. Do NOT let one populated-dir test stand in for both rows: it cannot detect whether P7-3 was fixed.**
   - **P7-9** — (A) `expected-hops` on an unreadable manifest; (B) the lazy `import yaml` PLACEMENT invariant (hoisting it to module scope passes every existing test, and P7-3 edits that exact function); (D) `derive_expected_hops`'s `isinstance(h, dict)` guard, unpinned while its `_cli` twin is pinned.
 
-- [ ] **Step 3: Run to verify failures**, then **Step 4: Implement** in the script:
+- [x] **Step 3: Run to verify failures**, then **Step 4: Implement** in the script:
 
 (a) Arg parse gains the flag: add `--user-approved) USER_APPROVED=1 ;;` beside `--dry-run` (initialize `USER_APPROVED=0`).
 
@@ -257,19 +257,37 @@ if [ -f "$MANIFEST_FILE" ]; then
   [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
 fi
 # Ceiling: explicit env wins absolutely; else derived max(6, 2 x expected).
-# SSOT: the literals 6 and 2 below MIRROR CEILING_FLOOR / CEILING_FACTOR in
-# _handoff_support.py — shell cannot import them, so this is a deliberate,
-# NAMED duplication. Change both or neither; a silent divergence is invisible.
+# AMENDED POST-QUALITY-REVIEW (this fence now matches the LANDED code — the
+# original two-copy form is preserved in deviations.md's PlanDeviation row).
+# Ceiling: derive max(6, 2 x expected) ONCE, then let an explicit VALID env value
+# override it absolutely. The derivation used to exist TWICE — once as the
+# invalid-knob revert target, once as the else-branch default — and only the
+# second copy was reachable by any test, so `* 99` in the first survived the
+# entire suite. Duplication does not merely risk drift: it SPLITS a guard's test
+# coverage in a way per-guard review cannot see. Keep this single.
+# SSOT: the floor and factor literals below MIRROR CEILING_FLOOR / CEILING_FACTOR
+# in _handoff_support.py — shell cannot import them, so this is a deliberate,
+# NAMED duplication. It is enforced: test_handoff_support.py::
+# test_shared_constants_are_the_ssot_the_shell_mirrors READS THIS FILE and
+# compares the literals. Change both or neither.
+# Deliberately NOT clamped from above: expected_hops is plan-author-declared and
+# schema-validated, so an author who writes expected_hops=500 has declared a
+# 500-hop plan and the ceiling is elastic in it BY DESIGN. The backstop against a
+# chain that spawns without PROGRESSING is the stall gate below, not this number.
+# A CEILING_MAX was considered and rejected (deviations.md): it would add a fourth
+# literal with no Python twin, in the region Task 9 edits.
+DERIVED=6
+if [ "$EXPECTED_HOPS" != "unknown" ]; then
+  DERIVED=$((EXPECTED_HOPS * 2))
+  [ "$DERIVED" -lt 6 ] && DERIVED=6
+fi
+MAX_HOPS="$DERIVED"
 if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
-  MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
-  if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
-    DERIVED=6; [ "$EXPECTED_HOPS" != "unknown" ] && { DERIVED=$((EXPECTED_HOPS * 2)); [ "$DERIVED" -lt 6 ] && DERIVED=6; }
-    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to derived default $DERIVED." >&2
-    MAX_HOPS="$DERIVED"
+  if [[ "$SUPERPOWERS_CMUX_MAX_HOPS" =~ ^[0-9]+$ ]]; then
+    MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
+  else
+    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($SUPERPOWERS_CMUX_MAX_HOPS) — reverting to derived default $DERIVED." >&2
   fi
-else
-  MAX_HOPS=6
-  [ "$EXPECTED_HOPS" != "unknown" ] && { MAX_HOPS=$((EXPECTED_HOPS * 2)); [ "$MAX_HOPS" -lt 6 ] && MAX_HOPS=6; }
 fi
 ```
 
@@ -299,9 +317,9 @@ fi
 
 (f) The intent record gains the count: `printf '%s %s intent hop=%s tasks_done=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$TASKS_DONE" >> "$SPAWN_LOG"` (same checked-write `if !` wrapper as today).
 
-- [ ] **Step 5: Run the FULL suite + fix migrations** — `.venv/bin/python3 -m pytest tests/unit/ -q -p no:cacheprovider`. All PASS (707 green before this task; report the number you measure). A file-list run is dishonest here because this task moves a global default — narrow only while iterating.
+- [x] **Step 5: Run the FULL suite + fix migrations** — `.venv/bin/python3 -m pytest tests/unit/ -q -p no:cacheprovider`. All PASS (707 green before this task; report the number you measure). A file-list run is dishonest here because this task moves a global default — narrow only while iterating.
 
-- [ ] **Step 6: Commit** — `git add` the EIGHT explicit paths (never `-A`): `spawn-handoff-session.sh`, `_handoff_support.py`, `test_spawn_handoff.py`, `test_spawn_handoff_v2.py`, `test_spawn_handoff_hardening.py`, `test_handoff_support.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`; `git commit -m "feat(cmux-spawn-v2): policy gate + progress-aware stall/ceiling + intent tasks_done"`.
+- [x] **Step 6: Commit** — `git add` the EIGHT explicit paths (never `-A`): `spawn-handoff-session.sh`, `_handoff_support.py`, `test_spawn_handoff.py`, `test_spawn_handoff_v2.py`, `test_spawn_handoff_hardening.py`, `test_handoff_support.py`, `spawn_handoff_helpers.py`, `tests/unit/fixtures/spawn-handoff/`; `git commit -m "feat(cmux-spawn-v2): policy gate + progress-aware stall/ceiling + intent tasks_done"`.
 
 ### Task 9: Surface topology + shared launch wrapper + workspace fallback
 
