@@ -558,7 +558,7 @@ Also: delete the old `spawn_claude_workspace` success/failure call-site stanza i
 
   **`banner.txt` IS ALSO DERIVED FROM A LIVE CAPTURE. AMENDED AGAIN 2026-08-02 (partner round 2, BLOCKER A) — the round-1 amendment asserted "Task 0 captured no live screen for them", and THAT CLAIM WAS FALSE.** `cmux-verb-shapes.json` is `captured: "live"` throughout, and `rc_confirmation_screen` holds **TWO live captures of a running Claude session** (`rc_screen`, `rename_screen`) — exactly the `banner` branch's semantic. **This is the controller writing a second false factual claim into the plan while fixing the first one**, the same shape partner round 2 caught on Task 9. Derive `banner.txt` from `rc_confirmation_screen.rc_screen` and pin BOTH live captures to `diagnosis=banner`.
 
-  **Measured, with controls, against those two captures and the trust capture:** `shift+tab to cycle` is present in BOTH live sessions and ABSENT from the trust screen — it is the one usable MEASURED banner anchor. `esc to interrupt` occurs **zero times in the entire fixture** (both live captures are IDLE sessions; that string only appears while Claude is generating), so it is an INFERENCE covering the busy state. `claude code` matches **only the trust screen** and NEITHER running session — an anchor that fires on the wrong screen; it is REMOVED from the banner pattern.
+  **Measured, with controls, against those two captures and the trust capture:** `shift+tab to cycle` is present in BOTH live sessions and ABSENT from the trust screen — it is the one usable MEASURED banner anchor. **Scope that measurement honestly (partner round 3, MEDIUM K): both captures carry the SAME session id and the same `bypass permissions` statusline, so n = ONE session captured twice**, and it was a long-running interactive session rather than a freshly-spawned successor — which is the population this feature actually cares about. The anchor IS measured; the generalization to "any running Claude session" is INFERRED and the fixture cannot settle it. Do not launder the one into the other. `esc to interrupt` occurs **zero times in the entire fixture** (both live captures are IDLE sessions; that string only appears while Claude is generating), so it is an INFERENCE covering the busy state. `claude code` matches **only the trust screen** and NEITHER running session — an anchor that fires on the wrong screen; it is REMOVED from the banner pattern.
 
   The remaining two ARE synthetic — `picker-error.txt` (`claude-picker: error: no matching version`) and `noise.txt` (shell prompt + scrollback junk) — and that limitation must be stated in each file or its loader comment. **For those two, an anchor you invent is a HYPOTHESIS, not a contract** — say so where it lives.
 
@@ -586,10 +586,30 @@ class TestHandshake:
     def test_trust_dialog_fixture_matches_the_frozen_capture(self):
         # BLOCKER 1: screens/trust-dialog.txt == cmux-verb-shapes.json
         # trust_dialog_screen.screen, verbatim. Stops fixture/contract drift.
+    def test_banner_fixture_matches_the_frozen_capture(self):
+        # MEDIUM M (partner round 3): banner.txt is ALSO derived from a live capture
+        # (rc_confirmation_screen.rc_screen), so it needs the SAME anti-drift pin.
+        # Round 1's remedy was written for trust-dialog.txt only and never mirrored
+        # when banner.txt joined it — a derived fixture with no equality test can
+        # drift from the capture it claims to derive from with every test green.
     def test_real_trust_capture_diagnoses_trust_not_banner(self, tmp_path):
-        # BLOCKER 1, the compounding half: the banner regex MATCHES the real trust
-        # screen, so this pins that trust WINS. Positive-control it by reordering
-        # the two greps in diagnose_target and confirming this test goes RED.
+        # BLOCKER 1: the real trust capture must diagnose trust-dialog.
+        # AMENDED (partner round 3, MEDIUM L) — THE PRESCRIBED POSITIVE CONTROL NO
+        # LONGER FIRES, and the reason is worth understanding rather than patching:
+        # removing `claude code` from the banner pattern DISSOLVED the very overlap
+        # that made ordering load-bearing. Measured: with the old pattern, reordering
+        # banner above trust turned the trust capture into `banner`; with the fixed
+        # pattern it stays `trust-dialog` either way. So "reorder and confirm RED"
+        # now yields GREEN, and this test pins ordering for NO captured shape.
+        # A correct fix can retire the subject of a companion test, leaving a test
+        # that still READS as a guard while pinning nothing.
+    def test_ordering_trust_beats_banner_on_a_both_anchors_screen(self, tmp_path):
+        # MEDIUM L's actual remedy. Ordering remains correct defense-in-depth — a
+        # screen CAN carry both anchors (a trust modal raised over a pane that has
+        # already painted a statusline) — but no CAPTURED screen does. So pin it
+        # with an explicitly SYNTHETIC fixture containing BOTH a trust anchor and a
+        # banner anchor, labelled synthetic where it lives. THIS test is the one
+        # whose positive control must go RED when the two greps are reordered.
     def test_diagnosis_banner_steers_to_tab_and_omits_manual_block(self, tmp_path):
         # MEDIUM 3: module AC names BOTH trust-dialog AND banner as steering to the
         # existing tab; only trust had a test. Assert the manual-instructions block
@@ -666,7 +686,7 @@ diagnose_target() {  # NEVER selects the exit code — enrichment only (Decision
 
 (pattern constants may be hoisted; every grep uses here-strings, never a pipe.)
 
-- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). **AMENDED AGAIN 2026-08-02 (partner round 2, MEDIUM B) — the round-1 wording undercounted what Task 0 actually measured.** THREE are MEASURED: `trust-dialog` (`trust_dialog_screen.candidate_anchors`), `banner` (`rc_confirmation_screen`, two live running-session captures — see Step 1), and the `internal_error` disjunct of `unreadable`, whose live capture is `read_screen_cold` (`stderr: "Error: internal_error: Failed to read terminal text"`, exit 1) — that capture is the direct SOURCE of the anchor, not a guess. Only `picker-error` is genuinely un-captured. Label it INVENTED; do NOT mislabel the other three, and do not label as INFERRED anything the fixture measured. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
+- [ ] **Step 3b: Record anchor PROVENANCE for all four diagnoses.** *(AMENDED 2026-08-02 — partner review BLOCKER 2: this was prose inside Step 3 that commanded work no checkbox produced, the same producer-less shape that has now BLOCKED a partner round on two consecutive tasks. It is the ONLY place the plan requires anchor provenance at all, and BLOCKER 1 is what happens without it.)* Beside each pattern, state in a code comment whether the anchor is **MEASURED** (quote the `cmux-verb-shapes.json` key it came from) or **INVENTED** (say so plainly, and say what would falsify it). **AMENDED AGAIN 2026-08-02 (partner round 2, MEDIUM B) — the round-1 wording undercounted what Task 0 actually measured.** THREE are MEASURED: `trust-dialog` (`trust_dialog_screen.candidate_anchors`), `banner` (`rc_confirmation_screen`, two live running-session captures — see Step 1), and the `internal_error` disjunct of `unreadable`, whose live capture is `read_screen_cold` (`stderr: "Error: internal_error: Failed to read terminal text"`, exit 1) — that capture is the direct SOURCE of the anchor, not a guess. Only `picker-error` is genuinely un-captured. Label it INVENTED; do NOT mislabel the other three, and do not label as INFERRED anything the fixture measured. **LABEL PER ANCHOR, NOT PER BRANCH, and use THREE categories — MEASURED / INFERRED / INVENTED** *(partner round 3)*. The `banner` branch alone holds two anchors of DIFFERENT provenance: `shift+tab to cycle` is MEASURED, `esc to interrupt` is INFERRED (zero occurrences in the fixture; it covers the busy state that neither idle capture exercises). Labelled per-branch, `banner` reads MEASURED wholesale and the inference silently disappears — which is precisely the blurring this step exists to prevent. **Measured and inferred are not the same evidence, and a comment that blurs them is worse than no comment.**
 
 Timeout tail:
 
