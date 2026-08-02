@@ -1833,5 +1833,53 @@ class TestPostSpawn:
         ), send_lines
         assert send_lines[2] == "send --surface surface:7 /rc", send_lines
         assert "SUPERPOWERS_CMUX_POST_SPAWN=rc,rename" in r.stderr, r.stderr
-        assert "reordering to rename,rc" in r.stderr, r.stderr
+        # HUNT-THE-TWIN (round-2 amendment): the generalized canonicalization
+        # emits "canonicalized to rename,rc", not the old "reordering to ...".
+        assert "canonicalized to rename,rc" in r.stderr, r.stderr
         assert "addendum #3" in r.stderr, r.stderr
+
+    # --- AMENDED 2026-08-02 (round-2 quality review finding #1: the "/rc last"
+    #     guarantee must hold for EVERY accepted token list, not one literal) ----
+    def test_knob_multitoken_forces_rc_last(self, tmp_path):
+        screen = _post_spawn_screen(DEFAULT_TAB_TITLE)
+        r, ctx = _run_post_spawn(
+            tmp_path,
+            screen_text=screen,
+            SUPERPOWERS_CMUX_POST_SPAWN="rename,rc,rename",
+        )
+        assert r.returncode == 0, r.stderr
+        # Reordering/dedupe is not itself a partial — only a verify FAILURE is.
+        assert "post_spawn" not in _outcome(ctx)
+        send_lines = _send_lines(tmp_path)
+        assert len(send_lines) == 3, send_lines  # launch send + /rename + /rc
+        assert (
+            send_lines[1] == f"send --surface surface:7 /rename {DEFAULT_TAB_TITLE}"
+        ), send_lines
+        # The LAST post-spawn send is /rc — no /rename lands after /rc.
+        assert send_lines[2] == "send --surface surface:7 /rc", send_lines
+        # WARNING names the ACTUAL input AND the canonical result, cites the addendum.
+        assert "SUPERPOWERS_CMUX_POST_SPAWN=rename,rc,rename" in r.stderr, r.stderr
+        assert "canonicalized to rename,rc" in r.stderr, r.stderr
+        assert "addendum #3" in r.stderr, r.stderr
+
+    def test_knob_duplicate_token_deduped(self, tmp_path):
+        screen = _post_spawn_screen(DEFAULT_TAB_TITLE)
+        r, ctx = _run_post_spawn(
+            tmp_path,
+            screen_text=screen,
+            SUPERPOWERS_CMUX_POST_SPAWN="rename,rename",
+        )
+        assert r.returncode == 0, r.stderr
+        assert "post_spawn" not in _outcome(ctx)
+        send_lines = _send_lines(tmp_path)
+        assert len(send_lines) == 2, send_lines  # launch send + /rename ONCE
+        rename_sends = [
+            ln
+            for ln in send_lines
+            if ln == f"send --surface surface:7 /rename {DEFAULT_TAB_TITLE}"
+        ]
+        assert len(rename_sends) == 1, send_lines  # deduped: exactly once
+        assert "/rc" not in cmux_log_text(tmp_path)
+        # WARNING names the input AND the collapsed canonical result.
+        assert "SUPERPOWERS_CMUX_POST_SPAWN=rename,rename" in r.stderr, r.stderr
+        assert "canonicalized to rename (" in r.stderr, r.stderr

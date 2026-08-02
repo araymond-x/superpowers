@@ -888,16 +888,26 @@ post_spawn_send_verified() {
 }
 POST_SPAWN_FIELD=""
 run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
-  # AMENDED 2026-08-02 (deferred order A3b/c + B2): canonicalize ordering BEFORE
-  # the loop. Operator addendum #3 forbids any send after /rc lands (kept despite
-  # Task 0's N=1 non-reproduction -- deviations.md, "keep the addendum's ordering
-  # constraint... a single non-reproduction is not grounds to drop a safety
-  # ordering that costs nothing"). Reorder, don't reject: "rc" alone is already
-  # rc-last and stays valid; only "rc,rename" is unsafe, and dropping a step the
-  # operator asked for is worse than running it in a safe order.
-  if [ "$POST_SPAWN" = "rc,rename" ]; then
-    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=rc,rename would send after /rc landed (operator addendum #3: /rc must be sent LAST) — reordering to rename,rc." >&2
-    POST_SPAWN="rename,rc"
+  # AMENDED 2026-08-02 (round-2 quality review, finding #1): canonicalize ordering
+  # BEFORE the loop, for EVERY accepted token list -- not the one literal "rc,rename".
+  # The pre-amendment single-literal reorder was WRONG: any OTHER regex-valid
+  # multi-token knob slipped a /rename AFTER /rc with no warning (MEASURED:
+  # "rename,rc,rename" -> /rename,/rc,/rename; "rc,rename,rc" likewise), violating
+  # this module's AC ("ordering always resolves to /rc LAST"). Operator addendum #3
+  # forbids any send after /rc lands (kept despite Task 0's N=1 non-reproduction --
+  # deviations.md, "a single non-reproduction is not grounds to drop a safety
+  # ordering that costs nothing"); by that SAME "safety costs nothing" rationale the
+  # guarantee must hold for ALL inputs. The token universe is exactly {rename, rc},
+  # so the canonical form is fully determined: rename first (if present), rc last
+  # (if present), duplicates collapsed. Reorder+dedupe, NEVER reject. Warn iff
+  # canonicalization changed the effective sequence, naming the ACTUAL input and
+  # result (not a hardcoded pair). Uses [[ == *glob* ]] + ${x:+..} (bash-3.2 safe).
+  local canon=""
+  [[ ",$POST_SPAWN," == *,rename,* ]] && canon="rename"
+  [[ ",$POST_SPAWN," == *,rc,* ]] && canon="${canon:+$canon,}rc"
+  if [ "$canon" != "$POST_SPAWN" ]; then
+    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=$POST_SPAWN canonicalized to $canon (operator addendum #3: /rc must be sent LAST; duplicate steps collapsed)." >&2
+    POST_SPAWN="$canon"
   fi
   local step
   local IFS=','
