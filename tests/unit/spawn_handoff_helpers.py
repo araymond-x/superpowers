@@ -123,6 +123,24 @@ def cmux_log_text(tmp_path):
 #   CMUX_NOTIFY_RC        `notify` exits with this rc
 #   CMUX_WAITFOR_RC       `wait-for` exit code (default 0 = token received)
 #   CMUX_SCREEN_FILE      `read-screen` cats this file instead of erroring
+#   CMUX_LIST_SURFACES_NO_REF   `list-pane-surfaces` emits a row carrying NO
+#                         `surface:N` token, so the awk parser resolves nothing.
+#                         The ONLY way to reach `create_workspace_target`'s
+#                         ref-shape gate: under every other shape this stub can
+#                         emit, the parser yields `^surface:[0-9]+$` or the verb
+#                         is never reached, so the gate is redundant with the
+#                         parser and no assertion can distinguish it from
+#                         `if true`. A row rather than empty output, so the test
+#                         proves the parser SKIPPED a non-matching token.
+#   CMUX_LIST_SURFACES_TWO_ROWS   two surface rows with `[selected]` on the
+#                         SECOND. On the default one-row shape the first row IS
+#                         the selected row, so `first == selected` and the
+#                         `[selected]` branch is indistinguishable from `if(0)`
+#                         — the same mutual masking Task 0's review caught at the
+#                         fixture level, recurring at the script level.
+#
+# Both knobs are guarded BEFORE the default `printf`, so the default output is
+# byte-identical when neither is set.
 #
 # The `list-pane-surfaces` row carries the `* ` selected-row marker and the
 # two-space non-selected indent measured in cmux-verb-shapes.json's
@@ -159,7 +177,11 @@ case "$1" in
   workspace)     [ "$2" = "create" ] || { echo OK; exit 0; }
                  [ -n "$CMUX_WS_CREATE_RC" ] && exit "$CMUX_WS_CREATE_RC"
                  echo "OK workspace:9"; exit 0 ;;
-  list-pane-surfaces) printf '* surface:11  SDD resume: demo  [selected]\n'; exit 0 ;;
+  list-pane-surfaces)
+                 [ -n "$CMUX_LIST_SURFACES_NO_REF" ] && { printf '* pane:3  SDD resume: demo  [selected]\n'; exit 0; }
+                 [ -n "$CMUX_LIST_SURFACES_TWO_ROWS" ] && {
+                   printf '  surface:10  Other: window  \n* surface:11  SDD resume: demo  [selected]\n'; exit 0; }
+                 printf '* surface:11  SDD resume: demo  [selected]\n'; exit 0 ;;
   *) echo OK; exit 0 ;;
 esac
 """

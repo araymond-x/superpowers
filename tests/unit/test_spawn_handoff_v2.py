@@ -942,6 +942,34 @@ class TestSurfaceTopology:
         assert r.returncode == 0, r.stderr
         assert "SUPERPOWERS_CMUX_MAX_STALL_HOPS" not in _sent_text(tmp_path)
 
+    def test_forwarded_knob_values_are_shell_quoted(self, tmp_path):
+        """`shq` on the forwarded knob VALUES, which nothing else exercises.
+
+        The composed line is delivered verbatim into a live terminal by `cmux
+        send`, so quoting is the only thing between an operator-controlled env
+        value and command execution in the successor's shell. Every other
+        assertion in this class forwards a single-token value (`2`), which
+        quotes to ITSELF — so dropping `shq` is invisible to all of them.
+
+        VACUITY: the payload appears in both arms, since `shlex.quote` only
+        wraps it. Presence alone therefore proves nothing. The discriminator is
+        the pair — the QUOTED form present AND the bare form absent — asserted
+        against the rendered `send` payload, which is the only place INLINE_ENV
+        appears (the `successor command:` stderr echo carries no env prefix).
+        """
+        payload = "a b; touch /tmp/PWNED"
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_TITLE_FORMAT=payload)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        sent = _sent_text(tmp_path)
+        assert "SUPERPOWERS_CMUX_TITLE_FORMAT='a b; touch /tmp/PWNED'" in sent, (
+            f"forwarded knob value is not shell-quoted: {sent!r}"
+        )
+        assert f"SUPERPOWERS_CMUX_TITLE_FORMAT={payload}" not in sent, (
+            f"the bare value reached the sent line — the `;` would execute: {sent!r}"
+        )
+
     def test_tab_title_renders_hop_and_feature(self, tmp_path):
         # rename-tab failure is warn-and-continue, so a title rendered as
         # `hop SDD feat` (TAB_TITLE composed before SP_HOP exists) or a literal
@@ -980,24 +1008,40 @@ class TestSurfaceTopology:
         the successor surface is BY DEFINITION not in the caller's workspace.
         And because rename failure is warn-and-continue, a permanently-failing
         rename would stay green forever without this pin.
+
+        BOTH topologies genuinely run here. This test previously drove the
+        surface path only, while a sibling covered the fallback — so scoping
+        rename-tab to the CALLER's workspace killed the sibling and left THIS
+        test, under its "both topologies" name, green against its own subject.
+        That is the shape where a later reader deletes the sibling believing
+        this one covers it.
+
+        Per-leg tmp dirs: every harness path (`stubs/`, `home/`, `cmux.log` and
+        its per-verb argv files) is keyed on tmp_path, so two subdirs give two
+        independent runs — and two independent `.rename-tab.argv` files, which
+        one shared log could not tell apart.
         """
         # Consume the frozen fixture rather than restating the flag.
         rename_argv = _verb_shapes()["rename_tab"]["argv"]
         assert "--workspace" in rename_argv, "frozen contract lost the flag"
 
-        ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx)
-        assert run_spawn(ctx, tmp_path, "b1", env_extra=env).returncode == 0
-        assert _flag(_argv(tmp_path, "rename-tab"), "--workspace") == "TEST-WS"
+        surf = tmp_path / "surface-leg"
+        surf.mkdir()
+        ctx_s = setup_worktree(surf)
+        r_s = run_spawn(ctx_s, surf, "b1", env_extra=_reach_gate(surf, ctx_s))
+        assert r_s.returncode == 0, r_s.stderr
+        assert _flag(_argv(surf, "rename-tab"), "--workspace") == "TEST-WS"
 
-    def test_rename_tab_carries_workspace_on_the_fallback(self, tmp_path):
-        ctx = setup_worktree(tmp_path)
-        env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1")
-        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
-        assert r.returncode == 0, r.stderr
-        # The created workspace's ref, NOT the caller's — this is the leg where
+        fb = tmp_path / "fallback-leg"
+        fb.mkdir()
+        ctx_f = setup_worktree(fb)
+        r_f = run_spawn(
+            ctx_f, fb, "b1", env_extra=_reach_gate(fb, ctx_f, CMUX_NEW_SURFACE_RC="1")
+        )
+        assert r_f.returncode == 0, r_f.stderr
+        # The CREATED workspace's ref, NOT the caller's — this is the leg where
         # a bare rename-tab was measured to fail outright.
-        assert _flag(_argv(tmp_path, "rename-tab"), "--workspace") == "workspace:9"
+        assert _flag(_argv(fb, "rename-tab"), "--workspace") == "workspace:9"
 
     def test_rename_tab_success_is_never_ref_parsed(self, tmp_path):
         # Shared Contract §1: rename-tab's field 2 is `action=rename`, NOT a ref.
@@ -1030,6 +1074,87 @@ class TestSurfaceTopology:
         # parser reading awk's $1 gets `*` and fails the ref-shape gate.
         assert out["surface"] == "surface:11"
         assert out["handshake"] == "ok"
+
+    def test_fallback_refuses_when_no_surface_ref_can_be_resolved(self, tmp_path):
+        """`create_workspace_target`'s ref-shape gate, made reachable.
+
+        The gate is REDUNDANT with the awk parser under every other shape the
+        stub can emit (the parser yields `^surface:[0-9]+$` or nothing), so
+        without a stub that returns zero surface tokens no assertion can
+        distinguish it from `if true`. `CMUX_LIST_SURFACES_NO_REF` returns a row
+        with no `surface:N` token — the parser SKIPS it, the gate fires.
+
+        There is no stderr message unique to this refusal (both the capture's
+        shape check and this gate return 1 silently), so the pin is an evidence
+        COMBINATION, not a message: the workspace WAS created, the launch never
+        happened, and the outcome names no surface. Without the gate the empty
+        ref flows into `rename-tab --surface ''` and `send --surface ''`, the
+        stub answers OK to both, and the run reports success while addressing
+        nothing — the exact production failure Task 0 measured.
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(
+            tmp_path, ctx, CMUX_NEW_SURFACE_RC="1", CMUX_LIST_SURFACES_NO_REF="1"
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert "workspace create" in cmux_log_text(tmp_path), (
+            "control leg: the fallback workspace must actually have been created"
+        )
+        verbs = _verbs(tmp_path)
+        assert "rename-tab" not in verbs, "launched against an unresolvable ref"
+        assert "send" not in verbs, "launched against an unresolvable ref"
+        out = _outcome(ctx)
+        assert out["workspace"] == "spawn-failed"
+        assert out["surface"] == "-", (
+            "an unresolved ref must not be reported as a target"
+        )
+        assert out["topology"] == "workspace-fallback"
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+    def test_selected_row_wins_over_the_first_row_on_the_fallback(self, tmp_path):
+        """The `[selected]` branch, separated from `END{print first}`.
+
+        On the default ONE-row stub the first row IS the selected row, so the
+        two branches agree on every input and `if(index($0,"[selected]"))` is
+        indistinguishable from `if(0)`. Two rows with the marker on the SECOND
+        make them disagree. (`END{if(!f)print first}` stays unpinned — both stub
+        shapes carry a selected row; noted so it is not re-filed as new.)
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(
+            tmp_path, ctx, CMUX_NEW_SURFACE_RC="1", CMUX_LIST_SURFACES_TWO_ROWS="1"
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _flag(_argv(tmp_path, "send"), "--surface") == "surface:11", (
+            "launched into the FIRST surface rather than the selected one"
+        )
+        assert _outcome(ctx)["surface"] == "surface:11"
+
+    def test_timeout_record_keeps_its_topology_and_budget_suffixes(self, tmp_path):
+        """The `handshake=timeout` record's two trailing fields.
+
+        `budget=over-expected` was pinned only on the `handshake=ok` record, and
+        no test reached fallback + timeout together, so BOTH suffixes could be
+        dropped from this printf unnoticed — losing exactly the diagnostics a
+        failed hop is investigated with. Reaching the two conditions at once
+        pins both on the one record.
+        """
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_NEW_SURFACE_RC="1", CMUX_WAITFOR_RC="1")
+        # Same clamp arithmetic as test_over_expected_notifies_never_refuses:
+        # hop 6 > expected 1 sets BUDGET_FLAG while the ceiling floor of 6
+        # still allows the spawn.
+        write_manifest(ctx, expected_hops=1, total_tasks=1)
+        _hops(ctx, 5)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        out = _outcome(ctx)
+        assert out["handshake"] == "timeout"
+        assert out["topology"] == "workspace-fallback"
+        assert out["budget"] == "over-expected"
 
     def test_fallback_is_attempted_exactly_once(self, tmp_path):
         # "One-shot" is the containment property: a retry loop around a broken

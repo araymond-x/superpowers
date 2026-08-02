@@ -726,6 +726,15 @@ LAUNCH_ACCEPTED=0
 if create_surface_target && launch_into_target; then
   LAUNCH_ACCEPTED=1
 else
+  # Belt-and-braces. Under the CURRENT control flow both conjuncts are
+  # tautologies — this is the `else` of the `then` that sets LAUNCH_ACCEPTED=1,
+  # and SPAWN_TOPOLOGY leaves "surface" only inside create_workspace_target,
+  # which has not run — so no test can distinguish this from `if true`. Retained
+  # deliberately, and prescribed by the plan's fence: it states the fallback's
+  # precondition where a future edit (a retry, a second launch site, an earlier
+  # topology switch) would otherwise silently violate it, and it is the guard
+  # against the one failure this script exists to bound — two live successors
+  # for one hop.
   if [ "$LAUNCH_ACCEPTED" = "0" ] && [ "$SPAWN_TOPOLOGY" = "surface" ]; then
     echo "[spawn-handoff] surface path failed before launch accepted — one workspace-fallback attempt." >&2
     SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""

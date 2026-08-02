@@ -79,7 +79,9 @@ def test_did_not_spawn_is_false_on_a_real_surface_spawn(tmp_path):
     env = _reach_hop_gate(tmp_path, ctx)
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0, r.stderr
-    assert "new-surface" in cmux_log_text(tmp_path), "control leg never reached the verb"
+    assert "new-surface" in cmux_log_text(tmp_path), (
+        "control leg never reached the verb"
+    )
     assert not _did_not_spawn(tmp_path), "a real surface spawn read as 'did not spawn'"
     # The regression itself, made permanent: the PRE-Task-9 predicate is True on
     # this very log — i.e. it would have reported "did not spawn" about a run
@@ -112,9 +114,31 @@ def test_did_not_spawn_is_false_on_a_workspace_fallback_spawn(tmp_path):
 def test_spawn_verb_vocabulary_retains_the_legacy_verb():
     """The legacy verb stays in the list: an old stub or a partial revert that
     emits `new-workspace` must not read as 'did not spawn' either."""
+    # A deliberate change-detector, not a second SSOT: the list itself lives in
+    # spawn_handoff_helpers, and the test below pins that `_did_not_spawn`
+    # DELEGATES to it rather than re-spelling it here.
     assert set(SPAWN_VERBS) == {"new-surface", "workspace create", "new-workspace"}
-    assert _did_not_spawn.__module__  # helper is imported, not re-spelled here
     assert did_not_spawn("cmux new-workspace --name x") is False
+
+
+def test_did_not_spawn_delegates_to_the_shared_helper(monkeypatch, tmp_path):
+    """`_did_not_spawn` must CALL the shared predicate, not restate its verbs.
+
+    This replaces `assert _did_not_spawn.__module__`, which could not fail —
+    a function's `__module__` is always a truthy string — in the file whose
+    entire subject is a fail-open. The drift it claimed to catch was run: with
+    the verb tuple re-spelled locally inside `_did_not_spawn`, all 13 tests
+    passed. Provenance (`did_not_spawn.__module__ == "spawn_handoff_helpers"`)
+    would ALSO survive that drift, since the import stays and only the call site
+    changes — so DELEGATION is what has to be pinned.
+    """
+    import sys as _sys
+
+    sentinel = object()
+    monkeypatch.setattr(
+        _sys.modules[__name__], "did_not_spawn", lambda log_text: sentinel
+    )
+    assert _did_not_spawn(tmp_path) is sentinel
 
 
 # ── M1: the runaway-chain guard must fail CLOSED ──────────────────────────────
