@@ -665,6 +665,28 @@ def _commit_file_at(repo, filename, iso_date):
     )
 
 
+def _commit_files_at(repo, filenames, iso_date):
+    """Create + commit MULTIPLE files in a single commit with a fixed date.
+
+    Creates parent directories as needed so subdirectory filenames (e.g.
+    feature-dir bookkeeping paths) work without a separate mkdir step.
+    """
+    for filename in filenames:
+        full_path = os.path.join(repo, filename)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "w") as f:
+            f.write("content\n")
+    subprocess.run(["git", "-C", repo, "add"] + list(filenames), check=True)
+    env = dict(os.environ)
+    env["GIT_AUTHOR_DATE"] = iso_date
+    env["GIT_COMMITTER_DATE"] = iso_date
+    subprocess.run(
+        ["git", "-C", repo, "commit", "-q", "-m", "bookkeeping commit"],
+        check=True,
+        env=env,
+    )
+
+
 class TestGitRealityCheck:
     """_check_verification_git_reality flags file-modifying commits in a
     verification task's dispatch window."""
@@ -748,6 +770,220 @@ class TestGitRealityCheck:
                 assert findings[0]["task"] == 3, (
                     f"Finding should name task 3: {findings}"
                 )
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_bookkeeping_commit_in_window_passes(self):
+        """A commit inside the window touching ONLY feature-dir bookkeeping
+        files (handoff-spawn.log + .handoff-hops under reports/) produces no
+        finding when exclude_dir names the feature dir (Decision 17)."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_files_at(
+                repo,
+                [
+                    "docs/imp-plans/feat/reports/handoff-spawn.log",
+                    "docs/imp-plans/feat/reports/.handoff-hops",
+                ],
+                "2026-03-01T10:30:00",
+            )
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="docs/imp-plans/feat",
+                )
+                assert findings == [], (
+                    f"Expected no findings (bookkeeping-only commit excluded): {findings}"
+                )
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_source_commit_in_window_still_fails(self):
+        """A commit inside the window touching a SOURCE file (outside the
+        excluded feature dir) still produces a finding even with exclude_dir
+        set — only feature-dir bookkeeping is exempted."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_file_at(repo, "src-file.py", "2026-03-01T10:30:00")
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="docs/imp-plans/feat",
+                )
+                assert findings, (
+                    f"Expected finding (source file outside exclude_dir): {findings}"
+                )
+                assert findings[0]["task"] == 3
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_no_exclude_dir_keeps_old_behavior(self):
+        """Backward-compat pin: exclude_dir=None (the default) still flags a
+        bookkeeping-only commit — the exclusion is opt-in via exclude_dir."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_files_at(
+                repo,
+                [
+                    "docs/imp-plans/feat/reports/handoff-spawn.log",
+                    "docs/imp-plans/feat/reports/.handoff-hops",
+                ],
+                "2026-03-01T10:30:00",
+            )
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3}, log_path, git_root=repo
+                )
+                assert findings, (
+                    f"Expected finding without exclude_dir (old behavior): {findings}"
+                )
+                assert findings[0]["task"] == 3
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_no_exclude_dir_does_not_add_exclude_pathspec(self):
+        """Mutation-discriminating variant of test_no_exclude_dir_keeps_old_behavior
+        (advisory Finding 3, Task 15 fix round).
+
+        The original test passes identically whether `if exclude_dir:` guards
+        the pathspec extension or is mutated to `if True:` — with
+        exclude_dir=None, ``:(exclude)None`` is a literal path fragment that
+        matches nothing real, so the commit gets flagged either way.
+
+        This variant creates a directory literally NAMED "None" and commits
+        a file inside it. Correct code (guard False, exclude_dir is the
+        Python value None, not the string "None") never adds the exclude
+        pathspec, so the commit still produces a finding. A `if True:`
+        mutant would stringify exclude_dir into the literal pathspec
+        ``:(exclude)None`` and exclude that directory — the commit would
+        vanish and the test would fail, killing the mutant.
+        """
+        repo = _init_temp_git_repo()
+        try:
+            _commit_files_at(repo, ["None/inside.txt"], "2026-03-01T10:30:00")
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3}, log_path, git_root=repo, exclude_dir=None
+                )
+                assert findings, (
+                    "Expected a finding even though a directory literally "
+                    f"named 'None' exists — the exclude_dir guard must not "
+                    f"stringify None into a pathspec: {findings}"
+                )
+                assert findings[0]["task"] == 3
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_git_failure_produces_error_finding_not_silent_pass(self):
+        """Round 4 structural fix: git itself failing (rc != 0) must NOT be
+        swallowed into an empty findings list the way a genuinely clean
+        window is — it must produce its OWN distinguishable finding shaped
+        with an "error" key (not "commits"), so the caller can tell
+        "couldn't look" from "found nothing" instead of reporting both as
+        the same PASS.
+
+        _check_verification_git_reality does not sanitize its exclude_dir
+        argument itself (that is the caller's job, via
+        _sanitize_exclude_dir in run_pre_completion) — this drives a raw
+        git failure directly at the function under test, proving the
+        swallow fix at its source rather than only through the CLI-level
+        fallback behavior exercised elsewhere in this file.
+        """
+        repo = _init_temp_git_repo()
+        try:
+            _commit_file_at(repo, "src-file.py", "2026-03-01T10:30:00")
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                # An exclude_dir git cannot resolve as an in-repo pathspec
+                # makes `git log` exit non-zero (128, "is outside
+                # repository").
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="/nonexistent/outside/feat",
+                )
+                assert findings, (
+                    "Expected a finding when git itself fails, not a "
+                    f"silent empty list: {findings}"
+                )
+                assert findings[0]["task"] == 3
+                assert "error" in findings[0], (
+                    "Expected an 'error'-shaped finding, not a "
+                    f"'commits'-shaped one: {findings}"
+                )
+                assert "commits" not in findings[0]
+                assert (
+                    "128" in findings[0]["error"] or "exited" in findings[0]["error"]
+                ), f"Expected the git exit code surfaced in the error: {findings}"
             finally:
                 shutil.rmtree(log_dir, ignore_errors=True)
         finally:
@@ -840,9 +1076,7 @@ class TestReviewTiersArchiveAware:
         (archive / "task-002-quality-review-minimum-tier.md").write_text("x")
         (archive / "task-003-quality-review-minimum-tier.md").write_text("x")
         (reports / "task-004-quality-review.md").write_text("x")
-        tiers = dict(
-            _checkpoint._review_tiers_per_task(str(reports), "quality-review")
-        )
+        tiers = dict(_checkpoint._review_tiers_per_task(str(reports), "quality-review"))
         assert tiers == {1: True, 2: True, 3: True, 4: False}
 
     def test_review_tiers_live_wins_over_archive(self, tmp_path):
@@ -853,9 +1087,7 @@ class TestReviewTiersArchiveAware:
         # Same task id: archived as minimum, re-reviewed live as full.
         (archive / "task-005-quality-review-minimum-tier.md").write_text("x")
         (reports / "task-005-quality-review.md").write_text("x")
-        tiers = dict(
-            _checkpoint._review_tiers_per_task(str(reports), "quality-review")
-        )
+        tiers = dict(_checkpoint._review_tiers_per_task(str(reports), "quality-review"))
         assert tiers[5] is False  # live full wins over archived minimum
 
     def test_review_tiers_partner_archive(self, tmp_path):
@@ -865,7 +1097,597 @@ class TestReviewTiersArchiveAware:
         archive.mkdir()
         (archive / "partner-review-001-minimum-tier.md").write_text("x")
         (reports / "partner-review-002.md").write_text("x")
-        tiers = dict(
-            _checkpoint._review_tiers_per_task(str(reports), "partner-review")
-        )
+        tiers = dict(_checkpoint._review_tiers_per_task(str(reports), "partner-review"))
         assert tiers == {1: True, 2: False}
+
+
+# ---------------------------------------------------------------------------
+# Tests: run_pre_completion's OWN derivation of exclude_dir_for_check /
+# git_root_for_check (Task 15 fix round — spec review Finding 1 + Finding 2)
+#
+# TestGitRealityCheck above only exercises _check_verification_git_reality()
+# directly with a hand-supplied exclude_dir string. Nothing there proves the
+# CLI's own "elif args.reports_dir:" / "if getattr(args, 'manifest', ...)"
+# derivation wires it correctly. These tests drive controller-checkpoint.py
+# as a real subprocess against a real temp git repo, in BOTH modes.
+# ---------------------------------------------------------------------------
+
+from sdd_session import TIER_PROFILES  # noqa: E402
+
+
+def _verification_plan_two_tasks() -> str:
+    """2-task plan: Task 0 implementation, Task 1 task_type:verification.
+
+    Matches the _plan_with_task_types(2, verification_task_ids=[1]) shape
+    used elsewhere in this file (frontmatter tasks[] + matching ### Task N
+    headers), inlined here so this section has no ordering dependency on
+    TestVerificationRatioCheck's helper.
+    """
+    return _plan_with_task_types(2, verification_task_ids=[1])
+
+
+def _init_git_repo_at(path):
+    """git init + local identity at an existing directory (Path or str)."""
+    path = str(path)
+    subprocess.run(["git", "-C", path, "init", "-q"], check=True)
+    subprocess.run(
+        ["git", "-C", path, "config", "user.email", "test@example.com"], check=True
+    )
+    subprocess.run(["git", "-C", path, "config", "user.name", "Test"], check=True)
+    subprocess.run(["git", "-C", path, "config", "commit.gpgsign", "false"], check=True)
+
+
+def _build_verification_workspace(repo_root):
+    """Lay out docs/imp-plans/feat/{reports/,plan.md,deviations.md} under
+    repo_root (already git-init'd), with a dispatch log opening an
+    OPEN-ENDED verification window for task 1 (only one DISPATCH line, so
+    end_ts is None and the window covers "now" — matches how
+    _check_verification_git_reality treats the last dispatched task).
+
+    Returns (feat_dir, reports_dir, plan_path, dev_path) as plain str paths.
+    """
+    feat_dir = os.path.join(repo_root, "docs", "imp-plans", "feat")
+    reports_dir = os.path.join(feat_dir, "reports")
+    os.makedirs(reports_dir)
+
+    plan_path = os.path.join(feat_dir, "plan.md")
+    with open(plan_path, "w") as f:
+        f.write(_verification_plan_two_tasks())
+
+    dev_path = os.path.join(feat_dir, "deviations.md")
+    with open(dev_path, "w") as f:
+        f.write("")
+
+    with open(os.path.join(reports_dir, ".dispatch-log"), "w") as f:
+        f.write("2026-03-01T10:00:00 DISPATCH implementer task=1 type=implementer\n")
+
+    return feat_dir, reports_dir, plan_path, dev_path
+
+
+def _run_pre_completion_cli(
+    plan_file=None, deviations_file=None, reports_dir=None, manifest=None, cwd=None
+):
+    """Invoke controller-checkpoint.py --phase pre-completion as a real
+    subprocess, mirroring run_pre_completion()'s own invocation above but
+    adding --manifest support and a controllable subprocess cwd (needed for
+    the Finding-2 regression test, which must prove the derivation is
+    independent of the process's actual OS cwd)."""
+    cmd = [sys.executable, SCRIPT_PATH, "--phase", "pre-completion"]
+    if manifest:
+        cmd.extend(["--manifest", str(manifest)])
+    if plan_file:
+        cmd.extend(["--plan-file", str(plan_file)])
+    cmd.extend(
+        ["--deviations-file", str(deviations_file), "--reports-dir", str(reports_dir)]
+    )
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=15, cwd=cwd)
+    output = json.loads(result.stdout) if result.stdout.strip() else {}
+    return {"exit_code": result.returncode, "output": output, "stderr": result.stderr}
+
+
+def _write_manifest(repo_root, feat_dir, reports_dir, plan_path, dev_path):
+    """Write a standard-tier .sdd-session.json manifest whose paths are
+    git-root-relative (Decision 17 / CLAUDE.md "Manifest is git-root-relative").
+    Mirrors setup_checkpoint_workspace() in test_controller_checkpoint_stale.py.
+    """
+    profile = TIER_PROFILES["standard"]
+    manifest = {
+        "schema_version": 1,
+        "tier": "standard",
+        "paths": {
+            "feature_dir": os.path.relpath(feat_dir, repo_root),
+            "reports_dir": os.path.relpath(reports_dir, repo_root),
+            "dispatch_log": os.path.relpath(
+                os.path.join(reports_dir, ".dispatch-log"), repo_root
+            ),
+            "deviations_file": os.path.relpath(dev_path, repo_root),
+        },
+        "plan_file": os.path.relpath(plan_path, repo_root),
+        "active_module_id": None,
+        "active_module_file": None,
+        "task_range": [0, 1],
+        "total_tasks": 2,
+        "midpoint": 1,
+        "enforcement": profile["enforcement"],
+        "process_requirements": profile["process_requirements"],
+        "completed_modules": [],
+        "module_reports_archived": False,
+        "modules": None,
+        "dispatch_log_sentinel": False,
+    }
+    manifest_path = os.path.join(feat_dir, ".sdd-session.json")
+    with open(manifest_path, "w") as f:
+        json.dump(manifest, f, indent=2)
+    return manifest_path
+
+
+class TestGitRealityCallerDerivationReportsDirMode:
+    """Finding 1: run_pre_completion's `elif args.reports_dir:` derivation of
+    exclude_dir_for_check / git_root_for_check, exercised via the real CLI —
+    no --manifest."""
+
+    def test_bookkeeping_commit_passes(self, tmp_path):
+        """A commit inside the window touching ONLY feature-dir bookkeeping
+        (reports/handoff-spawn.log, reports/.handoff-hops) → Check 9 PASSes,
+        proving the exclude wiring works end-to-end through the real CLI."""
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        _commit_files_at(
+            repo_root,
+            [
+                "docs/imp-plans/feat/reports/handoff-spawn.log",
+                "docs/imp-plans/feat/reports/.handoff-hops",
+            ],
+            "2026-03-01T10:30:00",
+        )
+
+        result = _run_pre_completion_cli(
+            plan_file=plan_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "PASS", (
+            f"Expected PASS (bookkeeping-only commit excluded): {check}, "
+            f"stderr={result['stderr']}"
+        )
+        # Round 4 fix, Step 4 (MU3 coverage gap from the round-3 spec
+        # review): nothing previously pinned the NEGATIVE of
+        # exclude_dir_narrowing_failed — a hardcoded True there would leave
+        # every passing bookkeeping-commit test green with a spurious
+        # narrowing-failed note in `detail`. This is a normal layout where
+        # narrowing genuinely succeeds, so the note must be absent.
+        assert "could not exclude bookkeeping commits" not in check.get("detail", ""), (
+            f"Unexpected narrowing-failed note on a successful-narrowing PASS: {check}"
+        )
+
+    def test_source_commit_fails(self, tmp_path):
+        """A commit inside the window touching a SOURCE file OUTSIDE the
+        feature dir → Check 9 FAILs, proving exclude_dir doesn't
+        over-broadly exempt everything."""
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            plan_file=plan_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            f"Expected FAIL (source file outside feature dir): {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+
+
+class TestGitRealityCallerDerivationManifestMode:
+    """Finding 1: run_pre_completion's `if getattr(args, "manifest", ...)`
+    derivation of exclude_dir_for_check / git_root_for_check, exercised via
+    the real CLI with --manifest."""
+
+    def test_bookkeeping_commit_passes(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        _commit_files_at(
+            repo_root,
+            [
+                "docs/imp-plans/feat/reports/handoff-spawn.log",
+                "docs/imp-plans/feat/reports/.handoff-hops",
+            ],
+            "2026-03-01T10:30:00",
+        )
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "PASS", (
+            f"Expected PASS (bookkeeping-only commit excluded): {check}, "
+            f"stderr={result['stderr']}"
+        )
+
+    def test_source_commit_fails(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            f"Expected FAIL (source file outside feature dir): {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+
+
+class TestGitRealityCwdIndependence:
+    """Finding 2 regression test: before the fix, reports_dir-mode left
+    git_root_for_check as None, so _git_run invoked git WITHOUT -C and the
+    `-- . :(exclude)<dir>` pathspec resolved against the PROCESS's actual OS
+    cwd rather than the repo root. When that cwd was outside the repo
+    entirely (as in a subprocess test harness, or any caller invoked from a
+    directory other than the repo root), `git log -- .` silently found
+    nothing and Check 9 spuriously PASSED — a fail-closed integrity gate
+    going fail-open.
+
+    This test drives the exact same source-file-outside-feature-dir scenario
+    as TestGitRealityCallerDerivationReportsDirMode.test_source_commit_fails,
+    but pins the subprocess's cwd to an unrelated temp directory that is NOT
+    the repo root (and not even inside the repo). Before the fix this
+    spuriously PASSED; after the fix it must still FAIL.
+    """
+
+    def test_source_commit_still_fails_with_unrelated_process_cwd(self, tmp_path):
+        repo_root = str(tmp_path / "repo")
+        os.makedirs(repo_root)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        # A directory that shares no ancestry with repo_root at all — the
+        # scenario the spec reviewer used to empirically prove the bug.
+        unrelated_cwd = str(tmp_path / "unrelated-cwd")
+        os.makedirs(unrelated_cwd)
+
+        result = _run_pre_completion_cli(
+            plan_file=plan_path,
+            deviations_file=dev_path,
+            reports_dir=reports_dir,
+            cwd=unrelated_cwd,
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL regardless of process cwd (fail-closed) — a PASS "
+            f"here reproduces the Finding 2 fail-open bug: {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+
+
+# ---------------------------------------------------------------------------
+# Tests: Task 15 fix round 3 — quality review Critical findings C1 + C2
+# (docs/imp-plans/2026-07-30-cmux-spawn-v2/reports/task-015-quality-review.md)
+# ---------------------------------------------------------------------------
+
+
+class TestGitRealityUnresolvedTempRepoPath:
+    """C1: the round-2 fix's realpath() (not abspath()) correction on BOTH
+    sides of the reports_dir-mode relpath call has zero coverage from the
+    existing caller-derivation tests, because pytest's tmp_path fixture is
+    ALREADY realpath-canonicalized on this machine
+    (os.path.realpath(tmp_path) == tmp_path) — unlike a raw
+    tempfile.mkdtemp() call, which on macOS returns the UNRESOLVED
+    /var/folders/... form (realpath resolves it to /private/var/folders/...).
+    A workspace built under a directly-created mkdtemp() repo (mirroring
+    _init_temp_git_repo(), used elsewhere in this file exactly to get this
+    unresolved form) exercises the discrepancy.
+
+    test_bookkeeping_commit_passes_unresolved_repo_path is the mutation
+    killer: reverting realpath to abspath makes the two relpath operands
+    share no common path prefix at all (/var/folders/... vs
+    /private/var/folders/...), so the derived exclude_dir candidate comes
+    out "../../.../var/folders/.../docs/imp-plans/feat" — which
+    _sanitize_exclude_dir correctly rejects (leading ".."), falling back to
+    an UNNARROWED Check 9 that then flags the bookkeeping-only commit as a
+    violation (FAIL instead of the expected PASS). Empirically confirmed
+    against a hand-mutated copy of this fix during implementation.
+    test_source_commit_fails_unresolved_repo_path does NOT kill this
+    mutation on its own (both shipped and mutant code correctly FAIL a real
+    source commit — under the mutant via the same unnarrowed fallback) but
+    is kept as a straightforward fail-closed sanity check.
+    """
+
+    def test_bookkeeping_commit_passes_unresolved_repo_path(self):
+        repo_root = _init_temp_git_repo()
+        try:
+            feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+                repo_root
+            )
+            _commit_files_at(
+                repo_root,
+                [
+                    "docs/imp-plans/feat/reports/handoff-spawn.log",
+                    "docs/imp-plans/feat/reports/.handoff-hops",
+                ],
+                "2026-03-01T10:30:00",
+            )
+
+            result = _run_pre_completion_cli(
+                plan_file=plan_path, deviations_file=dev_path, reports_dir=reports_dir
+            )
+            check = (
+                result["output"].get("checks", {}).get("verification_git_reality", {})
+            )
+            assert check.get("status") == "PASS", (
+                "Expected PASS (bookkeeping-only commit excluded) on an "
+                "unresolved-symlink repo path — a FAIL here reproduces the "
+                "C1 realpath-vs-abspath regression: mismatched operands "
+                "produce a malformed '..'-prefixed exclude_dir that gets "
+                f"rejected, disabling narrowing entirely: {check}, "
+                f"stderr={result['stderr']}"
+            )
+
+        finally:
+            shutil.rmtree(repo_root, ignore_errors=True)
+
+    def test_source_commit_fails_unresolved_repo_path(self):
+        repo_root = _init_temp_git_repo()
+        try:
+            feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+                repo_root
+            )
+            _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+            result = _run_pre_completion_cli(
+                plan_file=plan_path, deviations_file=dev_path, reports_dir=reports_dir
+            )
+            check = (
+                result["output"].get("checks", {}).get("verification_git_reality", {})
+            )
+            assert check.get("status") == "FAIL", (
+                "Expected FAIL on an unresolved-symlink repo path: "
+                f"{check}, stderr={result['stderr']}"
+            )
+            assert "verification_git_reality" in result["output"].get("blockers", [])
+        finally:
+            shutil.rmtree(repo_root, ignore_errors=True)
+
+
+def _build_verification_workspace_at_root(repo_root):
+    """Like _build_verification_workspace, but lays reports/, plan.md, and
+    deviations.md directly at repo_root — i.e. reports_dir's PARENT (the
+    feature dir) IS the git root itself. --reports-dir is free-form and
+    unvalidated, so nothing stops a caller from pointing it at
+    <git_root>/reports; this is the exact layout that makes
+    relpath(feature_dir, git_root) == "." (Critical Finding C2).
+
+    Returns (feat_dir, reports_dir, plan_path, dev_path) as plain str paths.
+    """
+    feat_dir = repo_root
+    reports_dir = os.path.join(feat_dir, "reports")
+    os.makedirs(reports_dir)
+
+    plan_path = os.path.join(feat_dir, "plan.md")
+    with open(plan_path, "w") as f:
+        f.write(_verification_plan_two_tasks())
+
+    dev_path = os.path.join(feat_dir, "deviations.md")
+    with open(dev_path, "w") as f:
+        f.write("")
+
+    with open(os.path.join(reports_dir, ".dispatch-log"), "w") as f:
+        f.write("2026-03-01T10:00:00 DISPATCH implementer task=1 type=implementer\n")
+
+    return feat_dir, reports_dir, plan_path, dev_path
+
+
+class TestGitRealityExcludeDirNormalizesToRoot:
+    """C2: when reports_dir's parent (the feature dir) IS the git root
+    itself, relpath(feature_dir, git_root) yields ".", and an unsanitized
+    `git log -- . :(exclude).` excludes the ENTIRE repository (rc=0, empty
+    stdout) — a full, silent fail-open, not merely a partial narrowing.
+    _sanitize_exclude_dir must reject this candidate so Check 9 falls back
+    to running unnarrowed and still sees real source-file commits. Both
+    branches share the fix (manifest mode has the identical latent shape via
+    feature_dir: ".") so both are exercised here."""
+
+    def test_source_commit_fails_reports_dir_mode(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = (
+            _build_verification_workspace_at_root(repo_root)
+        )
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            plan_file=plan_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — reports_dir's parent resolves to git root, so "
+            "an unsanitized exclude_dir of '.' would exclude the WHOLE repo: "
+            f"{check}, stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        assert "resolves to the git root" in check.get("detail", ""), (
+            f"Expected the narrowing-failed note surfaced in check detail: {check}"
+        )
+
+    def test_source_commit_fails_manifest_mode(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = (
+            _build_verification_workspace_at_root(repo_root)
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — manifest feature_dir resolves to '.' (git "
+            f"root), the same latent shape as reports_dir mode: {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        assert "resolves to the git root" in check.get("detail", ""), (
+            f"Expected the narrowing-failed note surfaced in check detail: {check}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Task 15 fix round 4 — quality re-review findings I-A + I-B
+# (structural fix for the git-failure swallow in
+# _check_verification_git_reality, plus the isabs guard in
+# _sanitize_exclude_dir and its zero-coverage ".." guard)
+# ---------------------------------------------------------------------------
+
+
+class TestGitRealityExcludeDirRejectsTraversalManifestMode:
+    """I-B: the ".."-prefix guard in _sanitize_exclude_dir is load-bearing
+    and had ZERO shipped-code coverage — no existing test ever produces a
+    ".."-prefixed candidate under shipped code (only under a hand-applied
+    mutant), so the clause could be silently deleted and every existing
+    test would stay green.
+
+    A manifest feature_dir of "../outside-the-repo/feat" is exactly the
+    shape the guard exists to reject: _sanitize_exclude_dir must reject it
+    (reason "resolves outside the repository"), Check 9 falls back to
+    running unnarrowed, and a real source-file commit is still caught.
+
+    Discriminates from the round-4 structural fix's own safety net: if the
+    ".." guard were removed, the unsanitized candidate would reach the git
+    pathspec directly, `git log` would exit 128 ("is outside repository"),
+    and the round-4 fix in _check_verification_git_reality would surface
+    THAT as an "error"-shaped finding ("could not verify — git log exited
+    128: ...") with no narrowing note — still a FAIL, but a different
+    detail message. Asserting on "file modifications detected" (not
+    "could not verify") and on the narrowing note being present pins the
+    guard's specific behavior, not just the fallback safety net's.
+    """
+
+    def test_source_commit_fails_traversal_feature_dir(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        # Overwrite feature_dir with a ".."-prefixed candidate after the
+        # manifest is written — reports_dir/dispatch_log stay correct so
+        # Check 9 still finds the real dispatch log; only the exclude_dir
+        # derivation input is malformed.
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        manifest["paths"]["feature_dir"] = "../outside-the-repo/feat"
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — a '..'-prefixed feature_dir must be rejected "
+            "by _sanitize_exclude_dir, falling back to unnarrowed Check 9, "
+            f"which must still catch the source commit: {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        detail = check.get("detail", "")
+        assert "resolves outside the repository" in detail, (
+            f"Expected the narrowing-failed note to name the real cause: {check}"
+        )
+        assert "file modifications detected" in detail, (
+            "Expected the unnarrowed fallback to catch the source commit "
+            f"directly (not via the git-error path): {check}"
+        )
+        assert "could not verify" not in detail, (
+            f"A working '..' guard means git never sees the bad pathspec: {check}"
+        )
+
+
+class TestGitRealityExcludeDirRejectsAbsoluteOutOfRepoManifestMode:
+    """I-A (round-4 quality re-review): an absolute, out-of-repo
+    feature_dir reached the Check 9 git pathspec and silently certified a
+    modified repo as clean — `git log -- . ':(exclude)/abs/outside'` exits
+    128, and the pre-round-4 gate collapsed "git failed" and "found
+    nothing" into the same PASS. Reachable via materialize-manifest.py's
+    git_root_relative(), which only WARNS (doesn't reject) an
+    absolute/out-of-repo feature_dir.
+
+    Proves the round-4 Step 2 defense-in-depth fix specifically (the
+    explicit os.path.isabs guard in _sanitize_exclude_dir), not merely the
+    Step 1 structural fallback: asserts the narrowing-failed note names the
+    real cause and that Check 9 catches the commit via the unnarrowed
+    fallback (not via the git-error path), mirroring the discrimination in
+    TestGitRealityExcludeDirRejectsTraversalManifestMode above.
+    """
+
+    def test_source_commit_fails_absolute_feature_dir(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        manifest["paths"]["feature_dir"] = "/nonexistent/outside/feat"
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — an absolute out-of-repo feature_dir must be "
+            "rejected by _sanitize_exclude_dir's isabs guard, falling back "
+            f"to unnarrowed Check 9, which must still catch the source "
+            f"commit: {check}, stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        detail = check.get("detail", "")
+        assert "resolves outside the repository" in detail, (
+            f"Expected the narrowing-failed note to name the real cause: {check}"
+        )
+        assert "file modifications detected" in detail, (
+            "Expected the unnarrowed fallback to catch the source commit "
+            f"directly (not via the git-error path): {check}"
+        )
+        assert "could not verify" not in detail, (
+            f"A working isabs guard means git never sees the bad pathspec: {check}"
+        )

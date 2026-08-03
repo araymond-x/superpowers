@@ -19,6 +19,10 @@ and the review bundle 2026-07-29T01-40-25Z-superpowers (findings.md, M1/M2).
 import subprocess
 
 from spawn_handoff_helpers import (
+    SPAWN_VERBS,
+    cmux_log_text,
+    cmux_v2_stub,
+    did_not_spawn,
     encode_args,
     install_bundle,
     install_version,
@@ -50,13 +54,91 @@ def _commit_all(ctx, msg):
     subprocess.run(["git", "commit", "-qm", msg], cwd=ctx["wt"], check=True)
 
 
-def _cmux_log(tmp_path):
-    p = tmp_path / "cmux.log"
-    return p.read_text() if p.exists() else ""
-
-
 def _did_not_spawn(tmp_path):
-    return "new-workspace" not in _cmux_log(tmp_path)
+    """Absence of EVERY spawn verb, not just the legacy one.
+
+    B1's second clause. This used to read `"new-workspace" not in log`, which
+    Task 9's switch to the surface topology turned fail-OPEN: the script no
+    longer emits `new-workspace`, so the expression is True even when it
+    spawned — silently voiding the seven refusal assertions below, in a guard
+    whose entire purpose is to refuse. The verb list lives in exactly one place
+    (`spawn_handoff_helpers.SPAWN_VERBS`); a second copy here would be the drift
+    shape deviations.md:127 already caught once this sprint.
+    """
+    return did_not_spawn(cmux_log_text(tmp_path))
+
+
+def test_did_not_spawn_is_false_on_a_real_surface_spawn(tmp_path):
+    """POSITIVE CONTROL (a): the surface path.
+
+    Without this, "asserts absence of every verb" is indistinguishable from
+    "asserts absence of a verb no log ever contains" — the identical fail-open
+    in a new spelling.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
+    assert r.returncode == 0, r.stderr
+    assert "new-surface" in cmux_log_text(tmp_path), (
+        "control leg never reached the verb"
+    )
+    assert not _did_not_spawn(tmp_path), "a real surface spawn read as 'did not spawn'"
+    # The regression itself, made permanent: the PRE-Task-9 predicate is True on
+    # this very log — i.e. it would have reported "did not spawn" about a run
+    # that spawned. Keeping the demonstration here means a revert to the old
+    # spelling cannot pass quietly.
+    assert "new-workspace" not in cmux_log_text(tmp_path), (
+        "the old predicate must be demonstrably fail-open here"
+    )
+
+
+def test_did_not_spawn_is_false_on_a_workspace_fallback_spawn(tmp_path):
+    """POSITIVE CONTROL (b): the workspace-fallback path.
+
+    Control (a) alone pins only the `new-surface` disjunct — a rewrite like
+    `"new-surface" not in log and "workspace create" not in log.lower()` passes
+    (a) while leaving the fallback verb exactly as fail-open as the bug being
+    fixed. And the fallback is the reachable path where a spawn happens with
+    `new-surface` absent from any SUCCESSFUL create.
+    """
+    ctx = setup_worktree(tmp_path)
+    env = _reach_hop_gate(tmp_path, ctx)
+    env["CMUX_NEW_SURFACE_RC"] = "1"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
+    assert r.returncode == 0, r.stderr
+    log = cmux_log_text(tmp_path)
+    assert "workspace create" in log, "control leg never reached the fallback verb"
+    assert not _did_not_spawn(tmp_path), "a fallback spawn read as 'did not spawn'"
+
+
+def test_spawn_verb_vocabulary_retains_the_legacy_verb():
+    """The legacy verb stays in the list: an old stub or a partial revert that
+    emits `new-workspace` must not read as 'did not spawn' either."""
+    # A deliberate change-detector, not a second SSOT: the list itself lives in
+    # spawn_handoff_helpers, and the test below pins that `_did_not_spawn`
+    # DELEGATES to it rather than re-spelling it here.
+    assert set(SPAWN_VERBS) == {"new-surface", "workspace create", "new-workspace"}
+    assert did_not_spawn("cmux new-workspace --name x") is False
+
+
+def test_did_not_spawn_delegates_to_the_shared_helper(monkeypatch, tmp_path):
+    """`_did_not_spawn` must CALL the shared predicate, not restate its verbs.
+
+    This replaces `assert _did_not_spawn.__module__`, which could not fail —
+    a function's `__module__` is always a truthy string — in the file whose
+    entire subject is a fail-open. The drift it claimed to catch was run: with
+    the verb tuple re-spelled locally inside `_did_not_spawn`, all 13 tests
+    passed. Provenance (`did_not_spawn.__module__ == "spawn_handoff_helpers"`)
+    would ALSO survive that drift, since the import stays and only the call site
+    changes — so DELEGATION is what has to be pinned.
+    """
+    import sys as _sys
+
+    sentinel = object()
+    monkeypatch.setattr(
+        _sys.modules[__name__], "did_not_spawn", lambda log_text: sentinel
+    )
+    assert _did_not_spawn(tmp_path) is sentinel
 
 
 # ── M1: the runaway-chain guard must fail CLOSED ──────────────────────────────
@@ -65,14 +147,22 @@ def _did_not_spawn(tmp_path):
 def test_nonnumeric_max_hops_reverts_to_default_and_still_refuses(tmp_path):
     """A typo in the kill switch must not mean 'proceed'.
 
-    Positive control on the revert: the counter is seeded at 3, which is the
-    DEFAULT limit. If the revert did not happen, `-ge` errors on 'abc', the branch
-    is skipped, and the script spawns. Reaching the refusal proves MAX_HOPS was
-    restored to a usable integer rather than merely warned about.
+    Positive control on the revert: the counter is seeded AT the ceiling an
+    invalid knob reverts to. If the revert did not happen, `-ge` errors on 'abc',
+    the branch is skipped, and the script spawns. Reaching the refusal proves
+    MAX_HOPS was restored to a usable integer rather than merely warned about.
+
+    The seed is 6, not 3: the fixed `MAX_HOPS_DEFAULT=3` is gone, and an invalid
+    knob now reverts to the DERIVED ceiling — 6 for this fixture, which ships no
+    .sdd-session.json, so EXPECTED_HOPS is "unknown" and the floor applies. Left
+    at 3 this test would go fail-OPEN and only HALF-loudly: 3 < 6 means the gate
+    stops refusing and the script SPAWNS, while the `WARNING:` assertion below
+    still passes. The knob is NOT set explicitly here — the knob being invalid IS
+    the premise of this test.
     """
     ctx = setup_worktree(tmp_path)
     env = _reach_hop_gate(tmp_path, ctx)
-    (ctx["reports"] / ".handoff-hops").write_text("3\n")
+    (ctx["reports"] / ".handoff-hops").write_text("6\n")
     _commit_all(ctx, "seed hops")
     env["SUPERPOWERS_CMUX_MAX_HOPS"] = "abc"
     r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
@@ -139,10 +229,18 @@ def test_absent_and_empty_hop_counter_remain_the_first_hop_case(tmp_path):
 
     Absent and empty both legitimately mean 'hop 0'. Tightening M1 into a blanket
     'must be numeric' on raw file contents would refuse every first-ever handoff.
+
+    Drives the v2 stub because this is a REAL spawn: the default stub emits no
+    `OK surface:` line, so after Task 9's ref-shape check both topologies fail
+    before launch and this would exit 3 — for reasons that have nothing to do
+    with the hop counter. The invariant is unchanged: a legitimate first hop
+    must SPAWN and reserve.
     """
     ctx = setup_worktree(tmp_path)
     env = _reach_hop_gate(tmp_path, ctx)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)  # file absent
+    r = run_spawn(
+        ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub()
+    )  # file absent
     assert r.returncode == 0, f"absent counter must spawn: {r.stderr!r}"
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
 
@@ -223,6 +321,10 @@ def test_feature_dir_name_containing_dots_is_still_accepted(tmp_path):
 
     A naive `*..*` glob would reject a legitimate directory like `v1..2`. The check
     is segment-anchored (`*/../*`), so only a real parent-traversal segment fails.
+
+    v2 stub for the same reason as the first-hop fence above: this is a real
+    spawn, and its invariant is that a legitimate dotted feature dir must SPAWN
+    and reserve — not merely that it fails differently.
     """
     ctx = setup_worktree(tmp_path)
     feat = "docs/imp-plans/v1..2"
@@ -230,6 +332,6 @@ def test_feature_dir_name_containing_dots_is_still_accepted(tmp_path):
     _set_active_feature(ctx, feat + "\n")
     _commit_all(ctx, "dotted feature dir")
     env = _reach_hop_gate(tmp_path, ctx)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0, f"legitimate dotted dir refused: {r.stderr!r}"
     assert (ctx["wt"] / feat / "reports" / ".handoff-hops").exists()

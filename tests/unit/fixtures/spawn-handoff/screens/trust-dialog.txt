@@ -1,0 +1,26 @@
+claude-picker --non-interactive --pick-version 2.1.220
+Last login: Thu Jul 30 14:17:15 on ttys020
+araymond@Aarons-MacBook-Pro-3 ~ % claude-picker --non-interactive --pick-version 2.1.220
+Launching Claude Code 2.1.220 | telemetry ON | project=araymond  branch=no-git  launch_id=e4c61817…
+CWD: /Users/araymond
+
+
+───────────────────────────────────────────────────────
+ Accessing workspace:
+
+ /Users/araymond
+
+ Quick safety check: Is this a project you created or
+ one you trust? (Like your own code, a well-known open
+ source project, or work from your team). If not,
+ take a moment to review what's in this folder first.
+
+ Claude Code'll be able to read, edit, and execute
+ files here.
+
+ Security guide
+
+ ❯ 1. Yes, I trust this folder
+   2. No, exit
+
+ Enter to confirm · Esc to cancel

@@ -376,10 +376,52 @@ def _merged_dispatch_times(dispatch_log_path):
     return times
 
 
+def _sanitize_exclude_dir(candidate):
+    # type: (Optional[str]) -> Tuple[Optional[str], Optional[str]]
+    """Reject an exclude_dir candidate that would fail to narrow the Check 9
+    git pathspec (cmux-spawn-v2 Task 15 fix round 3, Critical Finding C2;
+    the isabs guard + reason plumbing below are round 4, closing quality
+    re-review Finding I-A/I-B).
+
+    A derived exclude_dir of "." arises whenever reports_dir's parent (the
+    feature dir) IS the git root itself — a legal but non-default layout,
+    since --reports-dir is a free-form unvalidated argument, and manifest
+    mode's feature_dir can be "." the same way. `git log -- . :(exclude).`
+    then excludes the ENTIRE repository (rc=0, empty stdout), so Check 9
+    silently certifies ANY commit — including a real source-file
+    modification — as clean.
+
+    A leading ".." (candidate resolves above git_root, e.g. a mis-derived
+    relpath) or an absolute path outside git_root (e.g. an unnormalized
+    manifest feature_dir — materialize-manifest.py's git_root_relative()
+    only WARNS on this, it doesn't reject) both mean the candidate sits
+    outside git_root entirely — unreachable/malformed as an in-repo exclude
+    pathspec (an absolute out-of-repo candidate makes `git log` exit 128,
+    "is outside repository"). All three cases are treated exactly like "no
+    exclude_dir configured": the caller still runs Check 9 unnarrowed, it
+    just can't exclude feature-dir bookkeeping commits.
+
+    Returns (sanitized_candidate, rejection_reason). rejection_reason is
+    None both when candidate was accepted AND when candidate was falsy to
+    begin with (no candidate to reject in the first place) — callers use
+    "is not None" on rejection_reason, not on sanitized_candidate, to
+    distinguish "genuinely rejected" from "nothing was ever derived".
+    """
+    if not candidate:
+        return None, None
+    normalized = os.path.normpath(candidate)
+    if normalized == ".":
+        return None, "resolves to the git root itself"
+    if os.path.isabs(normalized) or normalized.startswith(".."):
+        return None, "resolves outside the repository"
+    return candidate, None
+
+
 def _check_verification_git_reality(
     verification_ids,  # type: set
     dispatch_log_path,  # type: str
     git_root=None,  # type: Optional[str]
+    exclude_dir=None,  # type: Optional[str]
 ):
     # type: (...) -> list
     """Check whether verification tasks produced file-modifying commits.
@@ -387,6 +429,11 @@ def _check_verification_git_reality(
     Reads implementer dispatch timestamps from the dispatch log,
     runs git log between consecutive task windows,
     returns findings for any file modifications detected.
+
+    exclude_dir (cmux-spawn-v2 Decision 17): when set, excludes that directory
+    (a git pathspec, relative to git_root) from the diff so feature-dir hop
+    bookkeeping commits (handoff-spawn.log, .handoff-hops, handoff-mechanics.md,
+    reports/) don't trip the check — only SOURCE modifications do.
     """
     if not verification_ids:
         return []
@@ -414,9 +461,41 @@ def _check_verification_git_reality(
         if end_ts:
             git_args.append(f"--before={end_ts}")
         git_args.extend(["--diff-filter=ACDMR", "--name-only"])
+        if exclude_dir:
+            # cmux-spawn-v2 Decision 17: hop bookkeeping (handoff-spawn.log,
+            # .handoff-hops, handoff-mechanics.md, reports) lands as commits inside
+            # the feature dir during verification windows — exclude the feature dir
+            # so only SOURCE modifications trip the check.
+            git_args.extend(["--", ".", f":(exclude){exclude_dir}"])
 
         result = _git_run(git_args, cwd=git_root)
-        if result is not None and result.returncode == 0 and result.stdout.strip():
+        # cmux-spawn-v2 Task 15 fix round 4 (structural fix for the swallow
+        # identified across rounds 2-4): a git failure (timeout/OSError ->
+        # result is None, or a non-zero exit e.g. rc=128 "outside
+        # repository") must NOT read the same as "git ran and found
+        # nothing" — both used to collapse into zero findings, which the
+        # caller reports as Check 9 PASS. An integrity gate that can't
+        # actually check must say so, not silently pass. Every fail-open
+        # bug found in this check's history (cwd drift, exclude_dir=".",
+        # an absolute out-of-repo feature_dir) is a different way of
+        # making the pathspec malformed enough that git exits non-zero;
+        # this closes the shared swallow instead of patching each cause.
+        if result is None or result.returncode != 0:
+            if result is None:
+                error = "git log failed or timed out"
+            else:
+                error = f"git log exited {result.returncode}"
+                if result.stderr and result.stderr.strip():
+                    error += f": {result.stderr.strip()}"
+            findings.append(
+                {
+                    "task": vid,
+                    "start": start_ts,
+                    "end": end_ts or "now",
+                    "error": error,
+                }
+            )
+        elif result.stdout.strip():
             findings.append(
                 {
                     "task": vid,
@@ -513,7 +592,9 @@ def _git_run(args, cwd=None, timeout=10):
         return None
 
 
-_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+_EMPTY_TREE_SHA = (
+    "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+)
 
 
 def _merge_base_is_head(git_root, base_ref):
@@ -540,9 +621,7 @@ def _feature_window_base(git_root, feature_dir):
     """
     if not feature_dir:
         return None
-    log = _git_run(
-        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
-    )
+    log = _git_run(["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root)
     if log is None or log.returncode != 0 or not log.stdout.strip():
         return None
     first = log.stdout.strip().splitlines()[0].strip()
@@ -1650,6 +1729,17 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     if verification_ids:
         dispatch_log_path = ""
         git_root_for_check = None
+        exclude_dir_for_check = None
+        # True when a feature-dir/reports-dir candidate WAS derived but
+        # _sanitize_exclude_dir rejected it (e.g. it normalized to "." or
+        # resolved outside the repo) — distinct from "no candidate at all"
+        # so the check detail can say Check 9 is running unnarrowed rather
+        # than silently looking identical to a normal exclusion (Task 15
+        # fix round 3, Critical Finding C2). exclude_dir_narrowing_reason
+        # carries WHY (round 4) so the note names the real cause instead of
+        # a hardcoded sentence.
+        exclude_dir_narrowing_failed = False
+        exclude_dir_narrowing_reason = None
         if getattr(args, "manifest", None):
             try:
                 _mp = Path(args.manifest)
@@ -1659,29 +1749,94 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 dispatch_log_path = os.path.join(
                     _gr, _md.get("paths", {}).get("dispatch_log", "")
                 )
+                # Decision 17: manifest paths are git-root-relative (see
+                # CLAUDE.md "Manifest is git-root-relative"), so feature_dir is
+                # already a valid pathspec relative to git_root_for_check —
+                # EXCEPT when feature_dir IS the git root, or an unnormalized
+                # absolute/out-of-repo path snuck into the manifest (round 4,
+                # I-A): see _sanitize_exclude_dir.
+                _raw_exclude_dir = _md.get("paths", {}).get("feature_dir")
+                exclude_dir_for_check, exclude_dir_narrowing_reason = (
+                    _sanitize_exclude_dir(_raw_exclude_dir)
+                )
+                exclude_dir_narrowing_failed = exclude_dir_narrowing_reason is not None
             except Exception:
                 pass
         elif args.reports_dir:
             dispatch_log_path = os.path.join(args.reports_dir, ".dispatch-log")
+            # No manifest here, so resolve git_root_for_check the same way the
+            # manifest branch does (via _resolve_git_root) instead of leaving it
+            # None. Leaving it None makes _git_run invoke git WITHOUT -C, so git
+            # resolves the exclude pathspec against this PROCESS's actual OS cwd
+            # — which is not guaranteed to be the repo root (e.g. a subprocess
+            # test harness, or a caller invoked from a subdirectory). That
+            # mismatch silently narrows the `-- . :(exclude)<dir>` pathspec to
+            # files under the wrong cwd, turning this fail-closed integrity
+            # gate fail-open. Resolving git_root_for_check up front keeps both
+            # the git subprocess cwd AND the exclude pathspec anchored to the
+            # same root regardless of the process's cwd.
+            git_root_for_check = _resolve_git_root(Path(args.reports_dir))
+            # realpath (not abspath) on both sides: _resolve_git_root shells out
+            # to `git rev-parse --show-toplevel`, which resolves symlinks (e.g.
+            # macOS's /tmp -> /private/tmp) — abspath alone does not, so on a
+            # symlinked tmpdir the two sides would disagree and relpath would
+            # walk all the way up to the filesystem root instead of landing on
+            # the feature dir.
+            _raw_exclude_dir = os.path.relpath(
+                os.path.realpath(os.path.dirname(args.reports_dir.rstrip("/"))),
+                os.path.realpath(git_root_for_check),
+            )
+            # When reports_dir's parent (the feature dir) IS the git root
+            # itself, the relpath above is "." — see _sanitize_exclude_dir.
+            exclude_dir_for_check, exclude_dir_narrowing_reason = _sanitize_exclude_dir(
+                _raw_exclude_dir
+            )
+            exclude_dir_narrowing_failed = exclude_dir_narrowing_reason is not None
 
         git_findings = _check_verification_git_reality(
-            verification_ids, dispatch_log_path, git_root=git_root_for_check
+            verification_ids,
+            dispatch_log_path,
+            git_root=git_root_for_check,
+            exclude_dir=exclude_dir_for_check,
+        )
+        narrowing_note = (
+            f" (note: the feature/reports dir {exclude_dir_narrowing_reason}, "
+            "so Check 9 could not exclude bookkeeping commits — it ran "
+            "unnarrowed against the whole repository)"
+            if exclude_dir_narrowing_failed
+            else ""
         )
         if git_findings:
+            # Round 4: an "error"-shaped finding means git itself failed or
+            # errored (couldn't actually check) — distinct from a real
+            # "commits"-shaped finding (git ran and found a modification).
+            # Both still block completion, but the message must not claim a
+            # modification was detected when the truth is "couldn't verify".
             detail_parts = [
-                f"Task {f['task']} (window {f['start']}–{f['end']}): file modifications detected"
+                (
+                    f"Task {f['task']} (window {f['start']}–{f['end']}): "
+                    f"could not verify — {f['error']}"
+                )
+                if "error" in f
+                else (
+                    f"Task {f['task']} (window {f['start']}–{f['end']}): "
+                    "file modifications detected"
+                )
                 for f in git_findings
             ]
             checks["verification_git_reality"] = {
                 "status": "FAIL",
-                "detail": "Verification task(s) produced file modifications — requires review. "
-                + "; ".join(detail_parts),
+                "detail": "Verification task(s) produced file modifications or could not "
+                "be verified — requires review. "
+                + "; ".join(detail_parts)
+                + narrowing_note,
             }
             blockers.append("verification_git_reality")
         else:
             checks["verification_git_reality"] = {
                 "status": "PASS",
-                "detail": f"No file modifications during {len(verification_ids)} verification window(s)",
+                "detail": f"No file modifications during {len(verification_ids)} verification window(s)"
+                + narrowing_note,
             }
     else:
         checks["verification_git_reality"] = {

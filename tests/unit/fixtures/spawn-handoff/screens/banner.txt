@@ -1,0 +1,19 @@
+│                   /Users/araymond                   │
+│                                                     │
+╰─────────────────────────────────────────────────────╯
+
+ ▎ Using Opus 5 (1M context) (from 
+ ▎ .claude/settings.json) · /model
+
+❯ /remote-control   
+
+  /remote-control is active · Continue here, on your 
+  phone, or at https://claude.ai/code/session_01HRLuW8K
+  mevEP7Seqmu4chK
+                                      ● high · /effort
+───────────────────────────────────────────────────────
+❯ 
+───────────────────────────────────────────────────────
+  rep: araymond  |  Opus 5 (1M context) · high  |  ct…
+  tel: on  |  None
+  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← f…

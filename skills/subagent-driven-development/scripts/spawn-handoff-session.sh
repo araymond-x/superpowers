@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spawn-handoff-session.sh BUNDLE_ID [--dry-run]
+# spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved] [--no-commit]
 #
 # Auto-spawn the SDD controller's successor session in a new cmux workspace via
 # the extended claude-picker. Invoked by context-handoff-protocol.md step 4.
@@ -17,19 +17,11 @@ SUPERPOWERS_ROOT="${SUPERPOWERS_ROOT:-$(cd "$SCRIPT_DIR/../../.." && pwd)}"
 PYTHON="$SUPERPOWERS_ROOT/.venv/bin/python3"
 [ -x "$PYTHON" ] || PYTHON="python3"   # this script needs only json/base64 stdlib
 
-# Runaway-chain guard. Validated for the same reason the quota knobs below are,
-# and with the same warn-and-revert contract — but the motivation here is stronger:
-# this is the ONLY guard against an unbounded spawn chain, and an unvalidated value
-# made it fail OPEN. `[ "$HOPS" -ge "$MAX_HOPS" ]` with a non-numeric operand emits
-# "integer expression expected", the branch is NOT taken, and execution falls
-# through to spawn. A typo in a kill switch must never mean "proceed".
-# MAX_HOPS=0 remains a valid, deliberate refuse-everything setting.
-MAX_HOPS_DEFAULT=3
-MAX_HOPS="${SUPERPOWERS_CMUX_MAX_HOPS:-$MAX_HOPS_DEFAULT}"
-if ! [[ "$MAX_HOPS" =~ ^[0-9]+$ ]]; then
-  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($MAX_HOPS) — reverting to default $MAX_HOPS_DEFAULT." >&2
-  MAX_HOPS="$MAX_HOPS_DEFAULT"
-fi
+# NOTE: the SUPERPOWERS_CMUX_MAX_HOPS block used to live here. Its validation
+# MOVED into the ceiling derivation (Precondition 4) because the ceiling is now
+# DERIVED from the manifest's expected_hops, which is not resolvable this early.
+# The knob keeps its validate-warn-revert contract; only the revert TARGET changed
+# (fixed default -> derived ceiling). See that block for the fail-open rationale.
 # Percent threshold; may legitimately be fractional (e.g. 12.5). Validated because
 # it is interpolated into an awk program below — an unvalidated value is code
 # injection. Invalid input warns and reverts to the default (never exits: the
@@ -40,6 +32,43 @@ if ! [[ "$QUOTA_MIN_PCT" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "WARNING: invalid SUPERPOWERS_CMUX_QUOTA_MIN_PCT ($QUOTA_MIN_PCT) — reverting to default $QUOTA_MIN_PCT_DEFAULT." >&2
   QUOTA_MIN_PCT="$QUOTA_MIN_PCT_DEFAULT"
 fi
+MAX_STALL_HOPS_DEFAULT=1
+MAX_STALL_HOPS="${SUPERPOWERS_CMUX_MAX_STALL_HOPS:-$MAX_STALL_HOPS_DEFAULT}"
+if ! [[ "$MAX_STALL_HOPS" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_STALL_HOPS ($MAX_STALL_HOPS) — reverting to default $MAX_STALL_HOPS_DEFAULT." >&2
+  MAX_STALL_HOPS="$MAX_STALL_HOPS_DEFAULT"
+fi
+# Successor tab title. Tokens {hop} and {feature} are substituted once SP_HOP is
+# known. An empty knob is treated as unset (a blank tab title helps nobody).
+TITLE_FORMAT_DEFAULT='hop{hop} SDD {feature}'
+TITLE_FORMAT="${SUPERPOWERS_CMUX_TITLE_FORMAT:-$TITLE_FORMAT_DEFAULT}"
+[ -n "$TITLE_FORMAT" ] || TITLE_FORMAT="$TITLE_FORMAT_DEFAULT"
+# How long to wait for the successor's `cmux wait-for` token. PROVENANCE: this
+# is the spec floor; Task 0 measured 8–11s cold start. The derivation was
+# max(60, 2 x 11) = 60, so the FLOOR dominated — 60 was NOT measured, and a
+# comment implying otherwise would misrepresent the fixture it came from. The
+# samples establish roughly 5.5x headroom; the floor stops dominating only once
+# a re-measured max sample exceeds 30s. Consistency with
+# tests/unit/fixtures/spawn-handoff/cold-start-timing.json (`default_seconds`)
+# is asserted by the unit suite.
+SPAWN_WAIT_TIMEOUT_DEFAULT=60
+SPAWN_WAIT_TIMEOUT="${SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT:-$SPAWN_WAIT_TIMEOUT_DEFAULT}"
+if ! [[ "$SPAWN_WAIT_TIMEOUT" =~ ^[0-9]+$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT ($SPAWN_WAIT_TIMEOUT) — reverting to default $SPAWN_WAIT_TIMEOUT_DEFAULT." >&2
+  SPAWN_WAIT_TIMEOUT="$SPAWN_WAIT_TIMEOUT_DEFAULT"
+fi
+# Post-spawn setup, run after handshake=ok (below): /rename then /rc. Both
+# steps are cosmetic (§5.3) — see run_post_spawn's wiring for why a failure
+# here can only WARN, never change the exit code. NOTE ${var-def}, not
+# ${var:-def}: an explicit empty string is a VALID, deliberately-set value
+# (disables both steps) and must be told apart from "unset" (use the default).
+POST_SPAWN_DEFAULT="rename,rc"
+POST_SPAWN="${SUPERPOWERS_CMUX_POST_SPAWN-$POST_SPAWN_DEFAULT}"
+if [ -n "$POST_SPAWN" ] && ! [[ "$POST_SPAWN" =~ ^(rename|rc)(,(rename|rc))*$ ]]; then
+  echo "WARNING: invalid SUPERPOWERS_CMUX_POST_SPAWN ($POST_SPAWN) — reverting to default $POST_SPAWN_DEFAULT." >&2
+  POST_SPAWN="$POST_SPAWN_DEFAULT"
+fi
+SUPPORT_CLI="$SCRIPT_DIR/_handoff_support.py"
 BUNDLES_DIR="$HOME/.claude-codex-handoff/bundles"
 QUOTA_TOOL_DEFAULT="$HOME/.claude/bin/claude-usage-pace"
 EXPECTED_BUNDLE_TYPE="work"
@@ -47,17 +76,19 @@ EXPECTED_ENTRY_SKILL="superpowers:subagent-driven-development"
 PICKER_CONTRACT="1"
 
 # --- Arg parse -------------------------------------------------------------
-BUNDLE_ID=""; DRY_RUN=0
+BUNDLE_ID=""; DRY_RUN=0; USER_APPROVED=0; NO_COMMIT=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY_RUN=1 ;;
+    --user-approved) USER_APPROVED=1 ;;
+    --no-commit) NO_COMMIT=1 ;;
     -*) echo "spawn-handoff-session.sh: unknown flag: $a" >&2; exit 1 ;;
     *) if [ -z "$BUNDLE_ID" ]; then BUNDLE_ID="$a"; else
          echo "spawn-handoff-session.sh: unexpected extra arg: $a" >&2; exit 1; fi ;;
   esac
 done
 if [ -z "$BUNDLE_ID" ]; then
-  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run]  (BUNDLE_ID required)" >&2
+  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved] [--no-commit]  (BUNDLE_ID required)" >&2
   exit 1
 fi
 
@@ -99,6 +130,7 @@ if [ -d "$WORKTREE_ROOT/$FEATURE_DIR" ]; then
   esac
 fi
 REPORTS_DIR="$WORKTREE_ROOT/$FEATURE_DIR/reports"
+MANIFEST_FILE="$WORKTREE_ROOT/$FEATURE_DIR/.sdd-session.json"
 FEATURE_NAME="$(basename "$FEATURE_DIR")"
 HOPS_FILE="$REPORTS_DIR/.handoff-hops"
 SPAWN_LOG="$REPORTS_DIR/handoff-spawn.log"
@@ -160,6 +192,30 @@ PY
 if ! validate_bundle "$BUNDLE_ID" "$EXPECTED_BUNDLE_TYPE" "$EXPECTED_ENTRY_SKILL" "$WORKTREE_ROOT"; then
   exit 1; fi
 
+# --- Precondition 2b: consent policy (nothing reserved yet) -----------------
+# Absent manifest FILE stays `auto` DELIBERATELY: every pre-v2 handoff ships without
+# .sdd-session.json and must still spawn. The CLI fails closed to `ask` on a nonexistent
+# manifest PATH (omitting the flag is argparse exit 2 — different thing), but this
+# `[ -f ]` short-circuit makes that branch unreachable from here.
+# The two layers differ ON PURPOSE on this one input — do not "harmonize" them.
+SPAWN_POLICY="auto"
+if [ -f "$MANIFEST_FILE" ]; then
+  # stderr NOT discarded: a CLI failure must be visible, not silently coerced.
+  SPAWN_POLICY="$("$PYTHON" "$SUPPORT_CLI" spawn-policy --manifest "$MANIFEST_FILE")"
+  # Fail CLOSED: empty stdout (CLI crashed) and every unrecognized value mean
+  # NON-consent. `auto` here would make every failure mode of the SOLE consent
+  # gate resolve to "spawn without asking"; `ask` is retryable and pre-reservation.
+  case "$SPAWN_POLICY" in auto|ask|off) : ;; *) SPAWN_POLICY="ask" ;; esac
+fi
+if [ "$SPAWN_POLICY" = "off" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=off (reason=policy-off). Auto-spawn is disabled for this plan — resume manually." >&2
+  print_manual_instructions; exit 3
+fi
+if [ "$SPAWN_POLICY" = "ask" ] && [ "$USER_APPROVED" != "1" ]; then
+  echo "[spawn-handoff] refused: manifest spawn_policy=ask without --user-approved (reason=policy-ask). ASK THE USER, then re-run with --user-approved. No hop was consumed — this refusal is retryable." >&2
+  exit 3
+fi
+
 # --- Precondition 3: cmux reachable ----------------------------------------
 if [ -z "$CMUX_WORKSPACE_ID" ] || [ "$(cmux ping 2>/dev/null)" != "PONG" ]; then
   echo "[spawn-handoff] not in a reachable cmux workspace — manual fallback." >&2
@@ -167,7 +223,13 @@ if [ -z "$CMUX_WORKSPACE_ID" ] || [ "$(cmux ping 2>/dev/null)" != "PONG" ]; then
   exit 3
 fi
 
-# --- Precondition 4: hop limit ---------------------------------------------
+# --- Precondition 4: progress accounting + hop ceiling + stall --------------
+# Ceiling fail-open rationale, preserved from the deleted Layer-0 MAX_HOPS block:
+# this is the ONLY guard against an unbounded spawn chain, and an unvalidated
+# value made it fail OPEN — `[ "$HOPS" -ge "$MAX_HOPS" ]` with a non-numeric
+# operand emits "integer expression expected", the branch is NOT taken, and
+# execution falls through to spawn. A typo in a kill switch must never mean
+# "proceed". MAX_HOPS=0 remains a valid, deliberate refuse-everything setting.
 HOPS="$(cat "$HOPS_FILE" 2>/dev/null)"; [ -n "$HOPS" ] || HOPS=0
 # Absent/empty is the legitimate first-hop case and stays 0 (handled above).
 # Present-but-non-numeric is NOT: it defeats the comparison below exactly as an
@@ -184,14 +246,98 @@ if ! [[ "$HOPS" =~ ^[0-9]+$ ]]; then
   print_manual_instructions
   exit 3
 fi
+# Progress accounting (Decision 8). tasks_done failure degrades to "unknown":
+# the stall check SKIPs (stall=indeterminate) — never fake 0, which would
+# manufacture stalls. The runaway fail-closed guard remains .handoff-hops's own.
+TASKS_DONE="$("$PYTHON" "$SUPPORT_CLI" tasks-done --reports-dir "$REPORTS_DIR" 2>/dev/null)"
+[[ "$TASKS_DONE" =~ ^[0-9]+$ ]] || TASKS_DONE="unknown"
+EXPECTED_HOPS="unknown"
+if [ -f "$MANIFEST_FILE" ]; then
+  EXPECTED_HOPS="$("$PYTHON" "$SUPPORT_CLI" expected-hops --manifest "$MANIFEST_FILE" 2>/dev/null)"
+  [[ "$EXPECTED_HOPS" =~ ^[0-9]+$ ]] || EXPECTED_HOPS="unknown"
+fi
+# Ceiling: derive max(6, 2 x expected) ONCE, then let an explicit VALID env value
+# override it absolutely. The derivation used to exist TWICE — once as the
+# invalid-knob revert target, once as the else-branch default — and only the
+# second copy was reachable by any test, so `* 99` in the first survived the
+# entire suite. Duplication does not merely risk drift: it SPLITS a guard's test
+# coverage in a way per-guard review cannot see. Keep this single.
+# SSOT: the floor and factor literals below MIRROR CEILING_FLOOR / CEILING_FACTOR
+# in _handoff_support.py — shell cannot import them, so this is a deliberate,
+# NAMED duplication. test_handoff_support.py::
+# test_shared_constants_are_the_ssot_the_shell_mirrors READS THIS FILE and
+# compares the literals, so changing one side alone FAILs — change both or
+# neither. That same test also counts arithmetic derivations from EXPECTED_HOPS
+# and requires exactly ONE, so a second copy that NAMES EXPECTED_HOPS inside a
+# `$(( ))` or `(( ))` fails too. That is the whole of its reach: it is NOT an
+# unconditional bar on re-duplication, and an earlier version of this comment
+# wrongly implied it was. A copy that avoids those two syntaxes (`expr`, `let`,
+# `$[ ]`, `declare -i`) or reads the value into another name first — e.g.
+# `E="$EXPECTED_HOPS"; CEIL=$((E * 2))`, literally a second copy in a `$(( ))`
+# shape — and that clamps without the `[ … -lt N ]` form, still passes. Those
+# escapes are enumerated and MEASURED at the test itself, under
+# `KNOWN RESIDUAL ESCAPES`, which is the SSOT for what the guard does and does
+# not catch. Keep the derivation single because the comment above explains why,
+# not because a test will always catch you.
+# Deliberately NOT clamped from above: expected_hops is plan-author-declared and
+# schema-validated, so an author who writes expected_hops=500 has declared a
+# 500-hop plan and the ceiling is elastic in it BY DESIGN. The backstop against a
+# chain that spawns without PROGRESSING is the stall gate below, not this number.
+# A CEILING_MAX was considered and rejected (deviations.md): it would add a fourth
+# literal with no Python twin, in the region Task 9 edits.
+DERIVED=6
+if [ "$EXPECTED_HOPS" != "unknown" ]; then
+  DERIVED=$((EXPECTED_HOPS * 2))
+  [ "$DERIVED" -lt 6 ] && DERIVED=6
+fi
+MAX_HOPS="$DERIVED"
+if [ -n "$SUPERPOWERS_CMUX_MAX_HOPS" ]; then
+  if [[ "$SUPERPOWERS_CMUX_MAX_HOPS" =~ ^[0-9]+$ ]]; then
+    MAX_HOPS="$SUPERPOWERS_CMUX_MAX_HOPS"
+  else
+    echo "WARNING: invalid SUPERPOWERS_CMUX_MAX_HOPS ($SUPERPOWERS_CMUX_MAX_HOPS) — reverting to derived default $DERIVED." >&2
+  fi
+fi
 # SP_HOP is the successor's hop number; defined early because the Task-5 launch
 # composition references it in the runtime fallback chain.
 SP_HOP=$((HOPS + 1))
+# Rendered HERE, not at config time: {hop} needs SP_HOP. Composing the title
+# earlier renders `hop SDD feat`, which nothing would catch — rename-tab failure
+# is warn-and-continue, so a wrong title never fails a run.
+TAB_TITLE="${TITLE_FORMAT//\{hop\}/$SP_HOP}"
+TAB_TITLE="${TAB_TITLE//\{feature\}/$FEATURE_NAME}"
 if [ "$HOPS" -ge "$MAX_HOPS" ]; then
-  cmux notify --title "SDD handoff" --body "Hop limit $MAX_HOPS reached — manual resume needed" 2>/dev/null || true
-  echo "[spawn-handoff] hop limit reached ($HOPS/$MAX_HOPS) — manual fallback." >&2
+  cmux notify --title "SDD handoff" --body "Hop ceiling $MAX_HOPS reached — manual resume needed" 2>/dev/null || true
+  echo "[spawn-handoff] hop ceiling reached ($HOPS/$MAX_HOPS) — manual fallback." >&2
   print_manual_instructions
   exit 3
+fi
+BUDGET_FLAG=""
+if [ "$TASKS_DONE" = "unknown" ]; then
+  echo "[spawn-handoff] stall=indeterminate — tasks_done could not be counted; stall check skipped." >&2
+else
+  STREAK="$("$PYTHON" "$SUPPORT_CLI" stall-streak --spawn-log "$SPAWN_LOG" --tasks-done "$TASKS_DONE" 2>/dev/null)"
+  if [ "$STREAK" = "indeterminate" ]; then
+    echo "[spawn-handoff] stall=indeterminate — previous outcome record missing/malformed; stall check skipped." >&2
+  elif [[ "$STREAK" =~ ^[0-9]+$ ]] && [ "$STREAK" -gt "$MAX_STALL_HOPS" ]; then
+    # The `?` placeholder was previously OVERWRITTEN by the substitution itself:
+    # on a malformed manifest the one-liner raises, stdout is empty, and the
+    # refusal rendered "tasks 3/" with the denominator silently gone. Assign
+    # through a temp and keep `?` unless a real value came back.
+    TOTAL_DISP="?"
+    if [ -f "$MANIFEST_FILE" ]; then
+      _total_raw="$("$PYTHON" -c 'import json,sys;print(json.load(open(sys.argv[1])).get("total_tasks","?"))' "$MANIFEST_FILE" 2>/dev/null)"
+      [ -n "$_total_raw" ] && TOTAL_DISP="$_total_raw"
+    fi
+    cmux notify --title "SDD handoff" --body "Chain spawning without progress (tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS) — manual resume" 2>/dev/null || true
+    echo "[spawn-handoff] refused: $STREAK consecutive zero-progress hops (> SUPERPOWERS_CMUX_MAX_STALL_HOPS=$MAX_STALL_HOPS) at tasks $TASKS_DONE/$TOTAL_DISP, hops $HOPS (reason=stall). If this chain is legitimately slow, raise SUPERPOWERS_CMUX_MAX_STALL_HOPS via inline env on the spawn invocation — settings.local.json is NOT read by a running session." >&2
+    print_manual_instructions; exit 3
+  fi
+fi
+if [ "$EXPECTED_HOPS" != "unknown" ] && [ "$SP_HOP" -gt "$EXPECTED_HOPS" ]; then
+  BUDGET_FLAG=" budget=over-expected"
+  cmux notify --title "SDD handoff" --body "Hop $SP_HOP exceeds expected_hops=$EXPECTED_HOPS (advisory — spawning anyway)" 2>/dev/null || true
+  echo "[spawn-handoff] budget=over-expected (hop $SP_HOP > expected $EXPECTED_HOPS) — advisory only." >&2
 fi
 # --- Precondition 5: quota (fail-open; parameters pinned in spec §5.3) ------
 # Tool resolution: an explicit SUPERPOWERS_CMUX_QUOTA_TOOL override is
@@ -436,63 +582,187 @@ fi
 echo "[spawn-handoff] launch=$LAUNCH_MODE" >&2
 echo "[spawn-handoff] successor command: $SUCCESSOR_CMD" >&2
 
-# --- Generic, extraction-ready workspace-spawn core (Decision 15) ----------
-# spawn_claude_workspace CWD LAUNCH_COMMAND WORKSPACE_NAME NOTIFY_TEXT
-# Pure mechanics: no SDD *sequencing* policy (reservation, hop accounting, exit
-# ladder and launch composition all live in the caller). The one caller-specific
-# string still inside is the notify `--title "SDD handoff"` below — the single
-# line an extractor must parameterize; the notify BODY is already parameterized
-# via the {workspace} token. Returns cmux new-workspace's exit code and
-# publishes the created workspace's ref in the global SPAWN_WORKSPACE_REF.
+# Inline env prefix. This is the ONLY channel that reaches the successor: a
+# settings file is not re-read by an already-running session, and `cmux send`
+# delivers a shell line, not an environment. The `export …;` prefix therefore
+# fronts BOTH the primary picker invocation and the runtime-fallback tail.
+# $SPAWN_ID is interpolated (not shq-quoted): a uuid4 is shell-safe by
+# construction, and it must be the id THIS hop already recorded in its intent
+# record, or the child's correlation is broken. Knob VALUES are shq-quoted —
+# they are arbitrary user input. An unset knob is omitted entirely rather than
+# forwarded empty, which would override the child's own default with "".
+INLINE_ENV="export SUPERPOWERS_SPAWN_ID=$SPAWN_ID"
+for knob in SUPERPOWERS_CMUX_MAX_HOPS SUPERPOWERS_CMUX_QUOTA_MIN_PCT SUPERPOWERS_CMUX_QUOTA_TIMEOUT \
+            SUPERPOWERS_CMUX_QUOTA_TOOL SUPERPOWERS_CMUX_SPAWN_WAIT_TIMEOUT \
+            SUPERPOWERS_CMUX_MAX_STALL_HOPS SUPERPOWERS_CMUX_POST_SPAWN SUPERPOWERS_CMUX_TITLE_FORMAT; do
+  eval "v=\${$knob}"
+  [ -n "$v" ] && INLINE_ENV="$INLINE_ENV $knob=$(shq "$v")"
+done
+SENT_CMD="$INLINE_ENV; $SUCCESSOR_CMD"
+
+# --- Generic, extraction-ready spawn core (Decision 15, v2 topology) --------
+# Three functions, one shared launch wrapper. Pure mechanics: no SDD
+# *sequencing* policy (reservation, hop accounting, exit ladder and launch
+# composition all live in the caller). All three publish their refs via globals
+# and return non-zero on failure BEFORE the launch command is accepted. Once
+# launch_into_target returns 0 the command IS accepted (`cmux send` rc 0), and
+# no caller may create another target — that is the double-spawn guard.
 #
-# `cmux new-workspace` DOES report the workspace it created: it prints
-# `OK <ref>` on stdout (verified live 2026-07-24 against cmux from
-# /Applications/cmux.app — `OK workspace:8`, rc 0, LF-terminated). Its own
-# diagnostics — including the `new-workspace` -> `workspace create` alias
-# deprecation notice — go to STDERR, so redirecting stdout swallows nothing;
-# the captured bytes are additionally relayed verbatim to stderr, where the
-# rest of this script's diagnostics live. CMUX_QUIET=1 (the env var that notice
-# names) silences it so a chain of automated spawns does not repeat it.
-# Captured to a temp FILE rather than via `$(…)` so `$?` stays cmux's own exit
-# code — the whole exit ladder (0 spawned / non-zero -> exit 3 after the
-# reservation) depends on that.
-# The ref is parsed with awk, not a `read` loop: `read` drops a final line that
-# carries no trailing newline, which would degrade every real spawn to the
-# fallback while an `echo`-based test stub stayed green.
-# NOTIFY_TEXT may carry the literal token {workspace}; it is substituted with
-# the ref. An empty capture on success degrades the ref to `(spawned)`, so no
-# consumer ever sees an empty field.
-SPAWN_WORKSPACE_REF=""
-spawn_claude_workspace() {
-  local cwd="$1" launch_cmd="$2" ws_name="$3" notify_text="$4"
-  local rc out_f
-  local -a nw
-  SPAWN_WORKSPACE_REF=""
-  nw=(cmux new-workspace --name "$ws_name" --cwd "$cwd" --command "$launch_cmd" --focus false)
-  out_f="$(mktemp 2>/dev/null)"
-  if [ -n "$out_f" ]; then
-    CMUX_QUIET=1 "${nw[@]}" >"$out_f"
-    rc=$?
-    SPAWN_WORKSPACE_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
-    cat "$out_f" >&2
-    rm -f "$out_f"
-  else
-    # mktemp unavailable: spawn uncaptured rather than discarding cmux's output.
-    CMUX_QUIET=1 "${nw[@]}"
-    rc=$?
+# The workspace path is now a one-shot FALLBACK on the canonical `workspace
+# create` verb (Decision 19), not the primary route; `cmux new-workspace` is the
+# deprecated alias and is gone.
+SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""; SPAWN_TOPOLOGY="surface"; CAPTURED_REF=""
+
+# ONE capture path for every ref-returning verb (SSOT). Publishes field 2 of the
+# first `OK ` line as CAPTURED_REF ALWAYS — even on failure, so a spawn-failed
+# record can still NAME a partially-created target — relays stdout to stderr,
+# then returns non-zero on mktemp failure, a non-zero verb rc, or a ref failing
+# the expected `<prefix>:` shape.
+#
+# Why the shape check is load-bearing now, where the old core degraded an empty
+# capture to a `(spawned)` placeholder: the ref is the ADDRESS that rename-tab
+# and send use. A fabricated ref would create a target nobody can drive, and the
+# launch would silently never happen while the run reported success.
+#
+# Captured to a temp FILE rather than via `$(…)` so `$?` stays the verb's own
+# exit code — the exit ladder depends on that. Parsed with awk, not a `read`
+# loop: `read` drops a final line carrying no trailing newline, which would fail
+# every real spawn while an `echo`-based test stub stayed green. CMUX_QUIET=1
+# silences the alias-deprecation notice cmux writes to STDERR, so redirecting
+# stdout swallows nothing.
+capture_cmux_ref() {
+  local prefix="$1"; shift
+  local out_f rc
+  CAPTURED_REF=""
+  out_f="$(mktemp 2>/dev/null)" || return 1
+  CMUX_QUIET=1 "$@" >"$out_f"
+  rc=$?
+  CAPTURED_REF="$(awk '/^OK[ \t]/{print $2; exit}' "$out_f" 2>/dev/null)"
+  cat "$out_f" >&2; rm -f "$out_f"
+  [ $rc -eq 0 ] || return 1
+  case "$CAPTURED_REF" in "$prefix":*) return 0 ;; *) return 1 ;; esac
+}
+
+create_surface_target() {
+  capture_cmux_ref surface cmux new-surface --workspace "$CMUX_WORKSPACE_ID" \
+    --type terminal --working-directory "$WORKTREE_ROOT" --focus false
+  local rc=$?
+  SPAWN_SURFACE_REF="$CAPTURED_REF"
+  [ $rc -eq 0 ] || return 1
+  # The caller's own workspace, deliberately: the successor is a sibling tab of
+  # the session that spawned it. `new-surface`'s stdout also reports a workspace
+  # ref in field 4, but $CMUX_WORKSPACE_ID is what we ASKED for and is what
+  # rename-tab must be scoped to.
+  SPAWN_WORKSPACE_REF="$CMUX_WORKSPACE_ID"
+  return 0
+}
+
+create_workspace_target() {   # one-shot fallback — canonical verb (Decision 19)
+  SPAWN_TOPOLOGY="workspace-fallback"
+  capture_cmux_ref workspace cmux workspace create --name "SDD resume: $FEATURE_NAME" \
+    --cwd "$WORKTREE_ROOT" --focus false
+  local rc=$?
+  SPAWN_WORKSPACE_REF="$CAPTURED_REF"
+  [ $rc -eq 0 ] || return 1
+  # Resolve the selected surface. Task 0 MEASURED `* ` prefixing the selected
+  # row, so awk's $1 there is `*`, NOT the ref — and this fallback's fresh
+  # workspace has exactly ONE always-selected surface, so a $1 parser fails 100%
+  # of the time in production while passing green against a marker-less stub.
+  # Match `surface:N` by PATTERN; print EXACTLY ONE line (a multi-line ref globs
+  # past the `case` below and would reach cmux as a garbage argument).
+  SPAWN_SURFACE_REF="$(cmux list-pane-surfaces --workspace "$SPAWN_WORKSPACE_REF" 2>/dev/null \
+    | awk '{ref="";for(i=1;i<=NF;i++)if($i~/^surface:[0-9]+$/){ref=$i;break};if(ref=="")next
+            if(first=="")first=ref; if(index($0,"[selected]")){print ref;f=1;exit}} END{if(!f)print first}')"
+  case "$SPAWN_SURFACE_REF" in surface:*) : ;; *) return 1 ;; esac
+  return 0
+}
+
+launch_into_target() {   # shared by BOTH topologies (Decision 2)
+  local rt_out
+  # --workspace is REQUIRED, not optional: Task 0 measured that rename-tab
+  # resolves refs only within the CALLER's workspace otherwise (`not_found: Tab
+  # not found`, exit 1) — fatal on the fallback path, where the successor
+  # surface is by definition elsewhere. Success is checked by the `OK` PREFIX
+  # only: rename-tab's field 2 is `action=rename`, never a ref, so parsing it
+  # back would poison the address the send below uses. A rename failure is
+  # cosmetic (a missing tab title) and must never cost the handoff.
+  rt_out="$(cmux rename-tab --workspace "$SPAWN_WORKSPACE_REF" --surface "$SPAWN_SURFACE_REF" "$TAB_TITLE" 2>&1)"
+  case "$rt_out" in OK*) : ;; *) echo "[spawn-handoff] warn: rename-tab failed ($rt_out) — cosmetic, continuing." >&2 ;; esac
+  # The trailing `\n` is a LITERAL backslash-n: that is the sequence `cmux send`
+  # interprets as Enter. Do NOT convert it to a real newline.
+  cmux send --surface "$SPAWN_SURFACE_REF" "$SENT_CMD\n"
+}
+
+wait_for_token() {   # ONE bounded wait; the caller decides whether to re-wait
+  cmux wait-for "sdd-hop-$SPAWN_ID" --timeout "$SPAWN_WAIT_TIMEOUT"
+}
+
+diagnose_target() {
+  # ENRICHMENT ONLY — this function NEVER selects the exit code (Decision 5).
+  # A screen is not a handshake: the readiness token is the only success
+  # signal, and treating "a session is visible" as done caused three live
+  # incidents. Everything below only decides what the operator is TOLD.
+  #
+  # ANCHOR PROVENANCE IS PER ANCHOR, NOT PER BRANCH — the `banner` branch alone
+  # holds two anchors of different provenance, and labelling it wholesale would
+  # silently launder an inference into a measurement.
+  #   MEASURED = quoted from a Task 0 live capture (key named)
+  #   INFERRED = reasoned from a state no capture exercises
+  #   INVENTED = a hypothesis nobody has observed
+  local screen rc
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>&1)"
+  rc=$?
+  # `unreadable`, both disjuncts MEASURED from `read_screen_cold`: that capture
+  # is the direct source, exiting 1 (rc disjunct) with stderr
+  # `Error: internal_error: Failed to read terminal text` (literal disjunct).
+  # Both are kept because they are separable in principle — a non-zero rc with
+  # clean output, or the literal on a zero rc.
+  if [ $rc -ne 0 ] || grep -qi "internal_error" <<< "$screen"; then
+    printf 'unreadable'; return 0
   fi
-  if [ $rc -eq 0 ]; then
-    [ -n "$SPAWN_WORKSPACE_REF" ] || SPAWN_WORKSPACE_REF="(spawned)"
-    cmux notify --title "SDD handoff" --body "${notify_text//\{workspace\}/$SPAWN_WORKSPACE_REF}" 2>/dev/null || \
-      echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+  # `trust-dialog`, BOTH anchors MEASURED — verbatim from
+  # cmux-verb-shapes.json `trust_dialog_screen.candidate_anchors`.
+  # Tested BEFORE `banner` as defense in depth. Be precise about why: the
+  # PRE-FIX banner regex matched the real trust screen (its `claude code` anchor
+  # scores 2 there), which is what made ordering load-bearing. The fixed pattern
+  # scores ZERO on that capture, so ordering now changes no CAPTURED screen's
+  # diagnosis. It is retained because a screen CAN carry both — a trust modal
+  # raised over a pane that has already painted a statusline — and that case is
+  # pinned by a SYNTHETIC both-anchors fixture, not by any capture.
+  if grep -qiE "quick safety check|yes, i trust this folder" <<< "$screen"; then
+    printf 'trust-dialog'; return 0
   fi
-  return $rc
+  # `picker-error`, BOTH anchors INVENTED. Task 0 captured no picker failure, so
+  # this is a hypothesis, not a contract. Falsified by any real picker failure
+  # screen whose wording differs — in which case this branch silently degrades
+  # to `none`, which is honest (it never misreports another diagnosis).
+  if grep -qiE "claude-picker: (error|fatal)|no matching version" <<< "$screen"; then
+    printf 'picker-error'; return 0
+  fi
+  # `banner` — TWO anchors, DIFFERENT provenance:
+  #   `shift+tab to cycle` is MEASURED: present in BOTH live running-session
+  #     captures (rc_confirmation_screen.rc_screen and .rename_screen) and
+  #     absent from trust_dialog_screen. Scope it honestly — both captures carry
+  #     the SAME session id and statusline, so n = ONE session captured twice,
+  #     and it was a long-running interactive session rather than a freshly
+  #     spawned successor. The anchor is measured; generalizing it to "any
+  #     running Claude session" is an inference the fixture cannot settle.
+  #   `esc to interrupt` is INFERRED: it occurs ZERO times in the entire
+  #     fixture, because both live captures are IDLE and that string only
+  #     appears while Claude is generating. It covers the busy state no capture
+  #     exercises. Falsified by a busy-state capture that does not contain it.
+  # `claude code` was REMOVED: measured to match ONLY the trust screen and
+  # NEITHER running session — an anchor that fired on the wrong screen.
+  if grep -qiE "shift\+tab to cycle|esc to interrupt" <<< "$screen"; then
+    printf 'banner'; return 0
+  fi
+  printf 'none'
 }
 
 # --- Dry-run short-circuit: preconditions + preflight done, spawn nothing ---
 if [ "$DRY_RUN" = "1" ]; then
-  echo "[spawn-handoff] --dry-run: would spawn workspace 'SDD resume: $FEATURE_NAME'" >&2
-  echo "[spawn-handoff] --dry-run: quota=$QUOTA_STATUS launch=$LAUNCH_MODE (no hop increment, no spawn)" >&2
+  echo "[spawn-handoff] --dry-run: would spawn surface in $CMUX_WORKSPACE_ID (workspace fallback armed) — quota=$QUOTA_STATUS launch=$LAUNCH_MODE policy=$SPAWN_POLICY tasks_done=$TASKS_DONE" >&2
+  echo "[spawn-handoff] --dry-run: no hop increment, no spawn" >&2
   exit 0
 fi
 
@@ -520,30 +790,181 @@ if ! printf '%s\n' "$SP_HOP" > "$HOPS_FILE"; then
   print_manual_instructions
   exit 3
 fi
-if ! printf '%s %s intent hop=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" >> "$SPAWN_LOG"; then
+if ! printf '%s %s intent hop=%s tasks_done=%s\n' "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$TASKS_DONE" >> "$SPAWN_LOG"; then
   echo "[spawn-handoff] reservation write failed: cannot append intent record to $SPAWN_LOG (hop $SP_HOP consumed, no spawn attempted) — manual fallback." >&2
   print_manual_instructions
   exit 3
 fi
-# 2. Spawn.
-if spawn_claude_workspace "$WORKTREE_ROOT" "$SUCCESSOR_CMD" "SDD resume: $FEATURE_NAME" \
-     "Hop $SP_HOP/$MAX_HOPS — successor spawned in {workspace}"; then
-  # 3. Outcome (§5.4d step 3). The workspace ref is cmux's own `OK <ref>` stdout
-  # token, captured by the spawn core above and shared by all three consumers the
-  # spec names: this record, the notify body, and the stdout line below.
-  # `(spawned)` survives ONLY as the empty-capture fallback. Post-spawn failures
-  # are non-retryable by contract — notify already warns rather than failing, and
-  # this exits 0 regardless.
-  printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \
-    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
-  # 4. Print the workspace ref (spec §5.4d step 4) and exit 0.
-  echo "[spawn-handoff] spawned successor in $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE). STOP this session."
-  exit 0
+# 2. Spawn: surface topology first, ONE workspace fallback, ONE launch wrapper.
+# The fallback fires only while nothing has been accepted yet. `cmux send`
+# returning 0 is the point of no return: after it, a second target would mean
+# two live successors for one hop — a runaway chain, which is the failure this
+# whole script exists to bound.
+LAUNCH_ACCEPTED=0
+if create_surface_target && launch_into_target; then
+  LAUNCH_ACCEPTED=1
 else
-  printf '%s %s outcome hop=%s workspace=%s launch=%s bundle=%s quota=%s\n' \
-    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" >> "$SPAWN_LOG"
+  # Belt-and-braces. Under the CURRENT control flow both conjuncts are
+  # tautologies — this is the `else` of the `then` that sets LAUNCH_ACCEPTED=1,
+  # and SPAWN_TOPOLOGY leaves "surface" only inside create_workspace_target,
+  # which has not run — so no test can distinguish this from `if true`. Retained
+  # deliberately, and prescribed by the plan's fence: it states the fallback's
+  # precondition where a future edit (a retry, a second launch site, an earlier
+  # topology switch) would otherwise silently violate it, and it is the guard
+  # against the one failure this script exists to bound — two live successors
+  # for one hop.
+  if [ "$LAUNCH_ACCEPTED" = "0" ] && [ "$SPAWN_TOPOLOGY" = "surface" ]; then
+    echo "[spawn-handoff] surface path failed before launch accepted — one workspace-fallback attempt." >&2
+    SPAWN_SURFACE_REF=""; SPAWN_WORKSPACE_REF=""
+    if create_workspace_target && launch_into_target; then LAUNCH_ACCEPTED=1; fi
+  fi
+fi
+# Computed ONCE and used by every outcome record below (the fence in the plan
+# recomputed it per branch; a single assignment cannot drift between them).
+TOPOLOGY_FIELD=""
+[ "$SPAWN_TOPOLOGY" = "workspace-fallback" ] && TOPOLOGY_FIELD=" topology=workspace-fallback"
+if [ "$LAUNCH_ACCEPTED" != "1" ]; then
+  # workspace=spawn-failed is the grammar's failure sentinel; surface= still
+  # names a partially-created target when one exists, or `-` when none does.
+  if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=none%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "${SPAWN_SURFACE_REF:--}" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" >> "$SPAWN_LOG"; then
+    # N63: the successor EXISTS — a lost audit record must never look like a
+    # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+    cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+    echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+  fi
   cmux notify --title "SDD handoff" --body "Spawn failed after reservation — manual resume" 2>/dev/null || true
-  echo "[spawn-handoff] cmux new-workspace failed AFTER reservation (hop $SP_HOP consumed) — manual fallback." >&2
+  echo "[spawn-handoff] spawn failed AFTER reservation (hop $SP_HOP consumed) — manual fallback." >&2
   print_manual_instructions
   exit 3
 fi
+# 3. Handshake: the token, or nothing. A launched successor that never signals
+# is NOT a success — it may be sitting on a trust modal or a dead picker — so
+# the token is the only exit-0 path. NO second spawn is ever attempted from
+# here: the command was accepted, so the target exists and a human can drive it.
+if ! wait_for_token; then
+  # Exactly ONE re-wait, at the SAME duration. A cold start that merely ran
+  # long is the common benign cause, and a second bounded wait costs one
+  # timeout while removing most of that false-positive class. It is not a
+  # retry loop: two waits, then a decision.
+  echo "[spawn-handoff] no readiness token after ${SPAWN_WAIT_TIMEOUT}s — one re-wait." >&2
+  if ! wait_for_token; then
+    # Enrichment happens ONLY here, after the outcome is already decided.
+    DIAG="$(diagnose_target)"
+    if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout diagnosis=%s%s%s\n' \
+      "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$DIAG" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"; then
+      # N63: the successor EXISTS — a lost audit record must never look like a
+      # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+      cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+      echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+    fi
+    cmux notify --title "SDD handoff" --body "Successor in $SPAWN_SURFACE_REF spawned but NOT confirmed (diagnosis=$DIAG) — check that tab" 2>/dev/null || true
+    # Every arm states that a spawn WAS attempted and that the hop is spent.
+    # None may suggest nothing was spawned: that is what invites a second
+    # session for one hop — the runaway this whole script exists to bound.
+    case "$DIAG" in
+      trust-dialog)
+        # Steer to the tab: one keystroke finishes the handoff. Printing the
+        # fresh-session block here would be actively wrong.
+        echo "[spawn-handoff] handshake=timeout (hop $SP_HOP consumed): the successor in $SPAWN_SURFACE_REF is sitting on Claude's FOLDER-TRUST PROMPT ('Quick safety check: ... 1. Yes, I trust this folder'). Go to that tab and answer it — do NOT start a fresh session (a successor was spawned; a second one is a double-spawn)." >&2 ;;
+      banner)
+        echo "[spawn-handoff] handshake=timeout (hop $SP_HOP consumed): a Claude session IS visible in $SPAWN_SURFACE_REF but no readiness token arrived. Attach to that tab and continue there — do NOT start a fresh session." >&2 ;;
+      picker-error)
+        echo "[spawn-handoff] handshake=timeout: the picker errored in $SPAWN_SURFACE_REF (hop $SP_HOP consumed). Inspect that tab; a spawn WAS attempted — check the tab before any manual resume." >&2
+        print_manual_instructions ;;
+      *)
+        echo "[spawn-handoff] handshake=timeout (diagnosis=$DIAG, hop $SP_HOP consumed). A spawn WAS attempted in $SPAWN_SURFACE_REF — check that tab first; only then resume manually." >&2
+        print_manual_instructions ;;
+    esac
+    exit 3
+  fi
+fi
+# Token received. Post-spawn setup (/rename, /rc) runs HERE — after handshake
+# success, before the outcome record — so a WARNING it emits lands beside the
+# other diagnostics and POST_SPAWN_FIELD is populated before the printf below.
+post_spawn_send_verified() {
+  # $1=text to send, $2=anchor to verify, $3=step name. BOTH anchors are FIXED
+  # STRINGS (grep -F) -- no regex/alternation branch: both confirmation phrases
+  # are MEASURED to be unique to the response region and absent from the echoed
+  # sent line (Task 0, cmux-verb-shapes.json rc_confirmation_screen.{rc_anchor,
+  # rename_anchor} + their _rationale fields). Here-string, never a pipe.
+  local screen
+  cmux send --surface "$SPAWN_SURFACE_REF" "$1" 2>/dev/null
+  cmux send-key --surface "$SPAWN_SURFACE_REF" enter 2>/dev/null
+  sleep 2
+  screen="$(cmux read-screen --surface "$SPAWN_SURFACE_REF" --scrollback 2>/dev/null)"
+  grep -qiF "$2" <<< "$screen" && return 0
+  echo "[spawn-handoff] warn: post-spawn step '$3' unverified — cosmetic, successor is alive (post_spawn=partial:$3)." >&2
+  return 1
+}
+POST_SPAWN_FIELD=""
+run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contract (§5.3)
+  # AMENDED 2026-08-02 (round-2 quality review, finding #1): canonicalize ordering
+  # BEFORE the loop, for EVERY accepted token list -- not the one literal "rc,rename".
+  # The pre-amendment single-literal reorder was WRONG: any OTHER regex-valid
+  # multi-token knob slipped a /rename AFTER /rc with no warning (MEASURED:
+  # "rename,rc,rename" -> /rename,/rc,/rename; "rc,rename,rc" likewise), violating
+  # this module's AC ("ordering always resolves to /rc LAST"). Operator addendum #3
+  # forbids any send after /rc lands (kept despite Task 0's N=1 non-reproduction --
+  # deviations.md, "a single non-reproduction is not grounds to drop a safety
+  # ordering that costs nothing"); by that SAME "safety costs nothing" rationale the
+  # guarantee must hold for ALL inputs. The token universe is exactly {rename, rc},
+  # so the canonical form is fully determined: rename first (if present), rc last
+  # (if present), duplicates collapsed. Reorder+dedupe, NEVER reject. Warn iff
+  # canonicalization changed the effective sequence, naming the ACTUAL input and
+  # result (not a hardcoded pair). Uses [[ == *glob* ]] + ${x:+..} (bash-3.2 safe).
+  local canon=""
+  [[ ",$POST_SPAWN," == *,rename,* ]] && canon="rename"
+  [[ ",$POST_SPAWN," == *,rc,* ]] && canon="${canon:+$canon,}rc"
+  if [ "$canon" != "$POST_SPAWN" ]; then
+    echo "WARNING: SUPERPOWERS_CMUX_POST_SPAWN=$POST_SPAWN canonicalized to $canon (operator addendum #3: /rc must be sent LAST; duplicate steps collapsed)." >&2
+    POST_SPAWN="$canon"
+  fi
+  local step
+  local IFS=','
+  for step in $POST_SPAWN; do
+    case "$step" in
+      rename) post_spawn_send_verified "/rename $TAB_TITLE" "Session renamed to: $TAB_TITLE" "rename" || { POST_SPAWN_FIELD=" post_spawn=partial:rename"; return 0; } ;;
+      rc)     post_spawn_send_verified "/rc" "/remote-control is active" "rc" || { POST_SPAWN_FIELD=" post_spawn=partial:rc"; return 0; } ;;
+    esac
+  done
+  return 0
+}
+[ -n "$POST_SPAWN" ] && run_post_spawn
+if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s%s\n' \
+  "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" "$POST_SPAWN_FIELD" >> "$SPAWN_LOG"; then
+  # N63: the successor EXISTS — a lost audit record must never look like a
+  # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+  cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+  echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+fi
+cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
+  echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+
+# --- Mechanics card + hop bookkeeping commit (N64) --------------------------
+# A successful spawn commits its own bookkeeping (hops counter, spawn log,
+# mechanics card) so the successor's clean-tree precondition is not tripped
+# by the very hop that spawned it. Explicit paths only — NEVER `git add -A`,
+# the worktree may be shared with in-flight SDD artifacts. Card generation
+# and the commit are both best-effort: neither failure may change this
+# branch's exit code (the successor already exists).
+CARD_SCRIPT="$SCRIPT_DIR/write-mechanics-card.py"
+if [ -f "$MANIFEST_FILE" ] && [ -f "$CARD_SCRIPT" ]; then
+  if ! "$PYTHON" "$CARD_SCRIPT" --manifest "$MANIFEST_FILE" >/dev/null 2>&1; then
+    echo "[spawn-handoff] warn: mechanics card generation failed — successor must derive paths from the manifest itself." >&2
+  fi
+else
+  echo "[spawn-handoff] warn: mechanics card skipped (manifest or generator missing)." >&2
+fi
+if [ "$NO_COMMIT" = "1" ]; then
+  echo "[spawn-handoff] --no-commit: leaving hop bookkeeping uncommitted (successor's clean-tree checks will see it)." >&2
+else
+  git add "$HOPS_FILE" "$SPAWN_LOG" 2>/dev/null
+  BK_PATHS=("$HOPS_FILE" "$SPAWN_LOG")
+  [ -f "$REPORTS_DIR/handoff-mechanics.md" ] && { git add "$REPORTS_DIR/handoff-mechanics.md" 2>/dev/null; BK_PATHS+=("$REPORTS_DIR/handoff-mechanics.md"); }
+  if ! git commit -m "chore(sdd): record handoff hop $SP_HOP" -- "${BK_PATHS[@]}" >/dev/null 2>&1; then
+    echo "[spawn-handoff] warn: bookkeeping commit failed — commit reports/ manually (successor's clean-tree precondition will refuse otherwise)." >&2
+  fi
+fi
+echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
+exit 0

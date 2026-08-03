@@ -1,0 +1,177 @@
+{
+  "cmux_version": "cmux 0.64.20 (100) [14e3400b9]",
+  "captured": "live",
+  "captured_at": "2026-07-30",
+  "capture_note": "stdout and stderr are recorded as SEPARATE keys (the plan's snippet merged them with 2>&1 on some verbs). Errors land on stderr with a non-zero exit; no verb wrote its error text to stdout.",
+  "capture_note_addendum": "PROVENANCE SEAM -- this file mixes two capture sessions. Every key EXCEPT `list_pane_surfaces_multi` and `selected_row_marker` was captured 2026-07-30 in the original Task 0 session (see `captured_at`). Those two keys were captured later the same day, 2026-07-30, in the Task 0 quality-review fix round, against the SAME binary: `cmux --version` re-verified byte-identical as `cmux 0.64.20 (100) [14e3400b9]`, `cmux ping` -> PONG, before capture. Because the binary is identical, `captured: \"live\"` remains honest for the whole file. Capture workspace `task0-fix-multirow` was closed with `cmux workspace close <ref>` and `cmux workspace list` re-verified zero residual `task0-*` entries.",
+  "workspace_create": {
+    "verb": "workspace_create",
+    "argv": "CMUX_QUIET=1 cmux workspace create --name task0-shapes --cwd $HOME --focus false",
+    "stdout": "OK workspace:29\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "list_pane_surfaces": {
+    "verb": "list_pane_surfaces",
+    "argv": "cmux list-pane-surfaces --workspace workspace:29",
+    "stdout": "* surface:76  task0-shapes  [selected]\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "list_pane_surfaces_multi": {
+    "verb": "list_pane_surfaces_multi",
+    "argv": "cmux list-pane-surfaces --workspace workspace:37",
+    "stdout": "* surface:96  task0-fix-multirow  [selected]\n  surface:97  Terminal\n",
+    "stderr": "",
+    "exit": 0,
+    "capture_context": "Captured in the fix round (see capture_note_addendum) by running list-pane-surfaces AFTER `cmux new-surface --workspace workspace:37 --type terminal --working-directory $HOME --focus false` (which returned `OK surface:97 pane:37 workspace:37`). The original Task 0 Step 2 ran list-pane-surfaces BEFORE new-surface, so it could only ever record the single-row state.",
+    "selected_row": "Row 1, `surface:96` -- the workspace's AUTO-CREATED surface. It KEPT the marker: a `--focus false` new-surface does NOT take selection. This is what the earlier `--id-format both` transcript in surface_uuid_source also shows, so the behavior is stable across both capture sessions.",
+    "row_titles": "The auto-created surface's title is the WORKSPACE NAME (`task0-fix-multirow`); a new-surface's default title is `Terminal`. Titles contain spaces, so no field index past the ref is stable."
+  },
+  "selected_row_marker": {
+    "fact": "`* ` (asterisk + single space) prefixes the SELECTED row. Non-selected rows are prefixed with exactly TWO spaces. Both shapes end with a trailing newline.",
+    "awk_consequence": "Under awk's DEFAULT FS, leading whitespace is stripped and the `* ` marker becomes its own field. On a SELECTED row $1 is `*` and the ref is $2. On a NON-SELECTED row $1 IS the ref. Any parser must therefore normalize the marker before indexing, e.g. strip a leading `* ` / `  ` prefix, or match the `surface:` token by pattern rather than by field position.",
+    "single_row_state_same_session": "* surface:96  task0-fix-multirow  [selected]\n",
+    "sequence_note": "The two states are the SAME workspace before and after new-surface. The single-row state is what a freshly created workspace shows; the multi-row state only arises once a second surface is added.",
+    "production_shape": "SINGLE-ROW. Module 3's `create_workspace_target` runs `cmux workspace create` then IMMEDIATELY `list-pane-surfaces` on the new workspace, so the only listing the production workspace-fallback path ever parses has exactly ONE row -- and that row is selected, therefore marker-prefixed. A parser fix must handle the single-row marker case; the multi-row case is recorded so the fix does not break the second row (whose $1 IS the ref) if a future path lists a populated workspace.",
+    "measured_awk_behavior": "Module 3's planned parser `NR==1{first=$1} /\\[selected\\]/{print $1; f=1; exit} END{if(!f) print first}` was run against real inputs in the fix round: single-row live -> `*`; two-row live -> `*`; Module 3's PLANNED STUB `surface:11 terminal [selected]` (no marker) -> `surface:11`; an isolated non-selected row -> `surface:97`. The parser is green against the marker-less stub and returns `*` against every real shape, which then fails the `case surface:*` gate. The stub must carry the marker.",
+    "consumer": "Module 3 Task 9 -- stub must carry the `* ` marker; parser must not read $1 on marker rows."
+  },
+  "new_surface": {
+    "verb": "new_surface",
+    "argv": "cmux new-surface --workspace workspace:29 --type terminal --working-directory /Users/araymond --focus false",
+    "stdout": "OK surface:77 pane:29 workspace:29\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "rename_tab": {
+    "verb": "rename_tab",
+    "argv": "cmux rename-tab --workspace <ws> --surface <surface> \"task0 title probe\"",
+    "stdout": "OK action=rename tab=tab:77 workspace=workspace:29\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "read_screen_cold": {
+    "verb": "read_screen_cold",
+    "argv": "cmux read-screen --surface surface:77 --scrollback",
+    "stdout": "",
+    "stderr": "Error: internal_error: Failed to read terminal text\n",
+    "exit": 1
+  },
+  "send": {
+    "verb": "send",
+    "argv": "cmux send --surface surface:77 echo task0-alive\\n",
+    "stdout": "OK surface:77 workspace:29\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "send_key": {
+    "verb": "send_key",
+    "argv": "cmux send-key --surface surface:77 enter",
+    "stdout": "OK surface:77 workspace:29\n",
+    "stderr": "",
+    "exit": 0
+  },
+  "read_screen_warm": {
+    "verb": "read_screen_warm",
+    "argv": "cmux read-screen --surface surface:77 --scrollback",
+    "stdout": "echo task0-alive\n\nLast login: Thu Jul 30 14:08:48 on ttys007\naraymond@Aarons-MacBook-Pro-3 ~ % echo task0-alive\ntask0-alive\naraymond@Aarons-MacBook-Pro-3 ~ % \naraymond@Aarons-MacBook-Pro-3 ~ % \n",
+    "stderr": "",
+    "exit": 0
+  },
+  "wait_for": {
+    "verb": "wait_for",
+    "argv": "cmux wait-for <token> --timeout 10   (with: cmux wait-for -S <token> from another process)",
+    "stdout": "OK",
+    "stderr": "",
+    "exit": 0
+  },
+  "close_surface": {
+    "verb": "close_surface",
+    "argv": "cmux close-surface --workspace <ws> --surface <surface>",
+    "stdout": "OK surface:80 workspace:29\n",
+    "stderr": "",
+    "exit": 0,
+    "wrong_ref_note": "NEGATIVE FIXTURE -- field 2 of this stdout is a plausible but WRONG ref. The target of this call was `surface:77`; the success line reports `surface:80`. Success must therefore be checked by the `OK` prefix and the exit code ONLY; field 2 must never be parsed back as the surface that was closed. Same wrong-ref hazard class as `rename_tab`, whose field 2 is `action=rename` rather than a ref. Pinned in both the spec and the plan. (Kept as a documented property rather than a consumer requirement: `close-surface` is called nowhere in Modules 3-4.)"
+  },
+  "rename_tab_no_workspace_ctx": {
+    "verb": "rename_tab_no_workspace_ctx",
+    "argv": "cmux rename-tab --surface surface:77 task0 title probe",
+    "stdout": "",
+    "stderr": "Error: not_found: Tab not found\n",
+    "exit": 1
+  },
+  "close_surface_no_workspace_ctx": {
+    "verb": "close_surface_no_workspace_ctx",
+    "argv": "cmux close-surface --surface <surface>",
+    "stdout": "",
+    "stderr": "Error: not_found: Surface not found\n",
+    "exit": 1
+  },
+  "surface_uuid_source": {
+    "available": true,
+    "verb": "cmux identify --json --id-format both --workspace <ws> --surface <surface>",
+    "key_path": "caller.surface_id",
+    "example": "FAA9AA87-BB59-44A5-B33D-843764088D12",
+    "example_ref": "surface:77",
+    "alternate_verb": "cmux list-pane-surfaces --workspace <ws> --id-format both",
+    "alternate_key_path": "field 2 of the row whose field 1 equals the surface ref",
+    "notes": "--id-format is documented in NEITHER command's --help (the CLAUDE.md '--help is not a manifest' gotcha, reproduced live). identify is the recommended path: one verb, one JSON key, no row matching. tab_id == surface_id (same UUID), which is what makes the workspace-scoped tab lookup in rename-tab surprising.",
+    "transcript": "=== cmux identify --json ===\n{\n  \"app_bundle_path\" : \"/Applications/cmux.app\",\n  \"app_cli_path\" : \"/Applications/cmux.app/Contents/Resources/bin/cmux\",\n  \"app_executable_path\" : \"/Applications/cmux.app/Contents/MacOS/cmux\",\n  \"bundle_identifier\" : \"com.cmuxterm.app\",\n  \"caller\" : {\n    \"is_browser_surface\" : false,\n    \"pane_ref\" : \"pane:2\",\n    \"surface_ref\" : \"surface:74\",\n    \"surface_type\" : \"terminal\",\n    \"tab_ref\" : \"tab:74\",\n    \"window_ref\" : \"window:1\",\n    \"workspace_ref\" : \"workspace:2\"\n  },\n  \"focused\" : {\n    \"is_browser_surface\" : false,\n    \"pane_ref\" : \"pane:2\",\n    \"surface_ref\" : \"surface:74\",\n    \"surface_type\" : \"terminal\",\n    \"tab_ref\" : \"tab:74\",\n    \"window_ref\" : \"window:1\",\n    \"workspace_ref\" : \"workspace:2\"\n  },\n  \"socket_path\" : \"/Users/araymond/.local/state/cmux/cmux-501.sock\"\n}\n=== cmux identify --json --id-format both ===\n{\n  \"app_bundle_path\" : \"/Applications/cmux.app\",\n  \"app_cli_path\" : \"/Applications/cmux.app/Contents/Resources/bin/cmux\",\n  \"app_executable_path\" : \"/Applications/cmux.app/Contents/MacOS/cmux\",\n  \"bundle_identifier\" : \"com.cmuxterm.app\",\n  \"caller\" : {\n    \"is_browser_surface\" : false,\n    \"pane_id\" : \"7876AED2-3380-47BE-8AFA-8A4BEDC75398\",\n    \"pane_ref\" : \"pane:2\",\n    \"surface_id\" : \"D01FE8B2-476B-47C2-B073-1E540B5A324B\",\n    \"surface_ref\" : \"surface:74\",\n    \"surface_type\" : \"terminal\",\n    \"tab_id\" : \"D01FE8B2-476B-47C2-B073-1E540B5A324B\",\n    \"tab_ref\" : \"tab:74\",\n    \"window_id\" : \"836F9638-E9CC-4399-BF84-61A5B6CF2C94\",\n    \"window_ref\" : \"window:1\",\n    \"workspace_id\" : \"5BC6A8A3-28EE-4B50-885E-53C729464DA8\",\n    \"workspace_ref\" : \"workspace:2\"\n  },\n  \"focused\" : {\n    \"is_browser_surface\" : false,\n    \"pane_id\" : \"7876AED2-3380-47BE-8AFA-8A4BEDC75398\",\n    \"pane_ref\" : \"pane:2\",\n    \"surface_id\" : \"D01FE8B2-476B-47C2-B073-1E540B5A324B\",\n    \"surface_ref\" : \"surface:74\",\n    \"surface_type\" : \"terminal\",\n    \"tab_id\" : \"D01FE8B2-476B-47C2-B073-1E540B5A324B\",\n    \"tab_ref\" : \"tab:74\",\n    \"window_id\" : \"836F9638-E9CC-4399-BF84-61A5B6CF2C94\",\n    \"window_ref\" : \"window:1\",\n    \"workspace_id\" : \"5BC6A8A3-28EE-4B50-885E-53C729464DA8\",\n    \"workspace_ref\" : \"workspace:2\"\n  },\n  \"socket_path\" : \"/Users/araymond/.local/state/cmux/cmux-501.sock\"\n}\n=== cmux list-pane-surfaces --workspace workspace:29 --id-format both ===\n* surface:76 D9842F97-EBBA-4BEC-B33F-708A28AF996D  task0-shapes  [selected]\n  surface:77 FAA9AA87-BB59-44A5-B33D-843764088D12  task0 title probe\n=== cmux new-surface --help | grep id-format/uuid ===\n(grep rc=1)\n=== cmux list-pane-surfaces --help ===\ncmux list-pane-surfaces\n\nUsage: cmux list-pane-surfaces [--workspace <id|ref|index>] [--pane <id|ref|index>] [--window <id|ref|index>]\n\nList surfaces in a pane.\n\nFlags:\n  --workspace <id|ref|index>   Workspace context (default: $CMUX_WORKSPACE_ID)\n  --pane <id|ref|index>        Restrict to a specific pane (default: focused pane)\n  --window <id|ref|index>      Window context for workspace/pane refs and indexes\n\nExample:\n  cmux list-pane-surfaces\n  cmux list-pane-surfaces --workspace workspace:2 --pane pane:1\n=== cmux identify --help ===\ncmux identify\n\nUsage: cmux identify [--workspace <id|ref|index>] [--surface <id|ref|index>] [--window <id|ref|index>] [--no-caller]\n\nPrint server identity and caller context details.\n\nFlags:\n  --workspace <id|ref|index>   Caller workspace context (default: $CMUX_WORKSPACE_ID)\n  --surface <id|ref|index>     Caller surface context (default: $CMUX_SURFACE_ID)\n  --window <id|ref|index>      Window context for workspace/surface refs and indexes\n  --no-caller                  Omit caller context from the request\n",
+    "identify_targeted_transcript": "  \"caller\" : {\n    \"is_browser_surface\" : false,\n    \"pane_id\" : \"0464FAB5-86DA-4548-AF1D-656017BE30B3\",\n    \"pane_ref\" : \"pane:29\",\n    \"surface_id\" : \"FAA9AA87-BB59-44A5-B33D-843764088D12\",\n    \"surface_ref\" : \"surface:77\",\n    \"surface_type\" : \"terminal\",\n    \"tab_id\" : \"FAA9AA87-BB59-44A5-B33D-843764088D12\",\n    \"tab_ref\" : \"tab:77\",\n    \"window_id\" : \"836F9638-E9CC-4399-BF84-61A5B6CF2C94\",\n    \"window_ref\" : \"window:1\",\n    \"workspace_id\" : \"65B1B201-CD38-4E81-8681-F9B6FF6A2C2E\",\n    \"workspace_ref\" : \"workspace:29\"\n  },\n"
+  },
+  "wait_for_latching": {
+    "latching": true,
+    "signal_then_wait_rc": 0,
+    "rewait_rc": 1,
+    "gap_probe_first_rc": 1,
+    "gap_probe_second_rc": 0,
+    "evidence": "A token signaled with -S, then left with NO waiter alive for 3s, was still consumed by a later wait (latch_rc=0). That is exactly the inter-wait gap Task 10's bounded re-wait must survive.",
+    "one_shot": "A second wait on the same token timed out (rewait_rc=1): the latch is consumed by the first SUCCESSFUL wait. This is what makes Task 10 safe -- a first wait that TIMED OUT cannot have consumed the token.",
+    "gap_probe_caveat": "The plan's second probe corroborates nothing. Its signal fires at t~2s while the second wait (--timeout 10, started at t~1s) is ALREADY blocking, so second_rc=0 only proves a live waiter receives a signal. latching is derived from the first probe alone.",
+    "transcript": "=== identify --surface targeted (can parent resolve child UUID directly?) ===\n  \"caller\" : {\n    \"is_browser_surface\" : false,\n    \"pane_id\" : \"0464FAB5-86DA-4548-AF1D-656017BE30B3\",\n    \"pane_ref\" : \"pane:29\",\n=== 2c-1 LATCHING: signal, sleep 3 (no waiter alive), then wait ===\nOK\nsignal_rc=0\nOK\nlatch_rc=0\n=== 2c-1b: re-wait same token (is it one-shot consumed?) ===\nError: wait-for timed out waiting for 'task0-latch-21499-1785442362'\nrewait_rc=1\n=== 2c-2 GAP probe (plan's variant; see caveat) ===\nError: wait-for timed out waiting for 'task0-gap-21499-1785442362'\nfirst_rc=1\nOK\nOK\nsecond_rc=0\n=== Step2 wait_for round-trip (wait-then-signal) ===\nOK\nwait_for rc=0 out=[OK]\n"
+  },
+  "rc_confirmation_screen": {
+    "rc_screen": "│                   /Users/araymond                   │\n│                                                     │\n╰─────────────────────────────────────────────────────╯\n\n ▎ Using Opus 5 (1M context) (from \n ▎ .claude/settings.json) · /model\n\n❯ /remote-control   \n\n  /remote-control is active · Continue here, on your \n  phone, or at https://claude.ai/code/session_01HRLuW8K\n  mevEP7Seqmu4chK\n                                      ● high · /effort\n───────────────────────────────────────────────────────\n❯ \n───────────────────────────────────────────────────────\n  rep: araymond  |  Opus 5 (1M context) · high  |  ct…\n  tel: on  |  None\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← f…\n",
+    "rename_screen": "\n ▎ Using Opus 5 (1M context) (from \n ▎ .claude/settings.json) · /model\n\n❯ /remote-control \n\n  /remote-control is active · Continue here, on your \n  phone, or at https://claude.ai/code/session_01HRLuW8K\n  mevEP7Seqmu4chK\n\n❯ /rename task0-rename-probe \n  ⎿  Session renamed to: task0-rename-probe\n                                      \n───────────────────────────────── task0-rename-probe ──\n❯ \n───────────────────────────────────────────────────────\n  rep: araymond  |  Opus 5 (1M context) · high  |  ct…\n  tel: on  |  None\n  ⏵⏵ bypass permissions on (shift+tab to cycle) · ← f…\n",
+    "send_after_rc_landed": true,
+    "rc_anchor": "/remote-control is active",
+    "rc_sent_line": "/rc",
+    "rc_anchor_rationale": "The sent line is literally '/rc'. The composer EXPANDS the alias, so the submitted-command line reads '/remote-control' -- bare '/remote-control' occurs twice (echo + response). '/remote-control is active' occurs ONCE, only in the response region, and cannot appear in the sent line.",
+    "rename_anchor": "Session renamed to:",
+    "rename_sent_line": "/rename task0-rename-probe",
+    "rename_anchor_rationale": "The naive anchor (the title text itself) matches 3 lines INCLUDING the command echo -- the exact 'shell echo defeating composer verify' defeat. 'Session renamed to:' matches exactly 1 line and cannot appear in the sent line unless the title itself were that string.",
+    "addendum_3_result": "NEGATIVE -- the hazard did not reproduce. 'send' still landed after /remote-control was active: the /rename sent AFTER /rc was accepted and confirmed. Operator addendum #3 (N=1, unproven) is not supported here."
+  },
+  "ref_resolution_scoping": {
+    "finding": "rename-tab and close-surface resolve surface/tab refs WITHIN THE CALLER'S WORKSPACE unless --workspace is passed; send, send-key and read-screen resolve them cross-workspace with a bare --surface.",
+    "requires_workspace_flag": [
+      "rename-tab",
+      "close-surface"
+    ],
+    "resolves_cross_workspace_bare": [
+      "send",
+      "send-key",
+      "read-screen"
+    ],
+    "impact": "MEASURED CONSEQUENCE: a cosmetic one. In the workspace-fallback path the successor surface is by definition NOT in the caller's workspace, so a bare `rename-tab` fails there -- but Module 3's `launch_into_target` treats rename-tab failure as warn-and-continue, and this fixture's own `resolves_cross_workspace_bare` shows `send` reaches the surface cross-workspace with a bare --surface. The cost of the missing flag is therefore a MISSING TAB TITLE, not a failed launch. `close-surface` is called nowhere in Modules 3-4, so its half of this finding has no current consumer. Recommended anyway (cheap, correct): pass --workspace to rename-tab and close-surface.",
+    "impact_correction_note": "This field previously read \"Breaks the workspace-fallback path\". That was the right worry attached to the WRONG mechanism, and it is actively dangerous: the workspace fallback IS broken, but by `selected_row_marker` (the awk parser returns `*` and `create_workspace_target` returns 1 BEFORE `launch_into_target` ever runs). An implementer who adds --workspace here and stops will believe the fallback is fixed when it is not. Fix the marker parse; treat this key as a tab-title correctness item.",
+    "evidence": {
+      "cross_workspace_bare_rename": "Error: not_found: Tab not found (exit 1)",
+      "cross_workspace_with_workspace_flag": "OK action=rename tab=tab:77 workspace=workspace:29 (exit 0)",
+      "caller_workspace_bare_rename": "OK action=rename tab=tab:78 workspace=workspace:2 (exit 0)",
+      "cross_workspace_bare_close": "Error: not_found: Surface not found (exit 1)",
+      "cross_workspace_close_with_flag": "OK surface:80 workspace:29 (exit 0), target was surface:77"
+    },
+    "warmth_irrelevant": "The bare cross-workspace rename failed identically on a COLD and a WARM surface, so this is ref scoping, not lazy terminal instantiation."
+  },
+  "trust_dialog_screen": {
+    "observed": true,
+    "screen": "claude-picker --non-interactive --pick-version 2.1.220\nLast login: Thu Jul 30 14:17:15 on ttys020\naraymond@Aarons-MacBook-Pro-3 ~ % claude-picker --non-interactive --pick-version 2.1.220\nLaunching Claude Code 2.1.220 | telemetry ON | project=araymond  branch=no-git  launch_id=e4c61817…\nCWD: /Users/araymond\n\n\n───────────────────────────────────────────────────────\n Accessing workspace:\n\n /Users/araymond\n\n Quick safety check: Is this a project you created or\n one you trust? (Like your own code, a well-known open\n source project, or work from your team). If not,\n take a moment to review what's in this folder first.\n\n Claude Code'll be able to read, edit, and execute\n files here.\n\n Security guide\n\n ❯ 1. Yes, I trust this folder\n   2. No, exit\n\n Enter to confirm · Esc to cancel\n",
+    "context": "Interactive claude-picker launch into an untrusted --working-directory ($HOME) raised the directory-trust modal -- the N56 hazard the spec names as diagnosis=trust-dialog. Headless -p runs (the 5 timing runs) did NOT hit it. Real capture for Module 3's diagnosis branch.",
+    "candidate_anchors": [
+      "Quick safety check: Is this a project you created or",
+      "1. Yes, I trust this folder"
+    ]
+  }
+}

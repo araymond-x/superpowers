@@ -1,0 +1,5 @@
+docs/imp-plans/2026-07-30-cmux-spawn-v2/plan.md
+docs/imp-plans/2026-07-30-cmux-spawn-v2/module-1-contracts-spikes.md
+docs/imp-plans/2026-07-30-cmux-spawn-v2/module-2-models-budget.md
+docs/imp-plans/2026-07-30-cmux-spawn-v2/module-3-spawn-script.md
+docs/imp-plans/2026-07-30-cmux-spawn-v2/module-4-card-hooks-docs.md

@@ -1,0 +1,101 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers--worktrees-cmux-spawn-v2/43b47462-3292-4d3b-88d5-65bcf4961fc7.jsonl",
+  "extracted_at": "2026-08-03T20:55:16.947270+00:00",
+  "total_messages": 471,
+  "skills_invoked": [
+    "pickup",
+    "superpowers:subagent-driven-development",
+    "handoff"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 2,
+      "phase": "pre-execution"
+    },
+    {
+      "script": "validate-report",
+      "count": 3
+    }
+  ],
+  "tasks": [
+    {
+      "task_number": 17,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a focused implementation engineer. Your job is to build exactly what the spec asks \u2014 nothing more, nothing less.",
+        "message_index": 173
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 228
+        },
+        "code_quality": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 265
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    },
+    {
+      "task_number": 18,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "You are a **read-only auditor** executing Task 18 (`task_type: verification`) of the cmux-spawn-v2 feature. Do NOT creat",
+        "message_index": 328
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    }
+  ],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}

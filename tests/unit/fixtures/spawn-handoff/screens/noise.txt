@@ -1,0 +1,7 @@
+echo task0-alive
+
+Last login: Thu Jul 30 14:08:48 on ttys007
+araymond@Aarons-MacBook-Pro-3 ~ % echo task0-alive
+task0-alive
+araymond@Aarons-MacBook-Pro-3 ~ % 
+araymond@Aarons-MacBook-Pro-3 ~ % 

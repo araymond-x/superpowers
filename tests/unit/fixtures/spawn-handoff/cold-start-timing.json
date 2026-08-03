@@ -1,0 +1,19 @@
+{
+  "measured": true,
+  "cmux_version": "cmux 0.64.20 (100) [14e3400b9]",
+  "picker_version": "2.1.220",
+  "method": "read-screen poll 2s for headless READY; fresh workspace+surface per run",
+  "method_deviation": "The plan's matcher was `grep -q \"READY\"`, which matches the ECHOED command line (the prompt text `-p 'Reply with exactly READY'` contains READY). It reported 2s -- shell echo latency, not cold start. Corrected to the line-anchored `grep -qE '^READY[[:space:]]*$'`, which matches only Claude's answer line. Instrument, prompt, fresh-surface protocol and overestimate direction are unchanged.",
+  "warm_claude_interpretation": "'No warm claude process anywhere in the run' is unsatisfiable literally (the controller session and other sessions are running claude processes). Interpreted as: no pre-booted claude in the MEASURED surface -- each run creates a fresh workspace + fresh surface and boots the picker from cold.",
+  "overestimate_note": "-p completes a full headless turn, so each sample includes model round-trip and slightly OVERestimates boot->SessionStart -- the safe direction for a timeout.",
+  "runs_seconds": [
+    11,
+    10,
+    11,
+    8,
+    8
+  ],
+  "p95_seconds": 11,
+  "default_seconds": 60,
+  "derivation": "max(60, 2 x 11) = 60, rounded up to nearest 10 = 60. NOTE -- the 60s SPEC FLOOR dominated: 2 x p95 is only 22s, so the measurement did NOT set this value, the floor did. The samples establish roughly 5.5x headroom rather than determining the timeout. Consumers must not describe 60 as a measured cold start: Task 9's import-assertion provenance comment reads 'spec floor; Task 0 measured 8-11s cold start'. The floor stops dominating only once a re-measured max sample exceeds 30s."
+}

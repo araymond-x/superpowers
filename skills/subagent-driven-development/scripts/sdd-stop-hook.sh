@@ -61,6 +61,39 @@ if [ ! -f "$DEVIATIONS_FILE" ]; then
   exit 0
 fi
 
+# ─── Spawn-outcome step-completion check (cmux-spawn-v2 Decision 15) ─────────
+# A handoff bundle created during THIS session with no matching spawn outcome
+# and no decline record means the controller stopped mid-protocol (built the
+# bundle, never ran the spawn script, never declined). Matching key: bundle id
+# (outcome records carry bundle=<id>); mtime only bounds the candidate set.
+SPAWN_WARN=""
+BUNDLES_DIR="$HOME/.claude-codex-handoff/bundles"
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // ""' 2>/dev/null)
+SESSION_START=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  SESSION_START=$(head -n 1 "$TRANSCRIPT" 2>/dev/null | jq -r '.timestamp // ""' 2>/dev/null)
+fi
+if [ -n "$SESSION_START" ] && [ -d "$BUNDLES_DIR" ]; then
+  SPAWN_LOG_FILE="${REPORTS_DIR}/handoff-spawn.log"
+  REPO_ID=$(cd "$CWD" && python3 -c 'import os,subprocess;c=subprocess.run(["git","rev-parse","--git-common-dir"],capture_output=True,text=True).stdout.strip();print(os.path.realpath(c if os.path.isabs(c) else os.path.join(os.getcwd(),c)))' 2>/dev/null)
+  START_EPOCH=$(python3 -c 'import sys,datetime;print(int(datetime.datetime.fromisoformat(sys.argv[1].replace("Z","+00:00")).timestamp()))' "$SESSION_START" 2>/dev/null)
+  for bdir in "$BUNDLES_DIR"/*/; do
+    [ -d "$bdir" ] || continue
+    BID=$(basename "$bdir")
+    BMTIME=$(stat -f %m "$bdir" 2>/dev/null || stat -c %Y "$bdir" 2>/dev/null)
+    [ -n "$BMTIME" ] && [ -n "$START_EPOCH" ] && [ "$BMTIME" -ge "$START_EPOCH" ] || continue
+    BTYPE=$(jq -r '.session.bundle_type // ""' "$bdir/manifest.json" 2>/dev/null)
+    BSKILL=$(jq -r '.session.entry_skill // ""' "$bdir/manifest.json" 2>/dev/null)
+    BREPO=$(jq -r '.project.repo_id // ""' "$bdir/manifest.json" 2>/dev/null)
+    [ "$BTYPE" = "work" ] && [ "$BSKILL" = "superpowers:subagent-driven-development" ] && [ "$BREPO" = "$REPO_ID" ] || continue
+    if [ -f "$SPAWN_LOG_FILE" ] && grep -qE "( outcome .*bundle=$BID( |\$))|( decline bundle=$BID( |\$))" "$SPAWN_LOG_FILE"; then
+      continue
+    fi
+    SPAWN_WARN="WARNING: handoff bundle $BID was created this session but reports/handoff-spawn.log has no outcome or decline record for it. Either run spawn-handoff-session.sh $BID (protocol step 4), or record the decline: printf '%s - decline bundle=%s reason=<word>\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" $BID >> $SPAWN_LOG_FILE"
+    break
+  done
+fi
+
 # ─── Prerequisite checks ──────────────────────────────────────────────────────
 
 # controller-checkpoint.py must exist
@@ -177,6 +210,11 @@ fi
 
 if [ "$STATUS" = "FAIL" ]; then
   CONTEXT_MSG="Pre-Completion Gate FAILED. Issues: ${BLOCKERS:-see checkpoint output}. Address these before declaring implementation complete."
+  if [ -n "$SPAWN_WARN" ]; then
+    CONTEXT_MSG="${CONTEXT_MSG}
+
+${SPAWN_WARN}"
+  fi
   ESCAPED_MSG=$(echo "$CONTEXT_MSG" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read().rstrip()))')
   # Use systemMessage for Stop hooks (hookSpecificOutput not supported for Stop events)
   cat << HOOKJSON
@@ -184,8 +222,16 @@ if [ "$STATUS" = "FAIL" ]; then
   "systemMessage": ${ESCAPED_MSG}
 }
 HOOKJSON
+elif [ -n "$SPAWN_WARN" ]; then
+  # Gate passed but a this-session handoff bundle has no outcome/decline record.
+  ESCAPED_MSG=$(echo "$SPAWN_WARN" | python3 -c 'import sys, json; print(json.dumps(sys.stdin.read().rstrip()))')
+  cat << HOOKJSON
+{
+  "systemMessage": ${ESCAPED_MSG}
+}
+HOOKJSON
 else
-  # Gate passed — no output needed (exit 0 silently)
+  # Gate passed, no spawn warning — no output needed (exit 0 silently)
   :
 fi
 

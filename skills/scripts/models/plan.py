@@ -59,6 +59,7 @@ class Plan(SchemaVersionedModel):
     feature_archetype: FeatureArchetype
     enforcement_tier: Tier | None = None
     entry_mode: Literal["brainstorming", "direct"] = "brainstorming"
+    handoff_spawn: Literal["auto", "ask", "off"] = "auto"
     source_contracts: str | None = None
     shared_constants: list[SharedConstant] = Field(default_factory=list)
     pattern_references: list[PatternReference] = Field(default_factory=list)

@@ -10,6 +10,16 @@ ReviewMode = Literal["dispatched", "self_review", "skip"]
 DispatchMode = Literal["required", "controller_direct"]
 RequirementLevel = Literal["required", "skip"]
 
+SpawnPolicy = Literal["auto", "ask", "off"]
+
+
+class Handoff(StrictModel):
+    """Auto-spawn consent + advisory hop budget (cmux-spawn-v2). Optional —
+    absent on pre-v2 manifests; spawn-time consumers re-derive (see
+    _handoff_support.derive_expected_hops)."""
+    expected_hops: int = Field(ge=1)
+    spawn_policy: SpawnPolicy = "auto"
+
 
 class ArtifactPaths(StrictModel):
     """All paths are git-root-relative."""
@@ -96,6 +106,7 @@ class SddSession(SchemaVersionedModel):
     module_reports_archived: bool = False
     modules: list[ModuleState] | None = None
     dispatch_log_sentinel: bool = False
+    handoff: Handoff | None = None
 
     @model_validator(mode="after")
     def task_range_valid(self) -> "SddSession":

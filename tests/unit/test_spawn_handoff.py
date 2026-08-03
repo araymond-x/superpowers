@@ -10,10 +10,41 @@ from pathlib import Path
 
 FIX = Path(__file__).parent / "fixtures" / "spawn-handoff"
 
-# Contract facts frozen from live `cmux --help` (2026-07-22). If cmux renames a
-# flag, the exact-argv assertions in later tasks must be updated too.
-CMUX_NEW_WORKSPACE_FLAGS = ["--name", "--cwd", "--command", "--focus"]
+
+# Contract facts. `CMUX_NEW_WORKSPACE_FLAGS` used to be a hand-written literal
+# here despite its "frozen contract (SSOT)" comment, and it could not survive
+# the v2 migration as ONE constant: the two topologies now exercise two verbs
+# with two different flag sets, and `--command` is dropped from BOTH (launch
+# goes through `cmux send`). So derive each set from the Task-0 frozen fixture
+# rather than restating it — the fixture is the SSOT, this is a projection of it.
+def _fixture_flags(key):
+    """Long flags of a frozen verb's recorded argv, in capture order."""
+    argv = json.loads((FIX / "cmux-verb-shapes.json").read_text())[key]["argv"]
+    return [tok for tok in argv.split() if tok.startswith("--")]
+
+
+CMUX_NEW_SURFACE_FLAGS = _fixture_flags("new_surface")
+CMUX_WORKSPACE_CREATE_FLAGS = _fixture_flags("workspace_create")
 CMUX_NOTIFY_FLAGS = ["--title", "--body"]
+
+
+def test_spawn_verb_flag_sets_come_from_the_frozen_fixture():
+    # Guards the projection above: a fixture whose argv lost its flags would
+    # otherwise make every `for flag in …` loop below iterate over nothing and
+    # pass vacuously — the shape this task exists to stop.
+    assert CMUX_NEW_SURFACE_FLAGS == [
+        "--workspace",
+        "--type",
+        "--working-directory",
+        "--focus",
+    ]
+    assert CMUX_WORKSPACE_CREATE_FLAGS == ["--name", "--cwd", "--focus"]
+    # `--command` is gone from BOTH spawn verbs: the successor command is
+    # delivered by `cmux send`, not by the create verb.
+    assert "--command" not in CMUX_NEW_SURFACE_FLAGS
+    assert "--command" not in CMUX_WORKSPACE_CREATE_FLAGS
+
+
 PICKER_CONTRACT_VERSION = "1"
 
 # claude-picker exports FOUR forwarding vars on EVERY launch path (verified vs
@@ -59,7 +90,15 @@ def test_fixtures_shape_matches_contract():
 
 import os
 import subprocess
-from spawn_handoff_helpers import setup_worktree, install_bundle, run_spawn, SCRIPT
+from spawn_handoff_helpers import (
+    SCRIPT,
+    cmux_log_text,
+    cmux_v2_stub,
+    did_not_spawn,
+    install_bundle,
+    run_spawn,
+    setup_worktree,
+)
 
 
 def test_script_exists_and_executable():
@@ -146,7 +185,9 @@ def test_hop_limit_exits_3(tmp_path):
     # tree) — mirrors the commit pattern in test_missing_active_feature_exits_1.
     subprocess.run(["git", "add", "-A"], cwd=ctx["wt"], check=True)
     subprocess.run(["git", "commit", "-qm", "seed hops"], cwd=ctx["wt"], check=True)
-    r = run_spawn(ctx, tmp_path, "b1")
+    # The ceiling is DERIVED now (floor 6) — this test's premise was the old fixed
+    # MAX_HOPS_DEFAULT=3, so pin it explicitly or the seed of 3 no longer refuses.
+    r = run_spawn(ctx, tmp_path, "b1", env_extra={"SUPERPOWERS_CMUX_MAX_HOPS": "3"})
     assert r.returncode == 3 and "hop" in (r.stdout + r.stderr).lower()
 
 
@@ -251,7 +292,7 @@ def test_quota_tool_timeout_proceeds(tmp_path):
 
 # --- Task 4: launch composition A (decode / strip guard / label / telemetry) ---
 
-from spawn_handoff_helpers import encode_args, install_version
+from spawn_handoff_helpers import encode_args, install_version, NO_AMBIENT_HOP_KNOBS
 
 # The ambient picker-env scrub every test in this file depends on (absent must
 # mean absent) is the autouse `_hermetic_picker_env` fixture in tests/unit/
@@ -533,7 +574,12 @@ def _reach_spawn(tmp_path, ctx):
     """Env that reaches the spawn sequence in launch=auto mode."""
     _spawnable(tmp_path, ctx)
     install_version(tmp_path, "2.1.218")
-    return _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+    e = _meta(args_b64=encode_args(["--append-system-prompt-file", "/tmp/x.md"]))
+    # run_spawn copies os.environ; empty string neutralizes both consumers
+    # (`${VAR:-default}` and the derivation's `[ -n "$VAR" ]`) so an ambient
+    # SUPERPOWERS_CMUX_MAX_HOPS cannot skew the derived-ceiling assertions.
+    e.update(NO_AMBIENT_HOP_KNOBS)
+    return e
 
 
 def _fallback_spawn_id(cmd):
@@ -588,19 +634,12 @@ def _worktree_root(ctx):
     ).stdout.strip()
 
 
-def _cmux_stub_recording_argv():
-    """cmux stub that records each subcommand's argv ONE ELEMENT PER LINE.
-
-    The default stub's `echo "$@"` flattens argv into a space-joined line, which
-    cannot distinguish a flag's VALUE from the next token — `--name "SDD resume:
-    feat"` and `--cwd <path>` both carry spaces. Per-subcommand files keep the
-    new-workspace and notify argvs from interleaving.
-    """
-    return (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'printf \'%s\\n\' "$@" >> "$CMUX_LOG.$1.argv"\n'
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
-    )
+# The bespoke argv-recording stub that used to live here is gone: per-subcommand
+# argv recording (`$CMUX_LOG.$1.argv`, one element per line, so a flag's VALUE
+# stays distinguishable from the next token) is now built into `cmux_v2_stub()`
+# in the harness, and every v2 test gets it for free. Note the file is keyed on
+# `$1`, so `cmux workspace create …` records to `cmux.log.workspace.argv` with
+# `workspace` and `create` as argv[0]/argv[1].
 
 
 def _recorded_argv(tmp_path, subcmd):
@@ -618,29 +657,38 @@ def _flag_value(argv, flag):
 
 
 def test_dry_run_spawns_nothing(tmp_path):
+    # The spawn-verb leg goes through the shared helper: `"new-workspace" not in
+    # logged` became permanently TRUE once the script switched to `new-surface`,
+    # so a --dry-run that actually spawned a surface would have satisfied it.
+    # This test is the best-protected of the three (the two reservation-artifact
+    # legs below are direct anti-spawn evidence, since reservation strictly
+    # precedes spawn) — it is fixed anyway, in the same pass.
     ctx = setup_worktree(tmp_path)
     r = run_spawn(
         ctx, tmp_path, "b1", "--dry-run", env_extra=_reach_spawn(tmp_path, ctx)
     )
     assert r.returncode == 0
-    logged = (
-        (tmp_path / "cmux.log").read_text() if (tmp_path / "cmux.log").exists() else ""
-    )
-    assert "new-workspace" not in logged
+    assert did_not_spawn(cmux_log_text(tmp_path))
     assert not (ctx["reports"] / ".handoff-hops").exists()
     assert not (ctx["reports"] / "handoff-spawn.log").exists()
 
 
 def test_auto_spawn_success_exit_0(tmp_path):
     ctx = setup_worktree(tmp_path)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=cmux_v2_stub(),
+    )
     assert r.returncode == 0
     logged = (tmp_path / "cmux.log").read_text()
-    assert "new-workspace" in logged
+    assert "new-surface" in logged
     # Consume the Task-0 frozen contract constants (SSOT) rather than restating
     # them: if cmux renames a flag, exactly one place changes. Values are pinned
-    # separately in test_new_workspace_and_notify_argv_values_match_spec.
-    for flag in CMUX_NEW_WORKSPACE_FLAGS:
+    # separately in test_new_surface_and_notify_argv_values_match_spec.
+    for flag in CMUX_NEW_SURFACE_FLAGS:
         assert flag in logged
     assert "notify" in logged
     for flag in CMUX_NOTIFY_FLAGS:
@@ -661,35 +709,44 @@ def test_auto_spawn_success_exit_0(tmp_path):
     assert _fallback_spawn_id(_successor_cmd(r)) == spawn_id
 
 
-def test_new_workspace_and_notify_argv_values_match_spec(tmp_path):
-    # Flag PRESENCE is not coverage: `--cwd /tmp`, `--name BOGUS` and
+def test_new_surface_and_notify_argv_values_match_spec(tmp_path):
+    # Flag PRESENCE is not coverage: `--working-directory /tmp` and
     # `--title "BOGUS TITLE"` all survive a presence-only check. Each of these is
-    # a spec-named string (§5.4d steps 2-3), and a wrong --cwd is not cosmetic —
-    # per CLAUDE.md "Worktree Sessions" hooks resolve CWD from session start, so
-    # the successor's whole SDD session would be silently mis-rooted.
+    # a spec-named string (§5.4d steps 2-3), and a wrong working directory is not
+    # cosmetic — per CLAUDE.md "Worktree Sessions" hooks resolve CWD from session
+    # start, so the successor's whole SDD session would be silently mis-rooted.
+    #
+    # Migrated from new-workspace: the values move with the verb (`--cwd` ->
+    # `--working-directory`, `--name` -> no equivalent on a surface) and
+    # `--command` is GONE — the successor command now travels via `cmux send`,
+    # which is asserted in TestSurfaceTopology (test_spawn_handoff_v2.py).
     ctx = setup_worktree(tmp_path)
     r = run_spawn(
         ctx,
         tmp_path,
         "b1",
         env_extra=_reach_spawn(tmp_path, ctx),
-        cmux_body=_cmux_stub_recording_argv(),
+        cmux_body=cmux_v2_stub(),
     )
     assert r.returncode == 0
 
-    nw = _recorded_argv(tmp_path, "new-workspace")
-    for flag in CMUX_NEW_WORKSPACE_FLAGS:  # Task-0 frozen contract (SSOT)
+    nw = _recorded_argv(tmp_path, "new-surface")
+    for flag in CMUX_NEW_SURFACE_FLAGS:  # Task-0 frozen contract (SSOT)
         assert flag in nw
-    assert _flag_value(nw, "--name") == f"SDD resume: {Path(ctx['feat']).name}"
-    assert _flag_value(nw, "--cwd") == _worktree_root(ctx)
+    assert _flag_value(nw, "--workspace") == "TEST-WS"  # the caller's workspace
+    assert _flag_value(nw, "--type") == "terminal"
+    assert _flag_value(nw, "--working-directory") == _worktree_root(ctx)
     assert _flag_value(nw, "--focus") == "false"
-    assert _flag_value(nw, "--command") == _successor_cmd(r)
+    assert "--command" not in nw, "launch goes through `send`, never the create verb"
 
     notify = _recorded_argv(tmp_path, "notify")
     for flag in CMUX_NOTIFY_FLAGS:
         assert flag in notify
     assert _flag_value(notify, "--title") == "SDD handoff"
-    assert _flag_value(notify, "--body").startswith("Hop 1/3 ")
+    # `Hop $SP_HOP/$MAX_HOPS`: 6, not 3 — no .sdd-session.json here, so the
+    # ceiling derivation falls to its floor. A RENDERED dependency on the
+    # moved default, invisible to any grep for the identifier.
+    assert _flag_value(notify, "--body").startswith("Hop 1/6 ")
 
 
 def test_spawn_log_record_fields_match_spec_log_format(tmp_path):
@@ -697,27 +754,45 @@ def test_spawn_log_record_fields_match_spec_log_format(tmp_path):
     # on outcomes. Only `workspace=` was ever checked, so corrupting any other
     # field left the suite green.
     ctx = setup_worktree(tmp_path)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=cmux_v2_stub(),
+    )
     assert r.returncode == 0
-    assert _spawn_log_fields(ctx, "intent") == {"hop": "1"}
+    # Exact equality, so step (f)'s new tasks_done= field must be listed here.
+    # 0 done reports in this fixture => a real 0, not the degraded "unknown".
+    assert _spawn_log_fields(ctx, "intent") == {"hop": "1", "tasks_done": "0"}
     outcome = _spawn_log_fields(ctx, "outcome")
     assert outcome["hop"] == "1"
-    assert outcome["workspace"] == "(spawned)"  # stub emits no `OK <ref>`
+    # PREMISE REWRITTEN (class iii). The old core degraded an empty capture to
+    # the `(spawned)` constant; Task 9 makes the ref LOAD-BEARING (rename and
+    # send both address it), so an unusable ref is a FAILURE, not a degradation,
+    # and `(spawned)` no longer exists anywhere. The surviving invariant — every
+    # §5.4d field is present and correct on a successful outcome — is unchanged
+    # and now covers the two v2 fields as well.
+    assert outcome["workspace"] == "TEST-WS"  # the caller's own workspace
+    assert outcome["surface"] == "surface:7"  # from the stub's `OK surface:7 …`
+    assert outcome["handshake"] == "ok"
+    assert "topology" not in outcome, "the surface path is the default, not a variant"
     assert outcome["launch"] == "auto"
     assert outcome["bundle"] == "b1"
+    assert outcome["tasks_done"] == "0"
     assert outcome["quota"].startswith("ok:")  # PACE_OK => remaining 63.0%
 
 
 def test_spawn_failure_keeps_hop_exits_3(tmp_path):
+    # Migrated: a spawn failure is now BOTH topologies failing. Failing only
+    # `new-surface` would exercise the fallback and SUCCEED, so both verbs are
+    # refused — the invariant (hop consumed, spawn-failed recorded, manual
+    # instructions printed, notify fired) is unchanged.
     ctx = setup_worktree(tmp_path)
-    body = (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; exit 5; fi\n'
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
-    )
-    r = run_spawn(
-        ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
-    )
+    env = _reach_spawn(tmp_path, ctx)
+    env["CMUX_NEW_SURFACE_RC"] = "5"
+    env["CMUX_WS_CREATE_RC"] = "5"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 3
     # The hop stays consumed even though the spawn FAILED — only possible if the
     # reservation ran first. This, not log ordering, is Decision 21's real guard.
@@ -741,25 +816,29 @@ def test_spawn_failure_keeps_hop_exits_3(tmp_path):
 
 
 def test_notify_failure_still_exit_0(tmp_path):
+    # Migrated to the v2 stub (its custom body emitted no `OK surface:` line, so
+    # the ref-shape check would fail the spawn for an unrelated reason). The
+    # invariant is unchanged: a post-spawn notify failure is non-retryable by
+    # contract and must not turn a successful spawn into a failure.
     ctx = setup_worktree(tmp_path)
-    body = (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "notify" ]; then exit 9; fi\n'
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
-    )
-    r = run_spawn(
-        ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
-    )
+    env = _reach_spawn(tmp_path, ctx)
+    env["CMUX_NOTIFY_RC"] = "9"
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0
+    assert "warn: notify failed" in r.stderr
 
 
 def test_picker_manual_spawn_uses_interactive_command(tmp_path):
+    # Migrated: the literal `new-workspace` assertion becomes `new-surface`, and
+    # the successor command now reaches the log through `cmux send` rather than
+    # `--command`. Invariant unchanged: the degraded mode sends the ATTENDED
+    # picker invocation, never the non-interactive one.
     ctx = setup_worktree(tmp_path)
     _spawnable(tmp_path, ctx)  # no metadata => picker-manual
-    r = run_spawn(ctx, tmp_path, "b1")
+    r = run_spawn(ctx, tmp_path, "b1", cmux_body=cmux_v2_stub())
     assert r.returncode == 0
     logged = (tmp_path / "cmux.log").read_text()
-    assert "new-workspace" in logged
+    assert "new-surface" in logged
     assert "--non-interactive" not in logged
     assert "/pickup b1" in logged
 
@@ -779,7 +858,7 @@ def test_append_prompt_file_written_on_real_spawn(tmp_path):
         args_b64=encode_args(["--append-system-prompt-file", "/tmp/gone.md"]),
         append_b64=base64.b64encode(content).decode(),
     )
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub())
     assert r.returncode == 0
     target = (
         tmp_path / "home" / ".claude-codex-handoff" / "append-prompts" / "b1-hop1.md"
@@ -806,36 +885,43 @@ def test_fallback_tail_spawn_id_correlates_with_intent_record(tmp_path):
     # leaves every "is a uuid" assertion green while the child's runtime-failure
     # record no longer correlates to the parent's intent record.
     ctx = setup_worktree(tmp_path)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=cmux_v2_stub(),
+    )
     assert r.returncode == 0
     intent = [i for k, i, _ in _spawn_log_records(ctx) if k == "intent"]
     assert len(intent) == 1
     assert _fallback_spawn_id(_successor_cmd(r)) == intent[0]
 
 
-def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
+def test_reservation_lands_before_cmux_new_surface_runs(tmp_path):
     # Decision 21 is about WHEN the reservation happens, not the order the lines
     # end up in the file. Writing `intent` AFTER the spawn but before the outcome
     # leaves the file order intact and every ordering assertion green — verified
     # by mutation. So ask the spawn itself: the stub snapshots both reservation
-    # artifacts at `new-workspace` time, which is the only moment that proves the
-    # hop was already consumed when the workspace was created.
+    # artifacts at `new-surface` time, which is the only moment that proves the
+    # hop was already consumed when the target was created.
+    #
+    # The probe is INJECTED into the shared v2 stub rather than forked into a
+    # bespoke body, so it cannot drift from the stub every other test drives.
     ctx = setup_worktree(tmp_path)
-    body = (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "new-workspace" ]; then\n'
+    probe = (
+        'if [ "$1" = "new-surface" ]; then\n'
         '  cp "$SPAWN_LOG_PROBE" "$CMUX_LOG.log-at-spawn" 2>/dev/null\n'
         '  cp "$HOPS_PROBE" "$CMUX_LOG.hops-at-spawn" 2>/dev/null\n'
-        "fi\n"
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
+        "fi"
     )
     env = _reach_spawn(tmp_path, ctx)
     env["SPAWN_LOG_PROBE"] = str(ctx["reports"] / "handoff-spawn.log")
     env["HOPS_PROBE"] = str(ctx["reports"] / ".handoff-hops")
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=body)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra=env, cmux_body=cmux_v2_stub(probe))
     assert r.returncode == 0
     at_spawn = tmp_path / "cmux.log.log-at-spawn"
-    assert at_spawn.exists(), "cmux stub never reached new-workspace"
+    assert at_spawn.exists(), "cmux stub never reached new-surface"
     kinds = [
         f[2]
         for f in (ln.split() for ln in at_spawn.read_text().splitlines())
@@ -845,16 +931,23 @@ def test_reservation_lands_before_cmux_new_workspace_runs(tmp_path):
     assert (tmp_path / "cmux.log.hops-at-spawn").read_text().strip() == "1"
 
 
-# --- Task 6 fix: workspace ref capture (spec §5.4d steps 3-4) -----------------
-# `cmux new-workspace` prints `OK <ref>` on stdout (verified live: `OK workspace:8`).
-# The ref must reach all THREE consumers the spec names — the outcome record's
-# `workspace=` field, the notify body, and the script's stdout — with `(spawned)`
-# surviving only as the empty-capture fallback.
+# --- Task 6 fix, migrated by Task 9: ref capture (spec §5.4d steps 3-4) -------
+# `cmux new-surface` prints `OK surface:N pane:M workspace:K`; field 2 is the ref.
+# The ref must reach all THREE consumers the spec names — the outcome record, the
+# notify body, and the script's stdout. `(spawned)` is GONE: Task 9 makes the ref
+# load-bearing (rename-tab and send both address it), so an unusable ref is a
+# failure rather than a degradation, and a fake ref would be strictly worse than
+# none — it would address a target that does not exist.
 
 
 def _outcome_workspace(ctx):
     """`workspace=` value of the outcome record (spec §5.4d Log format)."""
     return _spawn_log_fields(ctx, "outcome").get("workspace")
+
+
+def _outcome_surface(ctx):
+    """`surface=` value of the outcome record (the v2 ref consumers care about)."""
+    return _spawn_log_fields(ctx, "outcome").get("surface")
 
 
 def _notify_line(tmp_path):
@@ -878,58 +971,73 @@ def _stdout_result_line(r):
 
 
 def _cmux_stub_emitting(ref_emit):
-    return (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; '
-        + ref_emit
-        + "; exit 0; fi\n"
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    """v2 stub whose `new-surface` emits a caller-chosen stdout instead of the
+    canonical `OK surface:7 …` line. Everything else (argv recording, the other
+    verbs, the marker-bearing `list-pane-surfaces`) is the shared body."""
+    return cmux_v2_stub(
+        'if [ "$1" = "new-surface" ]; then ' + ref_emit + "; exit 0; fi"
     )
 
 
-def test_workspace_ref_reaches_outcome_notify_and_stdout(tmp_path):
+def test_surface_ref_reaches_outcome_notify_and_stdout(tmp_path):
     ctx = setup_worktree(tmp_path)
     r = run_spawn(
         ctx,
         tmp_path,
         "b1",
         env_extra=_reach_spawn(tmp_path, ctx),
-        cmux_body=_cmux_stub_emitting('echo "OK workspace:42"'),
+        cmux_body=_cmux_stub_emitting('echo "OK surface:42 pane:1 workspace:5"'),
     )
     assert r.returncode == 0
-    assert _outcome_workspace(ctx) == "workspace:42"
-    assert "successor spawned in workspace:42" in _notify_line(tmp_path)
-    assert "workspace:42" in _stdout_result_line(r)
+    assert _outcome_surface(ctx) == "surface:42"
+    assert "successor confirmed in surface:42" in _notify_line(tmp_path)
+    assert "surface:42" in _stdout_result_line(r)
     # The placeholder is an implementation token, never user-visible output.
     assert "{workspace}" not in (tmp_path / "cmux.log").read_text()
 
 
-def test_workspace_ref_capture_survives_missing_trailing_newline(tmp_path):
-    # A `while read` parse silently drops a final unterminated line, degrading
-    # every real spawn to `(spawned)` while an echo-based stub stays green.
+def test_surface_ref_capture_survives_missing_trailing_newline(tmp_path):
+    # A `while read` parse silently drops a final unterminated line, which under
+    # v2 fails every real spawn while an echo-based stub stays green.
     ctx = setup_worktree(tmp_path)
     r = run_spawn(
         ctx,
         tmp_path,
         "b1",
         env_extra=_reach_spawn(tmp_path, ctx),
-        cmux_body=_cmux_stub_emitting("printf 'OK workspace:9'"),
+        cmux_body=_cmux_stub_emitting("printf 'OK surface:9 pane:1 workspace:5'"),
     )
     assert r.returncode == 0
-    assert _outcome_workspace(ctx) == "workspace:9"
-    assert "successor spawned in workspace:9" in _notify_line(tmp_path)
-    assert "workspace:9" in _stdout_result_line(r)
+    assert _outcome_surface(ctx) == "surface:9"
+    assert "successor confirmed in surface:9" in _notify_line(tmp_path)
+    assert "surface:9" in _stdout_result_line(r)
 
 
-def test_workspace_ref_falls_back_when_cmux_emits_nothing(tmp_path):
-    # Empty capture must degrade to the `(spawned)` constant — never an empty
-    # field in the outcome record or a dangling "spawned in " notify body.
+def test_empty_ref_capture_fails_the_spawn_instead_of_faking_one(tmp_path):
+    # PREMISE REWRITTEN (class iii). This used to assert that an empty capture
+    # DEGRADED to the `(spawned)` constant. Task 9 makes the ref load-bearing —
+    # rename-tab and send both address it — so a fabricated ref would address
+    # nothing and the launch would silently never happen. The new contract: an
+    # empty ref fails the surface path, the ONE workspace fallback is attempted,
+    # and with that create emitting nothing either the run ends spawn-failed with
+    # the hop consumed and NO launch attempted. Never a fake ref, never a blind
+    # launch.
     ctx = setup_worktree(tmp_path)
-    r = run_spawn(ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx))
-    assert r.returncode == 0
-    assert _outcome_workspace(ctx) == "(spawned)"
-    assert "successor spawned in (spawned)" in _notify_line(tmp_path)
-    assert "(spawned)" in _stdout_result_line(r)
+    r = run_spawn(
+        ctx,
+        tmp_path,
+        "b1",
+        env_extra=_reach_spawn(tmp_path, ctx),
+        cmux_body=cmux_v2_stub(
+            'case "$1 $2" in "new-surface "*|"workspace create") exit 0 ;; esac'
+        ),
+    )
+    assert r.returncode == 3, r.stderr
+    assert _outcome_workspace(ctx) == "spawn-failed"
+    assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+    log = cmux_log_text(tmp_path)
+    assert "workspace create" in log, "the one fallback attempt must have happened"
+    assert "send " not in log, "never launch blind into an unidentified target"
 
 
 def test_cmux_stdout_is_relayed_not_swallowed(tmp_path):
@@ -940,27 +1048,37 @@ def test_cmux_stdout_is_relayed_not_swallowed(tmp_path):
         tmp_path,
         "b1",
         env_extra=_reach_spawn(tmp_path, ctx),
-        cmux_body=_cmux_stub_emitting('echo "OK workspace:42"; echo "extra cmux note"'),
+        cmux_body=_cmux_stub_emitting(
+            'echo "OK surface:42 pane:1 workspace:5"; echo "extra cmux note"'
+        ),
     )
     assert r.returncode == 0
     assert "extra cmux note" in r.stderr
 
 
 def test_spawn_failure_rc_survives_stdout_capture(tmp_path):
-    # A command substitution or pipe around `cmux new-workspace` would clobber
-    # `$?`; the exit ladder (non-zero -> exit 3, hop consumed) depends on it.
+    # A command substitution or pipe around the create verb would clobber `$?`;
+    # the exit ladder (non-zero -> exit 3, hop consumed) depends on it. Migrated
+    # with its invariant intact and STRENGTHENED for v2: both verbs emit a
+    # perfectly VALID ref on stdout and then exit 5, so only the `rc` check —
+    # never the ref-shape check — can be what produces the failure.
     ctx = setup_worktree(tmp_path)
-    body = (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; '
-        'echo "OK workspace:42"; exit 5; fi\n'
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
+    body = cmux_v2_stub(
+        'if [ "$1" = "new-surface" ]; then echo "OK surface:42 pane:1 workspace:5"; exit 5; fi\n'
+        'if [ "$1 $2" = "workspace create" ]; then echo "OK workspace:42"; exit 5; fi'
     )
     r = run_spawn(
         ctx, tmp_path, "b1", env_extra=_reach_spawn(tmp_path, ctx), cmux_body=body
     )
     assert r.returncode == 3
     assert _outcome_workspace(ctx) == "spawn-failed"
+    # `-`, not `surface:42`: the fallback deliberately CLEARS the abandoned
+    # surface path's refs before its own attempt, so the record never names a
+    # target from a topology that was given up on. The "still names a
+    # partially-created target" property is pinned where it applies — on the
+    # fallback's own surface, in
+    # test_spawn_handoff_v2.py::TestSurfaceTopology::test_second_send_failure_is_spawn_failed.
+    assert _outcome_surface(ctx) == "-"
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
 
 
@@ -1097,12 +1215,6 @@ def test_invalid_quota_timeout_warns_and_quota_gate_stays_live(tmp_path):
 
 from spawn_handoff_helpers import make_stub
 
-
-def _cmux_log_text(tmp_path):
-    p = tmp_path / "cmux.log"
-    return p.read_text() if p.exists() else ""
-
-
 RESERVATION_WARN = "[spawn-handoff] reservation write failed:"
 DECODE_WARN = "[spawn-handoff] warn: forwarded-args decode failed"
 
@@ -1164,7 +1276,7 @@ def test_hops_write_failure_exits_3_without_spawning(tmp_path):
     # only if this guard's own `exit 3` runs: with it removed the intent write
     # succeeds and the spawn proceeds to rc 0.
     assert r.returncode == 3
-    assert "new-workspace" not in _cmux_log_text(tmp_path)
+    assert did_not_spawn(cmux_log_text(tmp_path))
     # Leg A's distinguishing signature: NOTHING was reserved. (Leg B's mirror is
     # `.handoff-hops == "1"` — there the hop IS consumed before its write fails.)
     assert "intent" not in _spawn_log_text(ctx)
@@ -1186,7 +1298,12 @@ def test_intent_write_failure_exits_3_without_spawning(tmp_path):
     assert _reservation_warning_lines(r, "cannot append intent record"), (
         f"no intent-write warning: {r.stderr!r}"
     )
-    assert "new-workspace" not in _cmux_log_text(tmp_path)
+    # The WEAKEST of the three class-(iv) sites, and the reason the discriminator
+    # is "does this assertion become FALSE if a spawn occurred?": the sibling leg
+    # `.handoff-hops == "1"` does NOT — the hop is consumed on the reservation
+    # path whether or not a spawn followed — so once the verb leg went vacuous,
+    # this test's only remaining spawn evidence was `rc == 3`.
+    assert did_not_spawn(cmux_log_text(tmp_path))
     # Discriminates this leg from the hops-write leg: the hop IS consumed here.
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
     assert "Manual resume required" in r.stdout
@@ -1199,33 +1316,44 @@ def _install_failing_mktemp(tmp_path):
     make_stub(stubs, "mktemp", "exit 1")
 
 
-def test_mktemp_failure_still_spawns_uncaptured(tmp_path):
-    # The spawn core captures cmux's stdout through a temp FILE; when mktemp is
-    # unavailable it must still spawn (uncaptured) rather than skip the spawn.
+def test_mktemp_failure_fails_the_spawn_rather_than_launching_blind(tmp_path):
+    # PREMISE REWRITTEN (class iii). The old core spawned UNCAPTURED when mktemp
+    # was unavailable and degraded the ref to `(spawned)`. Under v2 the ref is
+    # load-bearing, so "spawn without being able to read the ref" would mean
+    # creating a target nobody can address — worse than not creating one. New
+    # contract: mktemp failure fails BOTH topologies before launch, the outcome
+    # is spawn-failed, and the hop is consumed (the target may partially exist).
     ctx = setup_worktree(tmp_path)
     _spawnable(tmp_path, ctx)
     _install_failing_mktemp(tmp_path)
-    r = run_spawn(ctx, tmp_path, "b1")
-    assert r.returncode == 0
-    assert "new-workspace" in _cmux_log_text(tmp_path)
-    assert _outcome_workspace(ctx) == "(spawned)"  # nothing captured to parse
-
-
-def test_mktemp_failure_preserves_spawn_failure_rc(tmp_path):
-    # The uncaptured branch must propagate cmux's own exit code: the whole ladder
-    # (non-zero -> exit 3, hop consumed) hangs off that `rc=$?`.
-    ctx = setup_worktree(tmp_path)
-    _spawnable(tmp_path, ctx)
-    _install_failing_mktemp(tmp_path)
-    body = (
-        'if [ "$1" = "ping" ]; then echo PONG; exit 0; fi\n'
-        'if [ "$1" = "new-workspace" ]; then echo "$@" >> "$CMUX_LOG"; exit 5; fi\n'
-        'echo "$@" >> "$CMUX_LOG"; exit 0'
-    )
-    r = run_spawn(ctx, tmp_path, "b1", cmux_body=body)
-    assert r.returncode == 3
+    r = run_spawn(ctx, tmp_path, "b1", cmux_body=cmux_v2_stub())
+    assert r.returncode == 3, r.stderr
     assert _outcome_workspace(ctx) == "spawn-failed"
+    assert _outcome_surface(ctx) == "-", "no ref was capturable, so the field is `-`"
     assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+    assert "Manual resume required" in r.stdout
+
+
+def test_mktemp_failure_never_runs_the_spawn_verb(tmp_path):
+    # REPOINTED (class v). Its original invariant — "the UNCAPTURED branch must
+    # propagate cmux's own exit code, the whole ladder hangs off that `rc=$?`" —
+    # ceased to exist: `capture_cmux_ref` returns 1 on mktemp failure BEFORE
+    # running the verb, so there is no uncaptured branch and the custom stub's
+    # `exit 5` was unreachable, while every assertion (rc 3, spawn-failed, hops
+    # 1) still passed. It survived its own deletion. Repointed onto the invariant
+    # that the new code actually has, and that its sibling above does not cover:
+    # the failure happens BEFORE any cmux verb runs, so nothing is created at all.
+    # (rc propagation on a verb that DOES run is pinned by
+    # test_spawn_failure_rc_survives_stdout_capture.)
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    _install_failing_mktemp(tmp_path)
+    r = run_spawn(ctx, tmp_path, "b1", cmux_body=cmux_v2_stub())
+    assert r.returncode == 3
+    assert did_not_spawn(cmux_log_text(tmp_path)), (
+        "mktemp failure must abort before the create verb runs, not after"
+    )
+    assert "send " not in cmux_log_text(tmp_path)
 
 
 def test_version_installed_as_directory_degrades_to_picker_manual(tmp_path):
