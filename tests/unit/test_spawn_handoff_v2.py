@@ -10,7 +10,9 @@ absent, because Module 3 would build against the opposite of measured truth.
 
 import json
 import math
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -1886,3 +1888,220 @@ class TestPostSpawn:
         # WARNING names the input AND the collapsed canonical result.
         assert "SUPERPOWERS_CMUX_POST_SPAWN=rename,rename" in r.stderr, r.stderr
         assert "canonicalized to rename (" in r.stderr, r.stderr
+
+
+# ══ Task 13: checked outcome writes (N63) + bookkeeping commit + card ═══════
+
+
+def _git(ctx, *args):
+    return subprocess.run(
+        ["git", *args], cwd=str(ctx["wt"]), capture_output=True, text=True
+    )
+
+
+def _porcelain(ctx):
+    return _git(ctx, "status", "--porcelain").stdout
+
+
+def _last_commit_subject(ctx):
+    return _git(ctx, "log", "-1", "--format=%s").stdout.strip()
+
+
+def _rev_count(ctx):
+    return _git(ctx, "rev-list", "--count", "HEAD").stdout.strip()
+
+
+def _last_commit_files(ctx):
+    out = _git(ctx, "show", "--name-only", "--pretty=format:").stdout
+    return [ln for ln in out.splitlines() if ln.strip()]
+
+
+class TestDurableOutcome:
+    """N63: an outcome-log write failure must warn + notify, and must NEVER
+    change the branch's own exit code. The successor is already spawned (or,
+    on the spawn-failed leg, the hop is already spent) by the time the
+    outcome append runs, so a lost audit record must never read as a
+    retryable failure.
+
+    Both tests use the same CMUX_SABOTAGE_ON_WAITFOR knob (see
+    spawn_handoff_helpers.py's stub docstring): it flips the log file
+    read-only from INSIDE the cmux stub, at the last verb call before the
+    branch's own outcome printf -- `wait-for` for the success leg, `workspace
+    create` for the spawn-failed leg (which never reaches wait-for at all).
+
+    Both tests also pin the CONDITION the diagnostic describes, not merely
+    that the diagnostic fired: N63's own BACKLOG text is "leaves only an
+    `intent` record -- indistinguishable from a process that died between
+    reservation and spawn". Asserting the warn text alone would pass even if
+    the fault injection landed somewhere else and the outcome record was
+    written fine; asserting `intent` present + `outcome` absent pins the
+    actual audit-trail gap the warn exists to name.
+
+    On the spawn-failed leg, `returncode == 3` is true with or without this
+    branch's own checked-write wrapping (that branch always exits 3 once
+    both spawn attempts fail) -- the wrapping is proven by the warn text and
+    the missing outcome record, not by the exit code, which is why both are
+    asserted rather than the exit code alone.
+    """
+
+    def test_unwritable_log_on_success_path_warns_still_exit_0(self, tmp_path):
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        log_path = str(ctx["reports"] / "handoff-spawn.log")
+        env = dict(env, CMUX_SABOTAGE_ON_WAITFOR="1", SABOTAGE_TARGET=log_path)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "outcome could not be recorded" in r.stderr, r.stderr
+        assert "NOT recorded" in cmux_log_text(tmp_path), cmux_log_text(tmp_path)
+        log = _spawn_log_text_or_empty(ctx)
+        assert " intent " in log, log  # the earlier write DID land
+        assert " outcome " not in log, log  # the sabotaged write did not
+
+    def test_unwritable_log_on_spawn_failed_path_still_exit_3(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        log_path = str(ctx["reports"] / "handoff-spawn.log")
+        env = _reach_gate(
+            tmp_path,
+            ctx,
+            CMUX_NEW_SURFACE_RC="1",
+            CMUX_WS_CREATE_RC="1",
+            CMUX_SABOTAGE_ON_WAITFOR="1",
+            SABOTAGE_TARGET=log_path,
+        )
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert "outcome could not be recorded" in r.stderr, r.stderr
+        assert "NOT recorded" in cmux_log_text(tmp_path), cmux_log_text(tmp_path)
+        log = _spawn_log_text_or_empty(ctx)
+        assert " intent " in log, log  # the earlier write DID land
+        assert " outcome " not in log, log  # the sabotaged write did not
+        # The reservation (hop + intent) is unaffected: it happened BEFORE the
+        # sabotage fired, and the ladder still consumes the hop on this leg.
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
+
+class TestBookkeepingCommit:
+    """N64: a successful spawn commits its own hop bookkeeping (hops counter,
+    spawn log, mechanics card) with explicit paths -- never `git add -A` --
+    so the successor's clean-tree precondition isn't tripped by the very hop
+    that spawned it. Timeout/spawn-failed never commit: an un-clean tree is
+    the deliberate signal that routes the operator to the tab or the manual
+    fallback."""
+
+    def test_success_commits_three_artifacts(self, tmp_path):
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert _last_commit_subject(ctx) == "chore(sdd): record handoff hop 1"
+        files = _last_commit_files(ctx)
+        feat = ctx["feat"]
+        assert f"{feat}/reports/.handoff-hops" in files, files
+        assert f"{feat}/reports/handoff-spawn.log" in files, files
+        assert f"{feat}/reports/handoff-mechanics.md" in files, files
+        assert _porcelain(ctx) == "", _porcelain(ctx)
+
+    def test_commit_never_sweeps_unrelated_worktree_state(self, tmp_path):
+        # `git add -A` is byte-identical to the explicit-paths form on a
+        # fixture whose only mid-run write IS the three artifacts (the
+        # existing "three artifacts" test above cannot discriminate the two
+        # -- both would commit the same files and leave a clean porcelain).
+        # A stray file created DURING the run (via the stub's `extra`
+        # injection point, after Precondition 1's clean-tree check has
+        # already passed) is the discriminator: explicit paths leave it
+        # untracked; `-A` would sweep it into the bookkeeping commit.
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        stray = ctx["wt"] / "stray-untracked.txt"
+        r = run_spawn(
+            ctx,
+            tmp_path,
+            "b1",
+            env_extra=env,
+            cmux_body=cmux_v2_stub(extra=f': > "{stray}"'),
+        )
+        assert r.returncode == 0, r.stderr
+        # Positive control: a file that never existed would trivially be
+        # absent from the commit, making the assertion below vacuous.
+        assert stray.exists(), "the stub's side effect never ran"
+        assert "stray-untracked.txt" not in _last_commit_files(ctx)
+        assert _porcelain(ctx) != "", (
+            "the stray file must remain untracked, not swept by `git add -A`"
+        )
+
+    def test_no_commit_flag_skips(self, tmp_path):
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        before = _rev_count(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", "--no-commit", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "--no-commit" in r.stderr and "uncommitted" in r.stderr, r.stderr
+        assert _rev_count(ctx) == before, "no new commit under --no-commit"
+        assert _porcelain(ctx) != "", "the tree must stay dirty with --no-commit"
+
+    def test_commit_failure_warns_never_fails(self, tmp_path):
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        before = _rev_count(ctx)
+        hooks_dir = ctx["wt"] / ".git" / "hooks"
+        hooks_dir.mkdir(parents=True, exist_ok=True)
+        hook = hooks_dir / "pre-commit"
+        hook.write_text("#!/bin/sh\nexit 1\n")
+        os.chmod(hook, 0o755)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "bookkeeping commit failed" in r.stderr, r.stderr
+        assert _rev_count(ctx) == before, "the failed commit must not land"
+
+    def test_timeout_path_does_not_commit(self, tmp_path):
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, CMUX_WAITFOR_RC="1")
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        _commit(ctx)
+        before = _rev_count(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 3, r.stderr
+        assert _rev_count(ctx) == before, "handshake=timeout must never commit"
+        assert "chore(sdd)" not in _last_commit_subject(ctx)
+
+    def test_card_generated_before_commit(self, tmp_path):
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        card = _git(
+            ctx, "show", f"HEAD:{ctx['feat']}/reports/handoff-mechanics.md"
+        ).stdout
+        assert "Mechanics Card" in card, card
+
+    def test_card_failure_warns_commits_rest(self, tmp_path):
+        # Malformed manifest -> write-mechanics-card.py exits 2 on the JSON
+        # parse (write-mechanics-card.py's own `except (OSError,
+        # json.JSONDecodeError)` path) without ever touching SCRIPT_DIR or
+        # $PYTHON, which every OTHER gate in this script also depends on.
+        # Same malformed-manifest technique as
+        # TestTasksDoneFallbackAndDenominator.test_stall_refusal_keeps_its_denominator_placeholder:
+        # a malformed manifest fails spawn-policy closed to `ask`, so
+        # --user-approved is required to reach the spawn sequence at all.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_POST_SPAWN="")
+        (ctx["wt"] / ctx["feat"] / ".sdd-session.json").write_text("{not json")
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", "--user-approved", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "mechanics card generation failed" in r.stderr, r.stderr
+        assert _last_commit_subject(ctx) == "chore(sdd): record handoff hop 1"
+        files = _last_commit_files(ctx)
+        assert f"{ctx['feat']}/reports/.handoff-hops" in files, files
+        assert f"{ctx['feat']}/reports/handoff-spawn.log" in files, files
+        assert f"{ctx['feat']}/reports/handoff-mechanics.md" not in files, files
+
+    def test_absent_manifest_skips_card_but_still_commits(self, tmp_path):
+        # Sibling of TestPolicyDial.test_absent_manifest_file_is_auto: a
+        # pre-v2 handoff (no .sdd-session.json at all) is a real, supported
+        # production path, and the `[ -f "$MANIFEST_FILE" ]` else-branch
+        # (card generation skipped, not attempted) is otherwise unexercised.
+        ctx = setup_worktree(tmp_path)
+        env = _reach_gate(tmp_path, ctx, SUPERPOWERS_CMUX_POST_SPAWN="")
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        assert r.returncode == 0, r.stderr
+        assert "mechanics card skipped" in r.stderr, r.stderr
+        assert _last_commit_subject(ctx) == "chore(sdd): record handoff hop 1"
+        files = _last_commit_files(ctx)
+        assert f"{ctx['feat']}/reports/.handoff-hops" in files, files
+        assert f"{ctx['feat']}/reports/handoff-spawn.log" in files, files
+        assert f"{ctx['feat']}/reports/handoff-mechanics.md" not in files, files

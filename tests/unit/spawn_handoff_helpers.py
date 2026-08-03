@@ -149,6 +149,20 @@ def cmux_log_text(tmp_path):
 #                         `[selected]` branch is indistinguishable from `if(0)`
 #                         — the same mutual masking Task 0's review caught at the
 #                         fixture level, recurring at the script level.
+#   CMUX_SABOTAGE_ON_WAITFOR + SABOTAGE_TARGET   (Task 13/N63) flips
+#                         SABOTAGE_TARGET (normally the fixture's
+#                         handoff-spawn.log) to chmod 444 from INSIDE the stub,
+#                         between the script's own intent append and its
+#                         outcome append — the only way to make the outcome
+#                         write fail while the earlier intent write (and the
+#                         spawn itself) succeeds. Wired at TWO verb call sites,
+#                         not one: `wait-for` covers the handshake=ok path (the
+#                         last verb call before the success outcome printf);
+#                         `workspace create` covers the spawn-failed path (where
+#                         wait-for is never reached — LAUNCH_ACCEPTED stays 0
+#                         before either verb call's failure return). Both sites
+#                         share one knob because a given run takes only one of
+#                         the two branches, so there is no ordering conflict.
 #
 # Both knobs are guarded BEFORE the default `printf`, so the default output is
 # byte-identical when neither is set.
@@ -180,7 +194,8 @@ case "$1" in
                  [ -n "$CMUX_SEND_RC" ] && exit "$CMUX_SEND_RC"
                  echo "OK surface:7 workspace:5"; exit 0 ;;
   send-key)      echo "OK surface:7 workspace:5"; exit 0 ;;
-  wait-for)      exit "${CMUX_WAITFOR_RC:-0}" ;;
+  wait-for)      [ -n "$CMUX_SABOTAGE_ON_WAITFOR" ] && chmod 444 "$SABOTAGE_TARGET" 2>/dev/null
+                 exit "${CMUX_WAITFOR_RC:-0}" ;;
   read-screen)   if [ -n "$CMUX_READ_SCREEN_RC" ]; then
                    [ -n "$CMUX_SCREEN_FILE" ] && cat "$CMUX_SCREEN_FILE"
                    exit "$CMUX_READ_SCREEN_RC"
@@ -190,6 +205,7 @@ case "$1" in
   notify)        [ -n "$CMUX_NOTIFY_RC" ] && exit "$CMUX_NOTIFY_RC"
                  echo OK; exit 0 ;;
   workspace)     [ "$2" = "create" ] || { echo OK; exit 0; }
+                 [ -n "$CMUX_SABOTAGE_ON_WAITFOR" ] && chmod 444 "$SABOTAGE_TARGET" 2>/dev/null
                  [ -n "$CMUX_WS_CREATE_RC" ] && exit "$CMUX_WS_CREATE_RC"
                  echo "OK workspace:9"; exit 0 ;;
   list-pane-surfaces)

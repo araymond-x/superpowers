@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved]
+# spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved] [--no-commit]
 #
 # Auto-spawn the SDD controller's successor session in a new cmux workspace via
 # the extended claude-picker. Invoked by context-handoff-protocol.md step 4.
@@ -76,18 +76,19 @@ EXPECTED_ENTRY_SKILL="superpowers:subagent-driven-development"
 PICKER_CONTRACT="1"
 
 # --- Arg parse -------------------------------------------------------------
-BUNDLE_ID=""; DRY_RUN=0; USER_APPROVED=0
+BUNDLE_ID=""; DRY_RUN=0; USER_APPROVED=0; NO_COMMIT=0
 for a in "$@"; do
   case "$a" in
     --dry-run) DRY_RUN=1 ;;
     --user-approved) USER_APPROVED=1 ;;
+    --no-commit) NO_COMMIT=1 ;;
     -*) echo "spawn-handoff-session.sh: unknown flag: $a" >&2; exit 1 ;;
     *) if [ -z "$BUNDLE_ID" ]; then BUNDLE_ID="$a"; else
          echo "spawn-handoff-session.sh: unexpected extra arg: $a" >&2; exit 1; fi ;;
   esac
 done
 if [ -z "$BUNDLE_ID" ]; then
-  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved]  (BUNDLE_ID required)" >&2
+  echo "usage: spawn-handoff-session.sh BUNDLE_ID [--dry-run] [--user-approved] [--no-commit]  (BUNDLE_ID required)" >&2
   exit 1
 fi
 
@@ -825,8 +826,13 @@ TOPOLOGY_FIELD=""
 if [ "$LAUNCH_ACCEPTED" != "1" ]; then
   # workspace=spawn-failed is the grammar's failure sentinel; surface= still
   # names a partially-created target when one exists, or `-` when none does.
-  printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=none%s\n' \
-    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "${SPAWN_SURFACE_REF:--}" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" >> "$SPAWN_LOG"
+  if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=none%s\n' \
+    "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "spawn-failed" "${SPAWN_SURFACE_REF:--}" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" >> "$SPAWN_LOG"; then
+    # N63: the successor EXISTS — a lost audit record must never look like a
+    # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+    cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+    echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+  fi
   cmux notify --title "SDD handoff" --body "Spawn failed after reservation — manual resume" 2>/dev/null || true
   echo "[spawn-handoff] spawn failed AFTER reservation (hop $SP_HOP consumed) — manual fallback." >&2
   print_manual_instructions
@@ -845,8 +851,13 @@ if ! wait_for_token; then
   if ! wait_for_token; then
     # Enrichment happens ONLY here, after the outcome is already decided.
     DIAG="$(diagnose_target)"
-    printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout diagnosis=%s%s%s\n' \
-      "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$DIAG" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"
+    if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=timeout diagnosis=%s%s%s\n' \
+      "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$DIAG" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" >> "$SPAWN_LOG"; then
+      # N63: the successor EXISTS — a lost audit record must never look like a
+      # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+      cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+      echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+    fi
     cmux notify --title "SDD handoff" --body "Successor in $SPAWN_SURFACE_REF spawned but NOT confirmed (diagnosis=$DIAG) — check that tab" 2>/dev/null || true
     # Every arm states that a spawn WAS attempted and that the hop is spent.
     # None may suggest nothing was spawned: that is what invites a second
@@ -920,9 +931,39 @@ run_post_spawn() {   # after handshake=ok ONLY; failures are WARNINGs by contrac
   return 0
 }
 [ -n "$POST_SPAWN" ] && run_post_spawn
-printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s%s\n' \
-  "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" "$POST_SPAWN_FIELD" >> "$SPAWN_LOG"
+if ! printf '%s %s outcome hop=%s workspace=%s surface=%s launch=%s bundle=%s quota=%s tasks_done=%s handshake=ok%s%s%s\n' \
+  "$(now_iso)" "$SPAWN_ID" "$SP_HOP" "$SPAWN_WORKSPACE_REF" "$SPAWN_SURFACE_REF" "$LAUNCH_MODE" "$BUNDLE_ID" "$QUOTA_STATUS" "$TASKS_DONE" "$TOPOLOGY_FIELD" "$BUDGET_FLAG" "$POST_SPAWN_FIELD" >> "$SPAWN_LOG"; then
+  # N63: the successor EXISTS — a lost audit record must never look like a
+  # retryable failure. Warn + notify; the exit code of this branch is unchanged.
+  cmux notify --title "SDD handoff" --body "Successor spawned but outcome NOT recorded (audit log unwritable) — check $SPAWN_LOG" 2>/dev/null || true
+  echo "[spawn-handoff] warn: outcome could not be recorded in $SPAWN_LOG — successor is running; fix the log before the next hop (stall check will read stale history)." >&2
+fi
 cmux notify --title "SDD handoff" --body "Hop $SP_HOP/$MAX_HOPS — successor confirmed in $SPAWN_SURFACE_REF" 2>/dev/null || \
   echo "[spawn-handoff] warn: notify failed (successor already spawned)" >&2
+
+# --- Mechanics card + hop bookkeeping commit (N64) --------------------------
+# A successful spawn commits its own bookkeeping (hops counter, spawn log,
+# mechanics card) so the successor's clean-tree precondition is not tripped
+# by the very hop that spawned it. Explicit paths only — NEVER `git add -A`,
+# the worktree may be shared with in-flight SDD artifacts. Card generation
+# and the commit are both best-effort: neither failure may change this
+# branch's exit code (the successor already exists).
+CARD_SCRIPT="$SCRIPT_DIR/write-mechanics-card.py"
+if [ -f "$MANIFEST_FILE" ] && [ -f "$CARD_SCRIPT" ]; then
+  if ! "$PYTHON" "$CARD_SCRIPT" --manifest "$MANIFEST_FILE" >/dev/null 2>&1; then
+    echo "[spawn-handoff] warn: mechanics card generation failed — successor must derive paths from the manifest itself." >&2
+  fi
+else
+  echo "[spawn-handoff] warn: mechanics card skipped (manifest or generator missing)." >&2
+fi
+if [ "$NO_COMMIT" = "1" ]; then
+  echo "[spawn-handoff] --no-commit: leaving hop bookkeeping uncommitted (successor's clean-tree checks will see it)." >&2
+else
+  git add "$HOPS_FILE" "$SPAWN_LOG" 2>/dev/null
+  [ -f "$REPORTS_DIR/handoff-mechanics.md" ] && git add "$REPORTS_DIR/handoff-mechanics.md" 2>/dev/null
+  if ! git commit -m "chore(sdd): record handoff hop $SP_HOP" >/dev/null 2>&1; then
+    echo "[spawn-handoff] warn: bookkeeping commit failed — commit reports/ manually (successor's clean-tree precondition will refuse otherwise)." >&2
+  fi
+fi
 echo "[spawn-handoff] spawned successor in $SPAWN_SURFACE_REF of $SPAWN_WORKSPACE_REF (launch=$LAUNCH_MODE handshake=ok). STOP this session."
 exit 0
