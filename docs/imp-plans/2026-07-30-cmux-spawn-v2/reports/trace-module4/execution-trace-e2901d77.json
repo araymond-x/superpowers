@@ -1,0 +1,27 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers--worktrees-cmux-spawn-v2/e2901d77-bc0e-49fb-98f5-4dbf002aba3b.jsonl",
+  "extracted_at": "2026-08-03T20:55:17.118499+00:00",
+  "total_messages": 961,
+  "skills_invoked": [
+    "superpowers:subagent-driven-development",
+    "handoff"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 6,
+      "phase": "pre-execution"
+    }
+  ],
+  "tasks": [],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}

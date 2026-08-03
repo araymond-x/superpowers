@@ -1,0 +1,67 @@
+{
+  "session_file": "/Users/araymond/.claude/projects/-Users-araymond-projects-claude-custom-superpowers--worktrees-cmux-spawn-v2/232417cd-ec2e-4567-aaa8-00851467eef7.jsonl",
+  "extracted_at": "2026-08-03T20:55:17.203448+00:00",
+  "total_messages": 439,
+  "skills_invoked": [
+    "pickup",
+    "superpowers:subagent-driven-development",
+    "handoff"
+  ],
+  "scripts_run": [
+    {
+      "script": "controller-checkpoint",
+      "count": 1,
+      "phase": "pre-execution"
+    },
+    {
+      "script": "validate-report",
+      "count": 2
+    }
+  ],
+  "tasks": [
+    {
+      "task_number": 16,
+      "task_name": null,
+      "dispatch": {
+        "found": true,
+        "description_snippet": "[task 16 fix] You are applying a set of quality-review fixes to ONE documentation file. Apply exactly the six fixes belo",
+        "message_index": 308
+      },
+      "subagent_return": {
+        "found": false,
+        "status": null,
+        "had_concerns": false,
+        "concern_text": null,
+        "had_deviations": false,
+        "deviation_text": null,
+        "message_index": null
+      },
+      "reviews": {
+        "spec_compliance": {
+          "dispatched": true,
+          "result": null,
+          "message_index": 296
+        },
+        "code_quality": {
+          "dispatched": false,
+          "result": null,
+          "message_index": null
+        }
+      },
+      "deviations_logged": true,
+      "report_file_exists": true,
+      "plan_checkbox_updated": false,
+      "anomalies": []
+    }
+  ],
+  "anomaly_summary": {
+    "total_anomalies": 0,
+    "reviews_skipped": 0,
+    "concerns_not_logged": 0,
+    "tasks_without_reports": 0,
+    "blocked_retried_unchanged": 0,
+    "done_with_concerns_not_routed": 0,
+    "plan_checkboxes_not_updated": 0
+  },
+  "anomaly_details": []
+}
