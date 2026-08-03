@@ -88,8 +88,6 @@ def test_signal_fires_when_spawn_id_set(tmp_path):
 
 
 def test_no_spawn_id_no_signal(tmp_path):
-    env = dict(os.environ)
-    env.pop("SUPERPOWERS_SPAWN_ID", None)
     result, _ = _run_hook(tmp_path, env_extra={"SUPERPOWERS_SPAWN_ID": ""})
     assert result.returncode == 0, result.stderr
     json.loads(result.stdout)  # still valid JSON
