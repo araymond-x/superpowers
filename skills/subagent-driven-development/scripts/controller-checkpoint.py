@@ -525,7 +525,9 @@ def _git_run(args, cwd=None, timeout=10):
         return None
 
 
-_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+_EMPTY_TREE_SHA = (
+    "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+)
 
 
 def _merge_base_is_head(git_root, base_ref):
@@ -552,9 +554,7 @@ def _feature_window_base(git_root, feature_dir):
     """
     if not feature_dir:
         return None
-    log = _git_run(
-        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
-    )
+    log = _git_run(["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root)
     if log is None or log.returncode != 0 or not log.stdout.strip():
         return None
     first = log.stdout.strip().splitlines()[0].strip()
@@ -1680,13 +1680,27 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 pass
         elif args.reports_dir:
             dispatch_log_path = os.path.join(args.reports_dir, ".dispatch-log")
-            # No manifest here, so git_root_for_check stays None and _git_run
-            # invokes git without -C — it inherits this process's cwd. Convert
-            # reports_dir's parent (the feature dir) into a path relative to
-            # that same cwd so the pathspec resolves against the right root.
+            # No manifest here, so resolve git_root_for_check the same way the
+            # manifest branch does (via _resolve_git_root) instead of leaving it
+            # None. Leaving it None makes _git_run invoke git WITHOUT -C, so git
+            # resolves the exclude pathspec against this PROCESS's actual OS cwd
+            # — which is not guaranteed to be the repo root (e.g. a subprocess
+            # test harness, or a caller invoked from a subdirectory). That
+            # mismatch silently narrows the `-- . :(exclude)<dir>` pathspec to
+            # files under the wrong cwd, turning this fail-closed integrity
+            # gate fail-open. Resolving git_root_for_check up front keeps both
+            # the git subprocess cwd AND the exclude pathspec anchored to the
+            # same root regardless of the process's cwd.
+            git_root_for_check = _resolve_git_root(Path(args.reports_dir))
+            # realpath (not abspath) on both sides: _resolve_git_root shells out
+            # to `git rev-parse --show-toplevel`, which resolves symlinks (e.g.
+            # macOS's /tmp -> /private/tmp) — abspath alone does not, so on a
+            # symlinked tmpdir the two sides would disagree and relpath would
+            # walk all the way up to the filesystem root instead of landing on
+            # the feature dir.
             exclude_dir_for_check = os.path.relpath(
-                os.path.dirname(os.path.abspath(args.reports_dir.rstrip("/"))),
-                os.getcwd(),
+                os.path.realpath(os.path.dirname(args.reports_dir.rstrip("/"))),
+                os.path.realpath(git_root_for_check),
             )
 
         git_findings = _check_verification_git_reality(
