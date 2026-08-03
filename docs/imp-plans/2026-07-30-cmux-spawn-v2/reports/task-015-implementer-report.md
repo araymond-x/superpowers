@@ -10,7 +10,7 @@ files_changed:
     description: "Added _commit_files_at helper (multi-file single commit, with mkdir for subdirs) and 3 tests: test_bookkeeping_commit_in_window_passes, test_source_commit_in_window_still_fails, test_no_exclude_dir_keeps_old_behavior"
 tests:
   written: 3
-  passing: 41
+  passing: 3
   command: ".venv/bin/python3 -m pytest tests/unit/test_pre_completion_gates.py -v"
   result: PASS
 contract_compliance:
