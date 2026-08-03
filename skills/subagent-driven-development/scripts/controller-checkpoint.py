@@ -525,9 +525,7 @@ def _git_run(args, cwd=None, timeout=10):
         return None
 
 
-_EMPTY_TREE_SHA = (
-    "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
-)
+_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
 
 
 def _merge_base_is_head(git_root, base_ref):
@@ -554,7 +552,9 @@ def _feature_window_base(git_root, feature_dir):
     """
     if not feature_dir:
         return None
-    log = _git_run(["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root)
+    log = _git_run(
+        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
+    )
     if log is None or log.returncode != 0 or not log.stdout.strip():
         return None
     first = log.stdout.strip().splitlines()[0].strip()
