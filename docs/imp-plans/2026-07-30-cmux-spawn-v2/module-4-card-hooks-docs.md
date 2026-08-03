@@ -456,7 +456,7 @@ The wait-for-stub side-effect trick: extend the v2 stub — when `CMUX_SABOTAGE_
 
 All three hook edits + the re-capture land in ONE commit — a split leaves `check-hooks.sh` failing between commits.
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
 
 ```python
 # session-start signal
@@ -467,6 +467,12 @@ def test_signal_fires_when_spawn_id_set(tmp_path):
 def test_no_spawn_id_no_signal(tmp_path): ...
 def test_cmux_absent_never_breaks_hook(tmp_path):
     # PATH without cmux + SUPERPOWERS_SPAWN_ID set -> exit 0, valid JSON (set -e survival)
+def test_cmux_present_but_failing_never_breaks_hook(tmp_path):
+    # PATH-stub cmux that `exit 1`s on wait-for + SUPERPOWERS_SPAWN_ID set ->
+    # exit 0, valid JSON (AC-1 says "all cases" — a failing binary is one)
+def test_cmux_present_but_hanging_never_blocks_hook(tmp_path):
+    # PATH-stub cmux `sleep 5` on wait-for + SUPERPOWERS_SPAWN_ID set -> hook
+    # itself returns well under 5s (proves the backgrounding, not just set -e)
 
 # stop-hook Decision 15
 def test_warns_on_unmatched_bundle(tmp_path):
@@ -478,14 +484,21 @@ def test_decline_record_suppresses_warning(tmp_path):   # log has "decline bundl
 def test_unrelated_repo_bundle_ignored(tmp_path):       # repo_id mismatch -> silent
 def test_composes_with_checkpoint_fail_message(tmp_path):
     # checkpoint FAIL fixture + unmatched bundle -> ONE systemMessage containing both
+def test_missing_transcript_silently_skips_check(tmp_path):
+    # no .transcript_path (or file missing, or first line has no .timestamp) ->
+    # SESSION_START empty -> check is a deliberate no-op: exit 0, no warning,
+    # no crash. Pins the inert path as intentional, not undiscovered.
 
-# Check 3b
+# Check 3b (bidirectional: each test must fail against the OTHER's fix)
 def test_handoff_prefix_reports_allowed(tmp_path):
-    # reports/handoff-mechanics.md present -> dispatch NOT blocked by Check 3b
-def test_junk_reports_still_blocked(tmp_path):          # reports/notes.md -> still blocked
+    # reports/handoff-mechanics.md present -> dispatch NOT blocked by Check 3b.
+    # Demonstrate this test goes RED if `handoff-|` is removed from the alternation.
+def test_junk_reports_still_blocked(tmp_path):
+    # reports/notes.md -> still blocked. Demonstrate this test goes RED if the
+    # allowlist is widened to also match arbitrary junk names.
 ```
 
-- [ ] **Step 2: Implement `hooks/session-start`** — immediately after the `PLUGIN_ROOT` resolution (top of file, so the token fires even if later checks are slow):
+- [x] **Step 2: Implement `hooks/session-start`** — immediately after the `PLUGIN_ROOT` resolution (top of file, so the token fires even if later checks are slow):
 
 ```bash
 # cmux-spawn-v2 handshake (spec §5.2): when spawned by spawn-handoff-session.sh,
@@ -497,7 +510,7 @@ if [ -n "${SUPERPOWERS_SPAWN_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
 fi
 ```
 
-- [ ] **Step 3: Implement the stop-hook check** — after the SDD-detection block (`REPORTS_DIR`/`DEVIATIONS_FILE` exist), before the checkpoint run; collect messages instead of emitting immediately:
+- [x] **Step 3: Implement the stop-hook check** — after the SDD-detection block (`REPORTS_DIR`/`DEVIATIONS_FILE` exist), before the checkpoint run; collect messages instead of emitting immediately:
 
 ```bash
 # ─── Spawn-outcome step-completion check (cmux-spawn-v2 Decision 15) ─────────
@@ -536,7 +549,7 @@ fi
 
 then merge into the emission: if the checkpoint result is FAIL, append `\n\n$SPAWN_WARN` to `CONTEXT_MSG` when non-empty; if the checkpoint passes but `SPAWN_WARN` is non-empty, emit a systemMessage with just the warning (replace the silent `:` branch with that conditional). Keep the guaranteed `exit 0`. Note the bundle-id regex uses a `grep -qE` on a FILE (no pipe — no SIGPIPE hazard) and `$BID` is charset-safe (`^[A-Za-z0-9_.-]+$` by construction of bundle ids; still, quote it).
 
-- [ ] **Step 4: Implement Check 3b** — in `sdd-pre-dispatch-hook.sh`, extend the allowlist alternation (quoted here as it must read after the edit):
+- [x] **Step 4: Implement Check 3b** — in `sdd-pre-dispatch-hook.sh`, extend the allowlist alternation (quoted here as it must read after the edit):
 
 ```bash
 if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch|honesty-check-|handoff-|execution-trace-audit\.md|final-code-review\.md)'; then
@@ -544,14 +557,14 @@ if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-sum
 
 (one token added: `handoff-|` — covers `handoff-mechanics.md`; `handoff-spawn.log` and `.handoff-hops` were never scanned, the glob is `*.md`.)
 
-- [ ] **Step 5: Re-capture the baseline IN THE SAME COMMIT:**
+- [x] **Step 5: Re-capture the baseline IN THE SAME COMMIT:**
 
 ```bash
 bash tests/ARaymond-hook-baseline/check-hooks.sh --capture
 bash tests/ARaymond-hook-baseline/check-hooks.sh          # verify: PASS, no drift
 ```
 
-- [ ] **Step 6: Run** — new hook tests + the FULL unit suite (the pre-dispatch hook has a wide existing matrix) — all PASS. **Step 7: Commit** (all three hooks + baseline.txt + tests together) — `"feat(cmux-spawn-v2): session-start handshake signal + stop-hook spawn-outcome warning + Check 3b handoff- allowlist (baseline re-captured)"`.
+- [x] **Step 6: Run** — implementer runs the NEW hook tests in the foreground (do not background this run); the controller runs the FULL unit suite as the authoritative gate before Step 7. All edits must be final BEFORE `--capture` runs — capturing and then fixing a test afterward leaves a stale baseline. Order: tests green -> `--capture` -> `check-hooks.sh` (no flag) PASS -> commit. **Step 7: Commit** (all three hooks + baseline.txt + tests together) — `"feat(cmux-spawn-v2): session-start handshake signal + stop-hook spawn-outcome warning + Check 3b handoff- allowlist (baseline re-captured)"`. _(implementer commit `dd68580`; `[task 14 fix]` `b1432f3` removed dead test code; suite 833/1 xfail/0 fail; quality review found + controller fixed a stranded git-index revert of the stop-hook edit; latent pre-existing stop-hook gate bug found, deferred with a coupled BACKLOG row per the quality reviewer's DEFER verdict — see deviations.md)_
 
 ### Task 15: Check 9 :(exclude) pathspec
 
