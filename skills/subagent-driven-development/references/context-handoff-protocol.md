@@ -3,7 +3,7 @@
 The pre-dispatch hook has BLOCKED the next new-task implementer dispatch. The
 usual cause is context pressure: the controller's context reached the hard
 threshold (default 400k tokens) at a clean task boundary — the previous task is
-reviewed and at a clean boundary. Follow this protocol. Do NOT improvise. (A
+reviewed and committed. Follow this protocol. Do NOT improvise. (A
 different block — "the context gate has run blind for N consecutive dispatches" —
 means `context-probe.py` itself is failing; that one is NOT a handoff. Fix the
 probe or set `SUPERPOWERS_CTX_HANDOFF_BYPASS`, per the blind-streak message,
@@ -53,8 +53,8 @@ from exit 0.** A plain terminal, or any non-picker session, degrades this way by
 
 *Hop budget (per-feature, not global).* `.handoff-hops` lives in the ACTIVE FEATURE's
 `reports/` dir — a different project starts fresh at 0. Three numbers govern the chain:
-the **ceiling** (the hard kill switch: derived `max(6, 2 × expected_hops)`, or an explicit
-`SUPERPOWERS_CMUX_MAX_HOPS` which overrides absolutely), **`expected_hops`** (advisory only —
+the **ceiling** (the hard kill switch — see `SUPERPOWERS_CMUX_MAX_HOPS` below),
+**`expected_hops`** (advisory only —
 exceeding it logs `budget=over-expected` and notifies, never refuses), and the **stall**
 guard (consecutive zero-progress hops). Every spawn attempt is recorded in
 `reports/handoff-spawn.log` — check it first when diagnosing.
@@ -77,14 +77,14 @@ Act on its exit code:
 - **Exit 0** — spawned AND the readiness token was received (`handshake=ok`), or
   `--dry-run` completed. Report the surface ref (the tab) and the launch mode
   (`auto` = unattended non-interactive pickup; `picker-manual` = the successor opened
-  the interactive picker and a human must complete it there before the pickup runs — the
-  spawn notification fires either way and does not name the mode).
-  At exit 0 the handshake already succeeded (`handshake=ok`), so a `picker-manual`
-  launch means the attended picker was used AND completed — the child booted and the
-  pickup is running. Nothing further is required of the user on this path; "the picker
-  is still unfinished" cannot surface at exit 0 (it appears instead as **exit 3
-  `handshake=timeout`**, handled by that branch). Since the notification doesn't name the
-  mode, it's still worth telling the user which one occurred. Otherwise nothing more to do here.
+  the interactive picker (at exit 0 that picker has already been completed — see below) —
+  the spawn notification fires either way and does not name the mode).
+  Exit 0 means success: the handshake already succeeded (`handshake=ok`), so a
+  `picker-manual` launch means the attended picker was used AND completed — the child
+  booted and the pickup is running. Nothing further is required of the user here; the
+  "picker still unfinished" case cannot surface at exit 0 (that is **exit 3
+  `handshake=timeout`**, handled by its own branch). Since the notification doesn't name
+  the mode, still tell the user which launch mode occurred.
 - **Exit 3** — manual fallback (or a retryable refusal). The cause is in the printed
   `[spawn-handoff]` message and, for most causes, a `reason=`/`handshake=` field in the
   spawn log. The causes:
@@ -97,10 +97,11 @@ Act on its exit code:
     re-run `spawn-handoff-session.sh <bundle-id> --user-approved`.
   - **`reason=stall`** — too many consecutive zero-progress hops (the message reports
     `tasks X/Y, hops N`). If the chain is legitimately slow, raise the limit **via inline
-    env on the spawn invocation** — `SUPERPOWERS_CMUX_MAX_STALL_HOPS=2 spawn-handoff-session.sh <id>`
+    env on the spawn invocation** — `SUPERPOWERS_CMUX_MAX_STALL_HOPS=2 spawn-handoff-session.sh <bundle-id>`
     — then re-run. `settings.local.json` is NOT read by a running session.
   - **hop ceiling reached** — `HOPS ≥ ceiling`. The runaway guard fired; resume manually.
   - **quota low** — session quota below `SUPERPOWERS_CMUX_QUOTA_MIN_PCT` (default 15%).
+    Resume manually (or wait for quota to recover), then re-run.
   - **malformed hop counter** — `.handoff-hops` holds a non-integer. The runaway guard
     fails CLOSED rather than bypass itself: repair the file (a single non-negative integer)
     or delete it to reset the chain to 0, then re-run.
@@ -224,7 +225,11 @@ On the **manual-fallback path** the card is not generated for you — regenerate
 
     $PYTHON ~/.claude/skills/superpowers/subagent-driven-development/scripts/write-mechanics-card.py --manifest <feature-dir>/.sdd-session.json
 
-(the card itself prints an absolute-path form of this command in its header).
+Here `$PYTHON` is the superpowers **venv** interpreter (`$SUPERPOWERS_ROOT/.venv/bin/python3`) —
+`$PYTHON` is a hook-internal variable and is NOT defined in an interactive/agent shell, so
+substitute that venv python if it is unset. The card needs PyYAML + pydantic; a plain
+`python3` lacks them and exits 2. The `~/.claude/...` path shown above is already the
+standalone form to run.
 
 ## Recording a decline
 
