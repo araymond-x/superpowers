@@ -169,7 +169,7 @@ def _skeleton():
 - Create: `skills/subagent-driven-development/scripts/write-mechanics-card.py`
 - Test: `tests/unit/test_mechanics_card.py`
 
-- [ ] **Step 1: Failing tests** (the module-level harness from the "Test harness" section above must already be in the file):
+- [x] **Step 1: Failing tests** (the module-level harness from the "Test harness" section above must already be in the file):
 
 ````python
 def test_card_deterministic_with_contents(tmp_path):
@@ -213,18 +213,26 @@ def test_missing_inputs_degrade_not_crash(tmp_path):
 
 
 def test_byte_proxy_interference_invariant():
-    """Spec: card IS counted by the byte-proxy (real context), matched by NO
-    task-report glob or stale-artifact scan. Mirror the ACTUAL hook patterns —
-    grep sdd-pre-dispatch-hook.sh for `ctx_byte_estimate` + the stale-scan
-    prefixes and pin them here, citing the hook construct in a comment."""
+    """Spec: card IS counted by the byte-proxy (ctx_byte_estimate sums
+    reports/*.md — real context) but collides with NO task-report glob. Pinned
+    against the ACTUAL hook text so a glob change is caught. (The prior fenced
+    form asserted fnmatch facts about a string literal only — vacuous, could
+    never fail; amended pre-dispatch per the Task 11 fence-vs-prose discipline.)"""
     import fnmatch
+    hook = (ROOT / "skills" / "subagent-driven-development" / "scripts"
+            / "sdd-pre-dispatch-hook.sh").read_text()
     name = "handoff-mechanics.md"
-    assert fnmatch.fnmatch(name, "*.md")                      # byte-proxy counts it
+    # ctx_byte_estimate() globs "$REPORTS_DIR"/*.md — the card lands there, counted.
+    assert '"$REPORTS_DIR"/*.md' in hook
+    assert fnmatch.fnmatch(name, "*.md")
+    # task_report_glob() is task-${padded}-${report_type}* — card must not masquerade.
+    assert 'task-${padded}-${report_type}' in hook
+    assert not fnmatch.fnmatch(name, "task-*")
     assert not any(fnmatch.fnmatch(name, p) for p in
-                   ("task-*", "pre-execution-audit*", "context-summary*"))
+                   ("pre-execution-audit*", "context-summary*", "checkpoint-pre-dispatch*"))
 ````
 
-- [ ] **Step 2: Run to verify failure**, then **Step 3: Implement** `write-mechanics-card.py`:
+- [x] **Step 2: Run to verify failure**, then **Step 3: Implement** `write-mechanics-card.py`:
 
 ````python
 #!/usr/bin/env python3
@@ -353,7 +361,7 @@ if __name__ == "__main__":
 
 Verify the composed invocations against `run_pre_dispatch`/`run_pre_completion`'s REQUIREMENTS, not argparse — argparse marks `--deviations-file`/`--reports-dir` optional but both functions hard-require them (the N35 incident). Proof = running both composed commands verbatim against the fixture and getting a checkpoint result, not an argument error.
 
-- [ ] **Step 4: Run** — `.venv/bin/python3 -m pytest tests/unit/test_mechanics_card.py -v` — all PASS. **Step 5: Commit** — `"feat(cmux-spawn-v2): mechanics-card generator + golden tests"`.
+- [x] **Step 4: Run** — `.venv/bin/python3 -m pytest tests/unit/test_mechanics_card.py -v` — all PASS. **Step 5: Commit** — `"feat(cmux-spawn-v2): mechanics-card generator + golden tests"`.
 
 ### Task 13: Checked outcome writes (N63) + bookkeeping commit + card invocation
 
