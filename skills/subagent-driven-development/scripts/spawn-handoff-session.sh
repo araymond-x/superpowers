@@ -960,8 +960,9 @@ if [ "$NO_COMMIT" = "1" ]; then
   echo "[spawn-handoff] --no-commit: leaving hop bookkeeping uncommitted (successor's clean-tree checks will see it)." >&2
 else
   git add "$HOPS_FILE" "$SPAWN_LOG" 2>/dev/null
-  [ -f "$REPORTS_DIR/handoff-mechanics.md" ] && git add "$REPORTS_DIR/handoff-mechanics.md" 2>/dev/null
-  if ! git commit -m "chore(sdd): record handoff hop $SP_HOP" >/dev/null 2>&1; then
+  BK_PATHS=("$HOPS_FILE" "$SPAWN_LOG")
+  [ -f "$REPORTS_DIR/handoff-mechanics.md" ] && { git add "$REPORTS_DIR/handoff-mechanics.md" 2>/dev/null; BK_PATHS+=("$REPORTS_DIR/handoff-mechanics.md"); }
+  if ! git commit -m "chore(sdd): record handoff hop $SP_HOP" -- "${BK_PATHS[@]}" >/dev/null 2>&1; then
     echo "[spawn-handoff] warn: bookkeeping commit failed — commit reports/ manually (successor's clean-tree precondition will refuse otherwise)." >&2
   fi
 fi

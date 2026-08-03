@@ -1978,6 +1978,40 @@ class TestDurableOutcome:
         # sabotage fired, and the ladder still consumes the hop on this leg.
         assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
 
+    def test_unwritable_log_on_timeout_path_still_exit_3(self, tmp_path):
+        # Third leg of N63's checked-write coverage (task-13 quality review,
+        # Minor #2): success and spawn-failed were both fault-injected, but the
+        # handshake=timeout outcome printf had no test at all. Same knob wiring
+        # as the sibling above: CMUX_SABOTAGE_ON_WAITFOR fires from INSIDE the
+        # `wait-for` stub branch itself, so forcing CMUX_WAITFOR_RC=1 (timeout)
+        # means every wait-for call (the first attempt AND the one re-wait)
+        # chmod 444's the log before returning non-zero -- by the time the
+        # script reaches the handshake=timeout outcome printf, the log is
+        # already read-only.
+        ctx = setup_worktree(tmp_path)
+        log_path = str(ctx["reports"] / "handoff-spawn.log")
+        env = _reach_gate(
+            tmp_path,
+            ctx,
+            CMUX_WAITFOR_RC="1",
+            CMUX_SABOTAGE_ON_WAITFOR="1",
+            SABOTAGE_TARGET=log_path,
+        )
+        write_manifest(ctx, expected_hops=3, total_tasks=5)
+        _commit(ctx)
+        r = run_spawn(ctx, tmp_path, "b1", env_extra=env)
+        # handshake=timeout's own exit code is unchanged by the checked-write
+        # wrapping -- this leg always exits 3 once the re-wait also times out.
+        assert r.returncode == 3, r.stderr
+        assert "outcome could not be recorded" in r.stderr, r.stderr
+        assert "NOT recorded" in cmux_log_text(tmp_path), cmux_log_text(tmp_path)
+        log = _spawn_log_text_or_empty(ctx)
+        assert " intent " in log, log  # the earlier write DID land
+        assert " outcome " not in log, log  # the sabotaged write did not
+        # The reservation (hop + intent) is unaffected: it happened BEFORE the
+        # sabotage fired, and the ladder still consumes the hop on this leg.
+        assert (ctx["reports"] / ".handoff-hops").read_text().strip() == "1"
+
 
 class TestBookkeepingCommit:
     """N64: a successful spawn commits its own hop bookkeeping (hops counter,
@@ -2025,6 +2059,51 @@ class TestBookkeepingCommit:
         assert _porcelain(ctx) != "", (
             "the stray file must remain untracked, not swept by `git add -A`"
         )
+
+    def test_staged_stray_does_not_ride_into_bookkeeping_commit(self, tmp_path):
+        # task-13 fix round, Fix 1 (Important): the sibling test above
+        # discriminates `git add -A` from explicit `git add <paths>`, but the
+        # commit itself used to be a BARE `git commit` -- which commits the
+        # WHOLE INDEX, not just the paths just `git add`-ed. On a shared
+        # worktree a concurrent `git add` in the ~2-min spawn window rides an
+        # unrelated STAGED file into the `chore(sdd)` commit even though the
+        # explicit-paths `git add` calls above it never touched that file.
+        # The untracked-stray test cannot catch this: an untracked file is
+        # invisible to a bare `git commit` too (nothing to commit unless
+        # staged), so it only ever exercises the `git add` calls, never the
+        # commit's own scoping. This test instead STAGES the stray itself
+        # (via `git add`, from inside the same extra-injection hook the
+        # sibling test uses) so only Fix 1's `-- "${BK_PATHS[@]}"` pathspec on
+        # the commit -- not the `git add` calls -- can keep it out.
+        ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
+        stray = ctx["wt"] / "stray-staged.txt"
+        r = run_spawn(
+            ctx,
+            tmp_path,
+            "b1",
+            env_extra=env,
+            cmux_body=cmux_v2_stub(
+                extra=f': > "{stray}"; git add "{stray}" 2>/dev/null'
+            ),
+        )
+        assert r.returncode == 0, r.stderr
+        # Positive control: a file that was never staged would trivially be
+        # absent from the commit, making the assertion below vacuous.
+        assert stray.exists(), "the stub's side effect never ran"
+        files = _last_commit_files(ctx)
+        assert "stray-staged.txt" not in files, files
+        assert set(files) == {
+            f"{ctx['feat']}/reports/.handoff-hops",
+            f"{ctx['feat']}/reports/handoff-spawn.log",
+            f"{ctx['feat']}/reports/handoff-mechanics.md",
+        }, files
+        # The stray must remain STAGED (it was `git add`-ed) but UNCOMMITTED:
+        # a pathspec-scoped commit leaves other index entries untouched.
+        status_lines = [
+            ln for ln in _porcelain(ctx).splitlines() if "stray-staged.txt" in ln
+        ]
+        assert status_lines, _porcelain(ctx)
+        assert status_lines[0].startswith("A"), status_lines
 
     def test_no_commit_flag_skips(self, tmp_path):
         ctx, env = _success_ctx(tmp_path, SUPERPOWERS_CMUX_POST_SPAWN="")
