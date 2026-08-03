@@ -704,9 +704,19 @@ case "$1" in
   notify)        echo OK; exit 0 ;;
   workspace)     [ "$2" = "create" ] && { echo "OK workspace:9"; exit 0; }; echo OK; exit 0 ;;
   list-pane-surfaces)
-                 # The `* ` selected-row marker is load-bearing (cmux-verb-shapes.json
-                 # selected_row_marker): a marker-less row is exactly what let the old
-                 # field-position parser pass while failing 100% in production.
+                 # `list-pane-surfaces` and `workspace create` (below) are the
+                 # workspace-FALLBACK topology, not the surface-topology success path
+                 # this e2e's three Step-14 sub-runs all take (new-surface always
+                 # succeeds above, so the script never falls back to these verbs
+                 # here). The `* ` selected-row marker is nonetheless kept in its
+                 # faithful frozen shape (cmux-verb-shapes.json selected_row_marker)
+                 # for test-double fidelity — a marker-less row is what let the old
+                 # field-position parser pass while failing 100% in production — so
+                 # the double still behaves like real cmux if a future change routes
+                 # through the fallback, NOT because Step 14 asserts against it. The
+                 # fallback marker-parser itself is exercised by the unit suite
+                 # (tests/unit/spawn_handoff_helpers.py CMUX_LIST_SURFACES_NO_REF /
+                 # CMUX_LIST_SURFACES_TWO_ROWS knobs), not here.
                  printf '* surface:7  SDD resume: demo  [selected]\n'; exit 0 ;;
   *)             echo OK; exit 0 ;;
 esac
@@ -764,10 +774,12 @@ spawn_run "$SPAWN_WORK/out" "$SPAWN_WORK/cmux.log"
 grep -q "launch=auto" "$SPAWN_WORK/out" \
   || { echo "FAIL: expected launch=auto — fixture degraded to picker-manual"; cat "$SPAWN_WORK/out"; exit 1; }
 # new-surface argv carries the surface-topology flags (successor is a sibling tab
-# in the CALLER's own workspace, TEST-WS).
-grep -q "new-surface --workspace TEST-WS --type terminal" "$SPAWN_WORK/cmux.log" \
-  || { echo "FAIL: new-surface missing --workspace TEST-WS --type terminal"; cat "$SPAWN_WORK/cmux.log"; exit 1; }
-grep -q -- "--focus false" "$SPAWN_WORK/cmux.log" || { echo "FAIL: missing --focus false"; exit 1; }
+# in the CALLER's own workspace, TEST-WS). Anchored to the new-surface line itself
+# (not the whole log) and to the script's actual emission order — --workspace,
+# --type terminal, --working-directory, --focus false (create_surface_target()) —
+# so this can't pass on a `--focus false` emitted by some other verb.
+grep -q "^new-surface .*--workspace TEST-WS .*--type terminal .*--focus false" "$SPAWN_WORK/cmux.log" \
+  || { echo "FAIL: new-surface line missing --workspace TEST-WS / --type terminal / --focus false in expected order"; cat "$SPAWN_WORK/cmux.log"; exit 1; }
 # rename-tab scoped to the captured surface ref (surface:7 from new-surface stdout).
 grep -q "rename-tab .*--surface surface:7" "$SPAWN_WORK/cmux.log" \
   || { echo "FAIL: rename-tab not scoped to --surface surface:7"; cat "$SPAWN_WORK/cmux.log"; exit 1; }
