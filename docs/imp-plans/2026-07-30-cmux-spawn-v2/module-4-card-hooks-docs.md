@@ -370,7 +370,7 @@ Verify the composed invocations against `run_pre_dispatch`/`run_pre_completion`'
 - Modify: `docs/process-improvement-findings/BACKLOG.md` (N63 → done)
 - Test: `tests/unit/test_spawn_handoff_v2.py` (+ any `test_spawn_handoff.py` alignment)
 
-- [ ] **Step 1: Failing tests:**
+- [x] **Step 1: Failing tests:**
 
 ```python
 class TestDurableOutcome:                       # N63: warn, notify, NEVER change exit
@@ -406,7 +406,7 @@ class TestBookkeepingCommit:
 
 The wait-for-stub side-effect trick: extend the v2 stub — when `CMUX_SABOTAGE_ON_WAITFOR=1`, the `wait-for` branch runs `chmod 444 "$SABOTAGE_TARGET"` before exiting 0. This flips the log read-only between the intent append and the outcome append, inside one script run.
 
-- [ ] **Step 2: Implement.** Arg parse gains `--no-commit) NO_COMMIT=1 ;;` (init `NO_COMMIT=0`). Then in the spawn sequence:
+- [x] **Step 2: Implement.** Arg parse gains `--no-commit) NO_COMMIT=1 ;;` (init `NO_COMMIT=0`). Then in the spawn sequence:
 
 (a) Wrap ALL THREE outcome appends (success, timeout, spawn-failed) in checked writes. Shape (success-path shown; the other two identical but keep their `exit 3`):
 
@@ -443,9 +443,9 @@ The wait-for-stub side-effect trick: extend the v2 stub — when `CMUX_SABOTAGE_
 
 (Explicit paths only — NEVER `git add -A`; the worktree may be shared. Timeout and spawn-failed branches do NOT commit: the operator is already being routed to that tab/manual flow with an un-clean tree as a signal.)
 
-- [ ] **Step 3: Close N63** — edit its BACKLOG row status to `done (cmux-spawn-v2 Task 13, 2026-07-30)` with one line naming the checked-append + unchanged-exit design.
+- [x] **Step 3: Close N63** — edit its BACKLOG row status to `done (cmux-spawn-v2 Task 13, 2026-07-30)` with one line naming the checked-append + unchanged-exit design.
 
-- [ ] **Step 4: Run both unit files + commit** — `"feat(cmux-spawn-v2): durable outcome writes (N63) + hop bookkeeping commit + card invocation"`.
+- [x] **Step 4: Run both unit files + commit** — `"feat(cmux-spawn-v2): durable outcome writes (N63) + hop bookkeeping commit + card invocation"`. _(implementer commit `96c4d48`; `[task 13 fix]` `07b27b0` added Form-C commit pathspec + staged-stray & timeout-leg tests; suite 821/0)_
 
 ### Task 14: Hooks trio + one baseline re-capture
 
@@ -607,7 +607,7 @@ Caller (Check 9 block): in manifest mode, `exclude_dir = _md.get("paths", {}).ge
 - Modify: `tests/integration/sdd-e2e-test.sh` (Step 14 block + closing banner)
 
 - [ ] **Step 1: Rewrite the Step 14 stub + fixture:** keep the existing fixture scaffolding (repo, bundle, picker version, ARGS) and:
-  - cmux stub gains the v2 verbs (same shapes as the unit helper: `new-surface` → `OK surface:7 pane:2 workspace:5`; `workspace create` → `OK workspace:9`; `rename-tab` → `OK action=rename`; `send`/`send-key` → `OK`; `wait-for` → exit 0; `read-screen` → emits a file whose content includes the tab title and `/remote-control is active` so post-spawn verification passes; `list-pane-surfaces` → the Task 0 shape, which **MUST include the `* ` selected-row marker** (`* surface:7  SDD resume: demo  [selected]`) — a marker-less stub is what let the old field-position parser pass while failing 100% in production; `ping` → PONG).
+  - cmux stub gains the v2 verbs (same shapes as the unit helper: `new-surface` → `OK surface:7 pane:2 workspace:5`; `workspace create` → `OK workspace:9`; `rename-tab` → `OK action=rename tab=tab:77 workspace=workspace:29` (the FULL frozen `cmux-verb-shapes.json` shape — do NOT truncate to `OK action=rename`; the unit stub emits this exact string and `test_verb_shapes_fixture_contract` pins field 2 as `action=rename`); `send`/`send-key` → `OK`; `wait-for` → exit 0; `read-screen` → emits a file whose content includes the tab title and `/remote-control is active` so post-spawn verification passes; `list-pane-surfaces` → the Task 0 shape, which **MUST include the `* ` selected-row marker** (`* surface:7  SDD resume: demo  [selected]`) — a marker-less stub is what let the old field-position parser pass while failing 100% in production; `ping` → PONG).
   - Fixture feature dir gains a committed `.sdd-session.json` (standard tier, `total_tasks: 5`, `task_range: [0,4]`, `handoff: {expected_hops: 2, spawn_policy: auto}`) — written with the SAME shape `materialize-manifest.py` emits (generate it by running the real script against a tiny plan fixture if easier).
 - [ ] **Step 2: Assertions** (replacing the workspace-era ones):
   - `launch=auto` first (unchanged trap note), then: `new-surface` argv carries `--workspace TEST-WS --type terminal --focus false`; `rename-tab --surface surface:7`; the `send` line carries `export SUPERPOWERS_SPAWN_ID=` + the composed picker command; TWO `wait-for` lines never occur on the success path (exactly one); outcome record matches `handshake=ok`, `surface=surface:7`, `workspace=TEST-WS`, `tasks_done=0`; intent precedes outcome; hop == 1; the bookkeeping commit exists (`git -C "$SPAWN_WT" log --format=%s -1` == `chore(sdd): record handoff hop 1`) and the tree is clean.
