@@ -376,6 +376,31 @@ def _merged_dispatch_times(dispatch_log_path):
     return times
 
 
+def _sanitize_exclude_dir(candidate):
+    # type: (Optional[str]) -> Optional[str]
+    """Reject an exclude_dir candidate that would fail to narrow the Check 9
+    git pathspec (cmux-spawn-v2 Task 15 fix round 3, Critical Finding C2).
+
+    A derived exclude_dir of "." arises whenever reports_dir's parent (the
+    feature dir) IS the git root itself — a legal but non-default layout,
+    since --reports-dir is a free-form unvalidated argument, and manifest
+    mode's feature_dir can be "." the same way. `git log -- . :(exclude).`
+    then excludes the ENTIRE repository (rc=0, empty stdout), so Check 9
+    silently certifies ANY commit — including a real source-file
+    modification — as clean. A leading ".." means the candidate sits
+    outside git_root entirely (unreachable/malformed as an in-repo exclude
+    pathspec). Both cases are treated exactly like "no exclude_dir
+    configured" — the caller still runs Check 9, it just can't narrow out
+    feature-dir bookkeeping commits when this returns None.
+    """
+    if not candidate:
+        return None
+    normalized = os.path.normpath(candidate)
+    if normalized == "." or normalized.startswith(".."):
+        return None
+    return candidate
+
+
 def _check_verification_git_reality(
     verification_ids,  # type: set
     dispatch_log_path,  # type: str
@@ -525,7 +550,9 @@ def _git_run(args, cwd=None, timeout=10):
         return None
 
 
-_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+_EMPTY_TREE_SHA = (
+    "4b825dc642cb6eb9a060e54bf8d69288fbee4904"  # git's well-known empty tree
+)
 
 
 def _merge_base_is_head(git_root, base_ref):
@@ -552,9 +579,7 @@ def _feature_window_base(git_root, feature_dir):
     """
     if not feature_dir:
         return None
-    log = _git_run(
-        ["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root
-    )
+    log = _git_run(["log", "--reverse", "--format=%H", "--", feature_dir], cwd=git_root)
     if log is None or log.returncode != 0 or not log.stdout.strip():
         return None
     first = log.stdout.strip().splitlines()[0].strip()
@@ -1663,6 +1688,12 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
         dispatch_log_path = ""
         git_root_for_check = None
         exclude_dir_for_check = None
+        # True when a feature-dir/reports-dir candidate WAS derived but
+        # _sanitize_exclude_dir rejected it (e.g. it normalized to ".") —
+        # distinct from "no candidate at all" so the check detail can say
+        # Check 9 is running unnarrowed rather than silently looking identical
+        # to a normal exclusion (Task 15 fix round 3, Critical Finding C2).
+        exclude_dir_narrowing_failed = False
         if getattr(args, "manifest", None):
             try:
                 _mp = Path(args.manifest)
@@ -1674,8 +1705,14 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 )
                 # Decision 17: manifest paths are git-root-relative (see
                 # CLAUDE.md "Manifest is git-root-relative"), so feature_dir is
-                # already a valid pathspec relative to git_root_for_check.
-                exclude_dir_for_check = _md.get("paths", {}).get("feature_dir")
+                # already a valid pathspec relative to git_root_for_check —
+                # EXCEPT when feature_dir IS the git root, where it's ".": see
+                # _sanitize_exclude_dir.
+                _raw_exclude_dir = _md.get("paths", {}).get("feature_dir")
+                exclude_dir_for_check = _sanitize_exclude_dir(_raw_exclude_dir)
+                exclude_dir_narrowing_failed = bool(_raw_exclude_dir) and (
+                    exclude_dir_for_check is None
+                )
             except Exception:
                 pass
         elif args.reports_dir:
@@ -1698,16 +1735,27 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             # symlinked tmpdir the two sides would disagree and relpath would
             # walk all the way up to the filesystem root instead of landing on
             # the feature dir.
-            exclude_dir_for_check = os.path.relpath(
+            _raw_exclude_dir = os.path.relpath(
                 os.path.realpath(os.path.dirname(args.reports_dir.rstrip("/"))),
                 os.path.realpath(git_root_for_check),
             )
+            # When reports_dir's parent (the feature dir) IS the git root
+            # itself, the relpath above is "." — see _sanitize_exclude_dir.
+            exclude_dir_for_check = _sanitize_exclude_dir(_raw_exclude_dir)
+            exclude_dir_narrowing_failed = exclude_dir_for_check is None
 
         git_findings = _check_verification_git_reality(
             verification_ids,
             dispatch_log_path,
             git_root=git_root_for_check,
             exclude_dir=exclude_dir_for_check,
+        )
+        narrowing_note = (
+            " (note: the feature/reports dir resolves to the git root "
+            "itself, so Check 9 could not exclude bookkeeping commits — "
+            "it ran unnarrowed against the whole repository)"
+            if exclude_dir_narrowing_failed
+            else ""
         )
         if git_findings:
             detail_parts = [
@@ -1717,13 +1765,15 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
             checks["verification_git_reality"] = {
                 "status": "FAIL",
                 "detail": "Verification task(s) produced file modifications — requires review. "
-                + "; ".join(detail_parts),
+                + "; ".join(detail_parts)
+                + narrowing_note,
             }
             blockers.append("verification_git_reality")
         else:
             checks["verification_git_reality"] = {
                 "status": "PASS",
-                "detail": f"No file modifications during {len(verification_ids)} verification window(s)",
+                "detail": f"No file modifications during {len(verification_ids)} verification window(s)"
+                + narrowing_note,
             }
     else:
         checks["verification_git_reality"] = {
