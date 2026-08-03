@@ -647,13 +647,13 @@ Caller (Check 9 block): in manifest mode, `exclude_dir = _md.get("paths", {}).ge
 
 ## Module 4 Acceptance Criteria
 
-- [ ] Mechanics card is deterministic, contains the checkpoint invocations/paths/hop state/context status/cmux refs/recipe pointer, and its skeleton passes `validate-report.py`.
-- [ ] All three outcome appends are checked; failures warn + notify and never change the branch's exit code (N63 closed in BACKLOG).
-- [ ] A successful spawn leaves the fixture tree CLEAN with commit `chore(sdd): record handoff hop N`; `--no-commit` skips; timeout/spawn-failed branches never commit.
-- [ ] `SUPERPOWERS_SPAWN_ID` + cmux on PATH → session-start signals `sdd-hop-<id>`; hook exit/stdout unaffected in all cases.
-- [ ] Stop hook warns (systemMessage) on a this-session SDD bundle with no outcome/decline record, matched by bundle id; suppressed by either record type; composes with the checkpoint FAIL message.
-- [ ] `handoff-mechanics.md` passes Check 3b; junk names still blocked.
-- [ ] Check 9 ignores feature-dir bookkeeping commits and still fails on source commits; legacy no-exclude behavior pinned.
-- [ ] Protocol doc describes the surface default, fallback, handshake states, policy dial, knobs, decline one-liner, and the card — no stale workspace-only claims.
-- [ ] e2e Step 14 proves the composed surface flow end-to-end (incl. policy + over-expected sub-runs) and the banner count matches the run.
-- [ ] Task 18's verification report shows every suite green.
+- [x] Mechanics card is deterministic, contains the checkpoint invocations/paths/hop state/context status/cmux refs/recipe pointer, and its skeleton passes `validate-report.py`.
+- [x] All three outcome appends are checked; failures warn + notify and never change the branch's exit code (N63 closed in BACKLOG).
+- [x] A successful spawn leaves the fixture tree CLEAN with commit `chore(sdd): record handoff hop N`; `--no-commit` skips; timeout/spawn-failed branches never commit.
+- [x] `SUPERPOWERS_SPAWN_ID` + cmux on PATH → session-start signals `sdd-hop-<id>`; hook exit/stdout unaffected in all cases.
+- [x] Stop hook warns (systemMessage) on a this-session SDD bundle with no outcome/decline record, matched by bundle id; suppressed by either record type; composes with the checkpoint FAIL message.
+- [x] `handoff-mechanics.md` passes Check 3b; junk names still blocked.
+- [x] Check 9 ignores feature-dir bookkeeping commits and still fails on source commits; legacy no-exclude behavior pinned.
+- [x] Protocol doc describes the surface default, fallback, handshake states, policy dial, knobs, decline one-liner, and the card — no stale workspace-only claims.
+- [x] e2e Step 14 proves the composed surface flow end-to-end (incl. policy + over-expected sub-runs) and the banner count matches the run.
+- [x] Task 18's verification report shows every suite green.

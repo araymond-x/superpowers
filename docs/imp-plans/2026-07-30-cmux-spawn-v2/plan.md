@@ -262,16 +262,16 @@ No parallel modules: each consumes the previous module's artifacts. Within modul
 
 ## Acceptance Criteria (sprint-level; module files carry per-task criteria)
 
-- [ ] A HARD/soft handoff spawns the successor as a top tab in the caller's workspace, `--focus false` held, tab renamed `hop<N> SDD <feature>`.
-- [ ] The successor is visible in the Claude phone app with that name and `/rc` active, with zero human keystrokes.
-- [ ] `handoff-spawn.log` outcome records carry `surface=`, `tasks_done=`, launch mode, and handshake status; e2e Step 14 asserts them.
-- [ ] A chain completing tasks every hop is never refused below the ceiling; two consecutive zero-progress hops are refused with a progress-bearing message.
-- [ ] `expected_hops` appears in the manifest and the over-expected notify fires (e2e stub).
-- [ ] The successor's first dispatch requires no report-naming, checkpoint, or Check 9 remediation caused by handoff artifacts.
-- [ ] `handoff_spawn: ask` blocks scripted spawn without `--user-approved`; `off` refuses with `reason=policy-off`.
-- [ ] The wait-for token is the only exit-0 path: stubbed banner/dialog screens with no token exit 3 with the matching `diagnosis=` field; a received token exits 0 (`handshake=ok`).
-- [ ] All suites green (unit, e2e with updated banner count, regression, install); hook baseline re-captured in the same change as the hook edits.
-- [ ] SP1–SP4 deliverables committed under `docs/process-improvement-findings/` (SP1 may instead land as a `context-probe.py` fix with tests).
+- [x] A HARD/soft handoff spawns the successor as a top tab in the caller's workspace, `--focus false` held, tab renamed `hop<N> SDD <feature>`.
+- [x] The successor is visible in the Claude phone app with that name and `/rc` active, with zero human keystrokes. _(in-repo proof: stub/e2e drives the real script's rename/`/rc` verbs; **LIVE proof deferred to the post-merge live-hook smoke check, spec §7** — the installed hook/cmux resolve to the MAIN checkout. Not silently live-verified.)_
+- [x] `handoff-spawn.log` outcome records carry `surface=`, `tasks_done=`, launch mode, and handshake status; e2e Step 14 asserts them.
+- [x] A chain completing tasks every hop is never refused below the ceiling; two consecutive zero-progress hops are refused with a progress-bearing message.
+- [x] `expected_hops` appears in the manifest and the over-expected notify fires (e2e stub).
+- [x] The successor's first dispatch requires no report-naming, checkpoint, or Check 9 remediation caused by handoff artifacts.
+- [x] `handoff_spawn: ask` blocks scripted spawn without `--user-approved`; `off` refuses with `reason=policy-off`.
+- [x] The wait-for token is the only exit-0 path: stubbed banner/dialog screens with no token exit 3 with the matching `diagnosis=` field; a received token exits 0 (`handshake=ok`). _(success path `handshake=ok` proven in e2e Step 14a; the stubbed no-token exit-3 paths are unit/e2e-covered. **LIVE `diagnosis=trust-dialog`/banner branches against real cmux are deferred to the post-merge smoke check, spec §7.** Not silently live-verified.)_
+- [x] All suites green (unit, e2e with updated banner count, regression, install); hook baseline re-captured in the same change as the hook edits.
+- [x] SP1–SP4 deliverables committed under `docs/process-improvement-findings/` (SP1 may instead land as a `context-probe.py` fix with tests).
 
 ## Post-merge (not plan tasks — recorded so nobody forgets)
 
