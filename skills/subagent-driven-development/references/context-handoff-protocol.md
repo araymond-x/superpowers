@@ -79,9 +79,12 @@ Act on its exit code:
   (`auto` = unattended non-interactive pickup; `picker-manual` = the successor opened
   the interactive picker and a human must complete it there before the pickup runs — the
   spawn notification fires either way and does not name the mode).
-  **If `picker-manual`, tell the user in so many words that they must go finish
-  the picker in that tab or the successor never starts** — the notification will not
-  tell them. Otherwise nothing more to do here.
+  At exit 0 the handshake already succeeded (`handshake=ok`), so a `picker-manual`
+  launch means the attended picker was used AND completed — the child booted and the
+  pickup is running. Nothing further is required of the user on this path; "the picker
+  is still unfinished" cannot surface at exit 0 (it appears instead as **exit 3
+  `handshake=timeout`**, handled by that branch). Since the notification doesn't name the
+  mode, it's still worth telling the user which one occurred. Otherwise nothing more to do here.
 - **Exit 3** — manual fallback (or a retryable refusal). The cause is in the printed
   `[spawn-handoff]` message and, for most causes, a `reason=`/`handshake=` field in the
   spawn log. The causes:
