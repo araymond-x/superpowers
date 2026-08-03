@@ -380,6 +380,7 @@ def _check_verification_git_reality(
     verification_ids,  # type: set
     dispatch_log_path,  # type: str
     git_root=None,  # type: Optional[str]
+    exclude_dir=None,  # type: Optional[str]
 ):
     # type: (...) -> list
     """Check whether verification tasks produced file-modifying commits.
@@ -387,6 +388,11 @@ def _check_verification_git_reality(
     Reads implementer dispatch timestamps from the dispatch log,
     runs git log between consecutive task windows,
     returns findings for any file modifications detected.
+
+    exclude_dir (cmux-spawn-v2 Decision 17): when set, excludes that directory
+    (a git pathspec, relative to git_root) from the diff so feature-dir hop
+    bookkeeping commits (handoff-spawn.log, .handoff-hops, handoff-mechanics.md,
+    reports/) don't trip the check — only SOURCE modifications do.
     """
     if not verification_ids:
         return []
@@ -414,6 +420,12 @@ def _check_verification_git_reality(
         if end_ts:
             git_args.append(f"--before={end_ts}")
         git_args.extend(["--diff-filter=ACDMR", "--name-only"])
+        if exclude_dir:
+            # cmux-spawn-v2 Decision 17: hop bookkeeping (handoff-spawn.log,
+            # .handoff-hops, handoff-mechanics.md, reports) lands as commits inside
+            # the feature dir during verification windows — exclude the feature dir
+            # so only SOURCE modifications trip the check.
+            git_args.extend(["--", ".", f":(exclude){exclude_dir}"])
 
         result = _git_run(git_args, cwd=git_root)
         if result is not None and result.returncode == 0 and result.stdout.strip():
@@ -1650,6 +1662,7 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
     if verification_ids:
         dispatch_log_path = ""
         git_root_for_check = None
+        exclude_dir_for_check = None
         if getattr(args, "manifest", None):
             try:
                 _mp = Path(args.manifest)
@@ -1659,13 +1672,28 @@ def run_pre_completion(args: argparse.Namespace) -> dict:
                 dispatch_log_path = os.path.join(
                     _gr, _md.get("paths", {}).get("dispatch_log", "")
                 )
+                # Decision 17: manifest paths are git-root-relative (see
+                # CLAUDE.md "Manifest is git-root-relative"), so feature_dir is
+                # already a valid pathspec relative to git_root_for_check.
+                exclude_dir_for_check = _md.get("paths", {}).get("feature_dir")
             except Exception:
                 pass
         elif args.reports_dir:
             dispatch_log_path = os.path.join(args.reports_dir, ".dispatch-log")
+            # No manifest here, so git_root_for_check stays None and _git_run
+            # invokes git without -C — it inherits this process's cwd. Convert
+            # reports_dir's parent (the feature dir) into a path relative to
+            # that same cwd so the pathspec resolves against the right root.
+            exclude_dir_for_check = os.path.relpath(
+                os.path.dirname(os.path.abspath(args.reports_dir.rstrip("/"))),
+                os.getcwd(),
+            )
 
         git_findings = _check_verification_git_reality(
-            verification_ids, dispatch_log_path, git_root=git_root_for_check
+            verification_ids,
+            dispatch_log_path,
+            git_root=git_root_for_check,
+            exclude_dir=exclude_dir_for_check,
         )
         if git_findings:
             detail_parts = [

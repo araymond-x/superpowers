@@ -665,6 +665,28 @@ def _commit_file_at(repo, filename, iso_date):
     )
 
 
+def _commit_files_at(repo, filenames, iso_date):
+    """Create + commit MULTIPLE files in a single commit with a fixed date.
+
+    Creates parent directories as needed so subdirectory filenames (e.g.
+    feature-dir bookkeeping paths) work without a separate mkdir step.
+    """
+    for filename in filenames:
+        full_path = os.path.join(repo, filename)
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+        with open(full_path, "w") as f:
+            f.write("content\n")
+    subprocess.run(["git", "-C", repo, "add"] + list(filenames), check=True)
+    env = dict(os.environ)
+    env["GIT_AUTHOR_DATE"] = iso_date
+    env["GIT_COMMITTER_DATE"] = iso_date
+    subprocess.run(
+        ["git", "-C", repo, "commit", "-q", "-m", "bookkeeping commit"],
+        check=True,
+        env=env,
+    )
+
+
 class TestGitRealityCheck:
     """_check_verification_git_reality flags file-modifying commits in a
     verification task's dispatch window."""
@@ -748,6 +770,117 @@ class TestGitRealityCheck:
                 assert findings[0]["task"] == 3, (
                     f"Finding should name task 3: {findings}"
                 )
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_bookkeeping_commit_in_window_passes(self):
+        """A commit inside the window touching ONLY feature-dir bookkeeping
+        files (handoff-spawn.log + .handoff-hops under reports/) produces no
+        finding when exclude_dir names the feature dir (Decision 17)."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_files_at(
+                repo,
+                [
+                    "docs/imp-plans/feat/reports/handoff-spawn.log",
+                    "docs/imp-plans/feat/reports/.handoff-hops",
+                ],
+                "2026-03-01T10:30:00",
+            )
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="docs/imp-plans/feat",
+                )
+                assert findings == [], (
+                    f"Expected no findings (bookkeeping-only commit excluded): {findings}"
+                )
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_source_commit_in_window_still_fails(self):
+        """A commit inside the window touching a SOURCE file (outside the
+        excluded feature dir) still produces a finding even with exclude_dir
+        set — only feature-dir bookkeeping is exempted."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_file_at(repo, "src-file.py", "2026-03-01T10:30:00")
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="docs/imp-plans/feat",
+                )
+                assert findings, (
+                    f"Expected finding (source file outside exclude_dir): {findings}"
+                )
+                assert findings[0]["task"] == 3
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
+    def test_no_exclude_dir_keeps_old_behavior(self):
+        """Backward-compat pin: exclude_dir=None (the default) still flags a
+        bookkeeping-only commit — the exclusion is opt-in via exclude_dir."""
+        repo = _init_temp_git_repo()
+        try:
+            _commit_files_at(
+                repo,
+                [
+                    "docs/imp-plans/feat/reports/handoff-spawn.log",
+                    "docs/imp-plans/feat/reports/.handoff-hops",
+                ],
+                "2026-03-01T10:30:00",
+            )
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                findings = _checkpoint._check_verification_git_reality(
+                    {3}, log_path, git_root=repo
+                )
+                assert findings, (
+                    f"Expected finding without exclude_dir (old behavior): {findings}"
+                )
+                assert findings[0]["task"] == 3
             finally:
                 shutil.rmtree(log_dir, ignore_errors=True)
         finally:
