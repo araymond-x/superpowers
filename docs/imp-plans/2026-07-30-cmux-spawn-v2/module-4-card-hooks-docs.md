@@ -572,7 +572,7 @@ bash tests/ARaymond-hook-baseline/check-hooks.sh          # verify: PASS, no dri
 - Modify: `skills/subagent-driven-development/scripts/controller-checkpoint.py`
 - Test: the existing checkpoint git-reality test file (locate via `grep -rln "_check_verification_git_reality\|verification_git_reality" tests/unit/`)
 
-- [ ] **Step 1: Failing tests** (in that file's idiom — it already builds git fixtures with dispatch logs):
+- [x] **Step 1: Failing tests** (in that file's idiom — it already builds git fixtures with dispatch logs):
 
 ```python
 def test_bookkeeping_commit_in_window_passes(...):
@@ -585,7 +585,7 @@ def test_no_exclude_dir_keeps_old_behavior(...):
     # exclude_dir=None + bookkeeping commit -> finding present (backward-compat pin)
 ```
 
-- [ ] **Step 2: Implement.** Signature: `def _check_verification_git_reality(verification_ids, dispatch_log_path, git_root=None, exclude_dir=None):`. After `git_args.extend(["--diff-filter=ACDMR", "--name-only"])`:
+- [x] **Step 2: Implement.** Signature: `def _check_verification_git_reality(verification_ids, dispatch_log_path, git_root=None, exclude_dir=None):`. After `git_args.extend(["--diff-filter=ACDMR", "--name-only"])`:
 
 ```python
     if exclude_dir:
@@ -598,7 +598,9 @@ def test_no_exclude_dir_keeps_old_behavior(...):
 
 Caller (Check 9 block): in manifest mode, `exclude_dir = _md.get("paths", {}).get("feature_dir")` (captured in the same `try` that reads the dispatch log); in `args.reports_dir` mode, `exclude_dir = os.path.relpath(os.path.dirname(os.path.abspath(args.reports_dir.rstrip("/"))), git_root_or_cwd)` — mirror however the file resolves relative paths elsewhere; read it first. Pass `exclude_dir=exclude_dir` at the call site.
 
-- [ ] **Step 3: Run** — the checkpoint test files + full unit suite — PASS. **Step 4: Commit** — `"feat(cmux-spawn-v2): Check 9 excludes feature-dir bookkeeping via :(exclude) pathspec"`.
+- [x] **Step 3: Run** — the checkpoint test files + full unit suite — PASS. **Step 4: Commit** — `"feat(cmux-spawn-v2): Check 9 excludes feature-dir bookkeeping via :(exclude) pathspec"`.
+
+**Task 15 closed 2026-08-03** after 4 fix-and-review rounds (see `deviations.md` "| 15 |" rows for the full history): round 1 implementation (`f2701df`) → spec review FAIL (2 blocking) → round 2 fix (`710c40f`, `85e4190`) → spec re-review PASS → quality review found 2 Critical (`task-015-quality-review.md`) → round 3 fix (`d5b966b`, `9b41eda`) → spec re-review PASS → quality re-review found 2 Important + named the shared structural root cause (`task-015-quality-review-round-3.md`) → round 4 fix (`d4aec06`, the structural fix) → spec re-review PASS, no outstanding findings (`task-015-spec-review-round-4.md`). Final suite: 849 passed, 1 xfailed, 0 failed (independently confirmed by the controller and the round-4 spec reviewer).
 
 ### Task 16: context-handoff-protocol.md rewrite
 
