@@ -932,6 +932,63 @@ class TestGitRealityCheck:
         finally:
             shutil.rmtree(repo, ignore_errors=True)
 
+    def test_git_failure_produces_error_finding_not_silent_pass(self):
+        """Round 4 structural fix: git itself failing (rc != 0) must NOT be
+        swallowed into an empty findings list the way a genuinely clean
+        window is — it must produce its OWN distinguishable finding shaped
+        with an "error" key (not "commits"), so the caller can tell
+        "couldn't look" from "found nothing" instead of reporting both as
+        the same PASS.
+
+        _check_verification_git_reality does not sanitize its exclude_dir
+        argument itself (that is the caller's job, via
+        _sanitize_exclude_dir in run_pre_completion) — this drives a raw
+        git failure directly at the function under test, proving the
+        swallow fix at its source rather than only through the CLI-level
+        fallback behavior exercised elsewhere in this file.
+        """
+        repo = _init_temp_git_repo()
+        try:
+            _commit_file_at(repo, "src-file.py", "2026-03-01T10:30:00")
+
+            log_dir = tempfile.mkdtemp()
+            try:
+                log_path = os.path.join(log_dir, ".dispatch-log")
+                with open(log_path, "w") as f:
+                    f.write(
+                        "2026-03-01T10:00:00 DISPATCH implementer task=3 type=implementer\n"
+                    )
+                    f.write(
+                        "2026-03-01T11:00:00 DISPATCH implementer task=4 type=implementer\n"
+                    )
+
+                # An exclude_dir git cannot resolve as an in-repo pathspec
+                # makes `git log` exit non-zero (128, "is outside
+                # repository").
+                findings = _checkpoint._check_verification_git_reality(
+                    {3},
+                    log_path,
+                    git_root=repo,
+                    exclude_dir="/nonexistent/outside/feat",
+                )
+                assert findings, (
+                    "Expected a finding when git itself fails, not a "
+                    f"silent empty list: {findings}"
+                )
+                assert findings[0]["task"] == 3
+                assert "error" in findings[0], (
+                    "Expected an 'error'-shaped finding, not a "
+                    f"'commits'-shaped one: {findings}"
+                )
+                assert "commits" not in findings[0]
+                assert (
+                    "128" in findings[0]["error"] or "exited" in findings[0]["error"]
+                ), f"Expected the git exit code surfaced in the error: {findings}"
+            finally:
+                shutil.rmtree(log_dir, ignore_errors=True)
+        finally:
+            shutil.rmtree(repo, ignore_errors=True)
+
 
 class TestCheck9ArchiveAware:
     """N27: Check 9 merges archived dispatch logs + live log."""
@@ -1194,6 +1251,15 @@ class TestGitRealityCallerDerivationReportsDirMode:
         assert check.get("status") == "PASS", (
             f"Expected PASS (bookkeeping-only commit excluded): {check}, "
             f"stderr={result['stderr']}"
+        )
+        # Round 4 fix, Step 4 (MU3 coverage gap from the round-3 spec
+        # review): nothing previously pinned the NEGATIVE of
+        # exclude_dir_narrowing_failed — a hardcoded True there would leave
+        # every passing bookkeeping-commit test green with a spurious
+        # narrowing-failed note in `detail`. This is a normal layout where
+        # narrowing genuinely succeeds, so the note must be absent.
+        assert "could not exclude bookkeeping commits" not in check.get("detail", ""), (
+            f"Unexpected narrowing-failed note on a successful-narrowing PASS: {check}"
         )
 
     def test_source_commit_fails(self, tmp_path):
@@ -1490,4 +1556,138 @@ class TestGitRealityExcludeDirNormalizesToRoot:
         assert "verification_git_reality" in result["output"].get("blockers", [])
         assert "resolves to the git root" in check.get("detail", ""), (
             f"Expected the narrowing-failed note surfaced in check detail: {check}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Tests: Task 15 fix round 4 — quality re-review findings I-A + I-B
+# (structural fix for the git-failure swallow in
+# _check_verification_git_reality, plus the isabs guard in
+# _sanitize_exclude_dir and its zero-coverage ".." guard)
+# ---------------------------------------------------------------------------
+
+
+class TestGitRealityExcludeDirRejectsTraversalManifestMode:
+    """I-B: the ".."-prefix guard in _sanitize_exclude_dir is load-bearing
+    and had ZERO shipped-code coverage — no existing test ever produces a
+    ".."-prefixed candidate under shipped code (only under a hand-applied
+    mutant), so the clause could be silently deleted and every existing
+    test would stay green.
+
+    A manifest feature_dir of "../outside-the-repo/feat" is exactly the
+    shape the guard exists to reject: _sanitize_exclude_dir must reject it
+    (reason "resolves outside the repository"), Check 9 falls back to
+    running unnarrowed, and a real source-file commit is still caught.
+
+    Discriminates from the round-4 structural fix's own safety net: if the
+    ".." guard were removed, the unsanitized candidate would reach the git
+    pathspec directly, `git log` would exit 128 ("is outside repository"),
+    and the round-4 fix in _check_verification_git_reality would surface
+    THAT as an "error"-shaped finding ("could not verify — git log exited
+    128: ...") with no narrowing note — still a FAIL, but a different
+    detail message. Asserting on "file modifications detected" (not
+    "could not verify") and on the narrowing note being present pins the
+    guard's specific behavior, not just the fallback safety net's.
+    """
+
+    def test_source_commit_fails_traversal_feature_dir(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        # Overwrite feature_dir with a ".."-prefixed candidate after the
+        # manifest is written — reports_dir/dispatch_log stay correct so
+        # Check 9 still finds the real dispatch log; only the exclude_dir
+        # derivation input is malformed.
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        manifest["paths"]["feature_dir"] = "../outside-the-repo/feat"
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — a '..'-prefixed feature_dir must be rejected "
+            "by _sanitize_exclude_dir, falling back to unnarrowed Check 9, "
+            f"which must still catch the source commit: {check}, "
+            f"stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        detail = check.get("detail", "")
+        assert "resolves outside the repository" in detail, (
+            f"Expected the narrowing-failed note to name the real cause: {check}"
+        )
+        assert "file modifications detected" in detail, (
+            "Expected the unnarrowed fallback to catch the source commit "
+            f"directly (not via the git-error path): {check}"
+        )
+        assert "could not verify" not in detail, (
+            f"A working '..' guard means git never sees the bad pathspec: {check}"
+        )
+
+
+class TestGitRealityExcludeDirRejectsAbsoluteOutOfRepoManifestMode:
+    """I-A (round-4 quality re-review): an absolute, out-of-repo
+    feature_dir reached the Check 9 git pathspec and silently certified a
+    modified repo as clean — `git log -- . ':(exclude)/abs/outside'` exits
+    128, and the pre-round-4 gate collapsed "git failed" and "found
+    nothing" into the same PASS. Reachable via materialize-manifest.py's
+    git_root_relative(), which only WARNS (doesn't reject) an
+    absolute/out-of-repo feature_dir.
+
+    Proves the round-4 Step 2 defense-in-depth fix specifically (the
+    explicit os.path.isabs guard in _sanitize_exclude_dir), not merely the
+    Step 1 structural fallback: asserts the narrowing-failed note names the
+    real cause and that Check 9 catches the commit via the unnarrowed
+    fallback (not via the git-error path), mirroring the discrimination in
+    TestGitRealityExcludeDirRejectsTraversalManifestMode above.
+    """
+
+    def test_source_commit_fails_absolute_feature_dir(self, tmp_path):
+        repo_root = str(tmp_path)
+        _init_git_repo_at(repo_root)
+        feat_dir, reports_dir, plan_path, dev_path = _build_verification_workspace(
+            repo_root
+        )
+        manifest_path = _write_manifest(
+            repo_root, feat_dir, reports_dir, plan_path, dev_path
+        )
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+        manifest["paths"]["feature_dir"] = "/nonexistent/outside/feat"
+        with open(manifest_path, "w") as f:
+            json.dump(manifest, f, indent=2)
+
+        _commit_files_at(repo_root, ["src/feature.py"], "2026-03-01T10:30:00")
+
+        result = _run_pre_completion_cli(
+            manifest=manifest_path, deviations_file=dev_path, reports_dir=reports_dir
+        )
+        check = result["output"].get("checks", {}).get("verification_git_reality", {})
+        assert check.get("status") == "FAIL", (
+            "Expected FAIL — an absolute out-of-repo feature_dir must be "
+            "rejected by _sanitize_exclude_dir's isabs guard, falling back "
+            f"to unnarrowed Check 9, which must still catch the source "
+            f"commit: {check}, stderr={result['stderr']}"
+        )
+        assert "verification_git_reality" in result["output"].get("blockers", [])
+        detail = check.get("detail", "")
+        assert "resolves outside the repository" in detail, (
+            f"Expected the narrowing-failed note to name the real cause: {check}"
+        )
+        assert "file modifications detected" in detail, (
+            "Expected the unnarrowed fallback to catch the source commit "
+            f"directly (not via the git-error path): {check}"
+        )
+        assert "could not verify" not in detail, (
+            f"A working isabs guard means git never sees the bad pathspec: {check}"
         )
