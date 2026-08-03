@@ -634,16 +634,16 @@ Caller (Check 9 block): in manifest mode, `exclude_dir = _md.get("paths", {}).ge
 
 **Files:** none (read-only; any fix found routes back as an attributed fix dispatch, committed BEFORE this task's final re-dispatch — Check 9 keys on the latest implementer timestamp).
 
-- [ ] **Step 1:** `.venv/bin/python3 -m pytest tests/unit/ -q` — 0 failures (record the count).
-- [ ] **Step 2:** `bash tests/integration/sdd-e2e-test.sh` — PASS with the Task 17 banner count.
-- [ ] **Step 3:** `python3 tests/ARaymond-skill-regression/validate-all-skills.py` — PASS (advisory warnings allowed); `bash tests/ARaymond-installation/verify-symlink-install.sh` — PASS.
-- [ ] **Step 4:** `bash tests/ARaymond-hook-baseline/check-hooks.sh` — PASS, no drift (proves Task 14's capture landed with the edits).
-- [ ] **Step 5:** Contract greps, each with expected outcome recorded in the report:
+- [x] **Step 1:** `.venv/bin/python3 -m pytest tests/unit/ -q` — 0 failures (record the count). _(849 passed, 1 xfailed, 0 failed — 430s)_
+- [x] **Step 2:** `bash tests/integration/sdd-e2e-test.sh` — PASS with the Task 17 banner count. _(`E2E PIPELINE PASS - 15 steps composed correctly`; 14a/14b/14c PASS)_
+- [x] **Step 3:** `python3 tests/ARaymond-skill-regression/validate-all-skills.py` — PASS (advisory warnings allowed); `bash tests/ARaymond-installation/verify-symlink-install.sh` — PASS. _(regression 161 PASS/0 FAIL/2 WARN; install 104/0)_
+- [x] **Step 4:** `bash tests/ARaymond-hook-baseline/check-hooks.sh` — PASS, no drift (proves Task 14's capture landed with the edits). _(7 hooks intact, no hash/registration drift)_
+- [x] **Step 5:** Contract greps, each with expected outcome recorded in the report: _(all met; new-workspace = 1 comment-only hit; set -u/-e/pipefail = comments-only; SKILL.md 4993w; exit-3 anchored=9 / bare=14 / true executable=11 — reconciled in the report)_
   - `grep -n "new-workspace" skills/subagent-driven-development/scripts/spawn-handoff-session.sh` → NO live call sites (comments referencing history are fine; the fallback uses `workspace create`).
   - `grep -rn "set -u\|set -e\|pipefail" skills/subagent-driven-development/scripts/spawn-handoff-session.sh` → none.
   - `wc -w skills/subagent-driven-development/SKILL.md` → at or under the pre-sprint count (protocol content stayed in references/).
   - `grep -c "exit 3" skills/subagent-driven-development/scripts/spawn-handoff-session.sh` → record the new site count with `grep -nE '^[[:space:]]*exit 3'` (the CLAUDE.md "enumerate the sites" rule — the number goes in the report, not in docs).
-- [ ] **Step 6:** Verification report (`task-018-implementer-report.md`, `task_type: verification`, `files_changed: []`) listing every command + verbatim tail of its output.
+- [x] **Step 6:** Verification report (`task-018-implementer-report.md`, `task_type: verification`, `files_changed: []`) listing every command + verbatim tail of its output. _(report validates via validate-report.py rc 0; DONE, all gates clean, no fix routed)_
 
 ## Module 4 Acceptance Criteria
 
