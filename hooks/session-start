@@ -7,6 +7,14 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# cmux-spawn-v2 handshake (spec §5.2): when spawned by spawn-handoff-session.sh,
+# signal the parent's wait-for token. Backgrounded subshell + discarded output:
+# this hook runs under `set -euo pipefail` and the signal must NEVER affect hook
+# exit or stdout (the JSON contract below).
+if [ -n "${SUPERPOWERS_SPAWN_ID:-}" ] && command -v cmux >/dev/null 2>&1; then
+    ( cmux wait-for -S "sdd-hop-${SUPERPOWERS_SPAWN_ID}" >/dev/null 2>&1 & )
+fi
+
 # Check if legacy skills directory exists and build warning
 warning_message=""
 legacy_skills_dir="${HOME}/.config/superpowers/skills"

@@ -507,8 +507,10 @@ if [ -d "$REPORTS_DIR" ]; then
   for rf in "${REPORTS_DIR}"/*.md; do
     if [ -f "$rf" ]; then
       BASENAME=$(basename "$rf")
-      # Allow: task-NNN-*, pre-execution-audit*, context-summary*
-      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch|honesty-check-|execution-trace-audit\.md|final-code-review\.md)'; then
+      # Allow: task-NNN-*, pre-execution-audit*, context-summary*, handoff-*
+      # (handoff-mechanics.md; handoff-spawn.log and .handoff-hops are never
+      # scanned here since this loop globs *.md only)
+      if ! echo "$BASENAME" | grep -qE '^(task-[0-9]+-|pre-execution-audit|context-summary|partner-review|checkpoint-pre-dispatch|honesty-check-|handoff-|execution-trace-audit\.md|final-code-review\.md)'; then
         NON_STANDARD_FILES+=("$BASENAME")
       fi
     fi
