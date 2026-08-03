@@ -133,3 +133,9 @@
 2026-08-03T16:35:52Z task= type=other tokens=284468 source=probe tier=below action=allow
 2026-08-03T16:56:38Z task=15 type=other tokens=298298 source=probe tier=below action=allow
 2026-08-03T17:24:56Z task= type=other tokens=323350 source=probe tier=soft action=allow
+2026-08-03T18:05:00Z task= type=partner-review tokens=161851 source=probe tier=below action=allow
+2026-08-03T18:11:36Z task=16 type=implementer tokens=202230 source=probe tier=below action=allow
+2026-08-03T18:16:47Z task= type=spec-review tokens=223401 source=probe tier=below action=allow
+2026-08-03T18:24:20Z task=16 type=other tokens=245476 source=probe tier=below action=allow
+2026-08-03T18:27:30Z task= type=quality-review tokens=257036 source=probe tier=below action=allow
+2026-08-03T18:31:57Z task=16 type=other tokens=271738 source=probe tier=below action=allow
