@@ -45,6 +45,12 @@ Create a task for each of these items and complete them in order:
 **Optional spec input**: If the user provides a distilled spec, run `check-distillation.sh` to validate it. Record the spec path in the plan's `Source Contracts` field. Neither a spec nor a handoff is required — planning directly from conversation context is valid.
 
 **Entry mode recording**: If no brainstorming artifacts exist in the feature directory (no `spec.md`, no `spec-distilled.md` from a prior brainstorming run), set `entry_mode: direct` in the plan YAML frontmatter. Otherwise, default `entry_mode: brainstorming`.
+
+**Execution-mode materialization**: Resolve `handoff_spawn` for this plan. If the spec / distilled spec records an execution mode (`handoff_spawn: <auto|ask|off>` from brainstorming step 3.6), use it. On the direct path (no such record), present the same choice now:
+
+> "Execution mode for auto-spawn handoff — **auto** (default, spawns the successor in cmux when context fills), **ask** (spawns but asks you first each hop), or **off** (never auto-spawn; manual `/pickup` handoff). Press enter for **auto**, or type `ask` / `off`."
+
+Write the resolved value as `handoff_spawn: <choice>` in the plan's YAML frontmatter (mandatory execution variable).
 1. **Read spec / requirements** — understand what to build, identify source contracts
 2. **Read core files** the plan will modify — assess interfaces, patterns, existing structure. **Pattern Discovery**: search for existing implementations of similar functionality (see below).
 3. **Scope check** — if spec covers multiple independent subsystems, decompose into separate plans
@@ -188,40 +194,7 @@ Pattern References flow into tasks as a per-task field (see Task Structure below
 
 ## Plan Document Header
 
-**Every plan MUST start with this header:**
-
-```markdown
-# [Feature Name] Implementation Plan
-
-> **For agentic workers:** Before implementing, invoke `superpowers:subagent-driven-development` (recommended) or `superpowers:executing-plans` via the Skill tool. Do not begin implementation without loading the skill first — direct implementation bypasses review enforcement, quality gates, and hooks.
-
-**Goal:** [One sentence describing what this builds]
-
-**Architecture:** [2-3 sentences about approach]
-
-**Tech Stack:** [Key technologies/libraries]
-
-**Source Contracts:** [List of external schemas, APIs, handoff packages this plan consumes. Write "None" if this plan is self-contained.]
-
-**Contract Constraints:** [Non-negotiable facts from source contracts — types, formats, invariants. Write "None" if no external contracts.]
-
-**Shared Constants:** [Constants, type definitions, enum values, and canonical value lists that subagents must import -- not redefine. Format: `CONSTANT_NAME` from `path/to/file.py`. Write "None" if no shared constants apply.]
-
-**Pattern References:** [Existing files that demonstrate established patterns subagents should follow. Format: `path/to/file` — what pattern it demonstrates. Write "Greenfield — conventions defined in this plan" if no existing patterns apply. See Pattern Discovery section.]
-
-**Feature Archetype:** [Greenfield | Replacement | Extension | Refactor | Migration]
-
-**Code Footprint:**
-
-| Category | Files / Functions | Action | Dependencies to Verify |
-|----------|------------------|--------|----------------------|
-| New | `path/to/new/file` | Create | — |
-| Obsolete | `path/to/old/function` | Remove after verification | Check: [consumers] |
-| Retained | `path/to/kept/function` | Keep | — |
-| Modified | `path/to/changed/file` | Extend/modify | [existing consumers] |
-
----
-```
+**Every plan MUST start with the header shown in `references/plan-header-template.md`** — Goal, Architecture, Tech Stack, Source Contracts, Contract Constraints, Shared Constants, Pattern References, Feature Archetype, and the Code Footprint table.
 
 The **Source Contracts** field forces you to declare upfront what external data shapes this plan depends on. The **Contract Constraints** field forces you to record the non-negotiable facts before any implementation begins — field types, required formats, invariants the code must preserve.
 
@@ -240,6 +213,7 @@ Every plan file must begin with a YAML frontmatter block between `---` delimiter
 schema_version: 1
 feature_archetype: greenfield  # greenfield | replacement | extension | refactor | migration
 enforcement_tier: standard  # micro | standard (default: standard)
+handoff_spawn: auto  # auto | ask | off (default: auto) — cmux auto-spawn consent; see "Declaring handoff_spawn per Plan"
 source_contracts: "path/to/spec.md"  # or null
 shared_constants:
   - path: "app.config.X"
@@ -444,6 +418,18 @@ The path must be repo-root-relative, non-absolute, and contain no `..` segments.
 **Pre-completion Check 10** verifies that the declared file: (a) exists on disk, and (b) is part of this feature's changeset (added or modified — both tracked diffs and untracked new files count). Modifying an existing integration test to cover the new feature is acceptable.
 
 When no `integration_test` is declared, `validate-plan.py` emits an advisory WARNING if the plan content matches risk-surface patterns. The WARNING is informational — not all plans need integration tests.
+
+## Declaring `handoff_spawn` per Plan
+
+Every plan declares `handoff_spawn` in its YAML frontmatter — a **mandatory execution variable**, listed alongside `enforcement_tier`. It sets whether the SDD controller's successor session auto-spawns in cmux when the context-pressure gate blocks. Default `auto`. If the feature came through brainstorming, this value was chosen at the feature-name step (recorded in the spec); on the direct path, choose it at Step 0.5.
+
+| Value | Behavior |
+|-------|----------|
+| `auto` (default) | The successor SDD session spawns automatically in cmux when the controller's context fills; degrades to a manual handoff when cmux is unreachable. |
+| `ask` | Auto-spawn, but `spawn-handoff-session.sh` refuses without `--user-approved` (runtime `reason=policy-ask`) — the controller asks the user first each hop. |
+| `off` | Never auto-spawn; the controller performs the manual handoff (build bundle → user `/pickup`) at each boundary (runtime `reason=policy-off`). |
+
+Write `off` unquoted or quoted — both are accepted (the model coerces YAML-1.1 `off`→`False`→`"off"`); `handoff_spawn: on` is rejected. Consent is plan-level (whole feature); handoffs happen at task boundaries. For a per-run, plan-less opt-out without editing the plan, set `SUPERPOWERS_CMUX_AUTOSPAWN=0` (see `subagent-driven-development/references/context-handoff-protocol.md`).
 
 ## No Placeholders
 
