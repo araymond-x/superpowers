@@ -1,10 +1,14 @@
 """Tests for SddSession Pydantic model and its cross-field validators."""
+
 import pytest
 from pydantic import ValidationError
 
 from sdd_session import (
-    SddSession, ArtifactPaths, ModuleState, Enforcement,
-    ProcessRequirements, TIER_PROFILES, Handoff,
+    SddSession,
+    Enforcement,
+    ProcessRequirements,
+    TIER_PROFILES,
+    Handoff,
 )
 from _base import CURRENT_SCHEMA_VERSION
 
@@ -74,13 +78,25 @@ class TestSddSessionValidation:
             SddSession.model_validate(data)
 
     def test_task_range_exceeds_total(self):
-        data = {**MINIMAL_SESSION, "task_range": (0, 9), "total_tasks": 5, "midpoint": 4}
+        data = {
+            **MINIMAL_SESSION,
+            "task_range": (0, 9),
+            "total_tasks": 5,
+            "midpoint": 4,
+        }
         with pytest.raises(ValidationError, match="total_tasks is 5"):
             SddSession.model_validate(data)
 
     def test_midpoint_outside_range(self):
-        data = {**MINIMAL_SESSION, "task_range": (0, 4), "total_tasks": 5, "midpoint": 99}
-        with pytest.raises(ValidationError, match=r"midpoint \(99\) outside task_range"):
+        data = {
+            **MINIMAL_SESSION,
+            "task_range": (0, 4),
+            "total_tasks": 5,
+            "midpoint": 99,
+        }
+        with pytest.raises(
+            ValidationError, match=r"midpoint \(99\) outside task_range"
+        ):
             SddSession.model_validate(data)
 
     def test_midpoint_below_range(self):
@@ -99,7 +115,12 @@ class TestSddSessionModuleConsistency:
         data = {
             **MINIMAL_SESSION,
             "modules": [
-                {"id": 1, "title": "Module 1", "file": "m1.md", "task_ids": [0, 1, 2, 3, 4]},
+                {
+                    "id": 1,
+                    "title": "Module 1",
+                    "file": "m1.md",
+                    "task_ids": [0, 1, 2, 3, 4],
+                },
             ],
             "active_module_id": None,
         }
@@ -110,11 +131,18 @@ class TestSddSessionModuleConsistency:
         data = {
             **MINIMAL_SESSION,
             "modules": [
-                {"id": 1, "title": "Module 1", "file": "m1.md", "task_ids": [0, 1, 2, 3, 4]},
+                {
+                    "id": 1,
+                    "title": "Module 1",
+                    "file": "m1.md",
+                    "task_ids": [0, 1, 2, 3, 4],
+                },
             ],
             "active_module_id": 99,
         }
-        with pytest.raises(ValidationError, match=r"active_module_id \(99\) not in modules"):
+        with pytest.raises(
+            ValidationError, match=r"active_module_id \(99\) not in modules"
+        ):
             SddSession.model_validate(data)
 
     def test_valid_multi_module_session(self):
@@ -142,7 +170,9 @@ class TestSddSessionModuleConsistency:
 class TestTierProfiles:
     @pytest.mark.parametrize("tier_name", ["micro", "standard"])
     def test_enforcement_profile_validates(self, tier_name):
-        enforcement = Enforcement.model_validate(TIER_PROFILES[tier_name]["enforcement"])
+        enforcement = Enforcement.model_validate(
+            TIER_PROFILES[tier_name]["enforcement"]
+        )
         assert isinstance(enforcement, Enforcement)
 
     @pytest.mark.parametrize("tier_name", ["micro", "standard"])
@@ -167,9 +197,7 @@ class TestTierProfiles:
         assert reqs.partner_review_mode == "dispatched"
 
     def test_micro_enforcement_all_off(self):
-        enforcement = Enforcement.model_validate(
-            TIER_PROFILES["micro"]["enforcement"]
-        )
+        enforcement = Enforcement.model_validate(TIER_PROFILES["micro"]["enforcement"])
         assert enforcement.pre_execution_audit is False
         assert enforcement.partner_review is False
         assert enforcement.dispatch_provenance is False
@@ -192,53 +220,91 @@ class TestHandoffBlock:
         assert s.handoff is None
 
     def test_handoff_block_validates(self):
-        s = SddSession.model_validate({**MINIMAL_SESSION,
-                                       "handoff": {"expected_hops": 5, "spawn_policy": "ask"}})
+        s = SddSession.model_validate(
+            {**MINIMAL_SESSION, "handoff": {"expected_hops": 5, "spawn_policy": "ask"}}
+        )
         assert s.handoff.expected_hops == 5
         assert s.handoff.spawn_policy == "ask"
 
     def test_spawn_policy_defaults_auto(self):
-        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 3}})
+        s = SddSession.model_validate(
+            {**MINIMAL_SESSION, "handoff": {"expected_hops": 3}}
+        )
         assert s.handoff.spawn_policy == "auto"
 
     def test_expected_hops_must_be_positive(self):
         for bad in (0, -1):
             with pytest.raises(ValidationError):
-                SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": bad}})
+                SddSession.model_validate(
+                    {**MINIMAL_SESSION, "handoff": {"expected_hops": bad}}
+                )
 
     def test_round_trips_through_json(self):
-        s = SddSession.model_validate({**MINIMAL_SESSION,
-                                       "handoff": {"expected_hops": 4, "spawn_policy": "off"}})
+        s = SddSession.model_validate(
+            {**MINIMAL_SESSION, "handoff": {"expected_hops": 4, "spawn_policy": "off"}}
+        )
         import json
+
         s2 = SddSession.model_validate(json.loads(s.model_dump_json()))
         assert s2.handoff == s.handoff
 
-    def test_partial_block_rejected(self):        # deferred order B4 — see note below
+    def test_partial_block_rejected(self):  # deferred order B4 — see note below
         for partial in ({}, {"spawn_policy": "ask"}):
             with pytest.raises(ValidationError):
                 SddSession.model_validate({**MINIMAL_SESSION, "handoff": partial})
 
-    def test_spawn_policy_literal_is_closed_set(self):   # carry-forward from Task 4 quality r2
+    def test_spawn_policy_literal_is_closed_set(
+        self,
+    ):  # carry-forward from Task 4 quality r2
         from typing import get_args
-        assert get_args(Handoff.model_fields["spawn_policy"].annotation) == ("auto", "ask", "off")
 
-    def test_extra_key_rejected(self):    # pins StrictModel base — see note below
+        assert get_args(Handoff.model_fields["spawn_policy"].annotation) == (
+            "auto",
+            "ask",
+            "off",
+        )
+
+    def test_extra_key_rejected(self):  # pins StrictModel base — see note below
         with pytest.raises(ValidationError):
-            SddSession.model_validate({**MINIMAL_SESSION,
-                                       "handoff": {"expected_hops": 5, "typo": 1}})
+            SddSession.model_validate(
+                {**MINIMAL_SESSION, "handoff": {"expected_hops": 5, "typo": 1}}
+            )
 
-    def test_expected_hops_accepts_one(self):   # micro-tier value; pins the valid boundary
-        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 1}})
+    def test_expected_hops_accepts_one(
+        self,
+    ):  # micro-tier value; pins the valid boundary
+        s = SddSession.model_validate(
+            {**MINIMAL_SESSION, "handoff": {"expected_hops": 1}}
+        )
         assert s.handoff.expected_hops == 1
 
-    def test_rejects_invalid_spawn_policy(self):   # symmetric to Task 4's test_rejects_invalid_value
+    def test_rejects_invalid_spawn_policy(
+        self,
+    ):  # symmetric to Task 4's test_rejects_invalid_value
         with pytest.raises(ValidationError) as exc:
-            SddSession.model_validate({**MINIMAL_SESSION,
-                                       "handoff": {"expected_hops": 1, "spawn_policy": "prompt"}})
+            SddSession.model_validate(
+                {
+                    **MINIMAL_SESSION,
+                    "handoff": {"expected_hops": 1, "spawn_policy": "prompt"},
+                }
+            )
         assert exc.value.errors()[0]["type"] == "literal_error"
 
     def test_expected_hops_must_be_an_integer(self):
         with pytest.raises(ValidationError):
-            SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 2.5}})
-        s = SddSession.model_validate({**MINIMAL_SESSION, "handoff": {"expected_hops": 3}})
+            SddSession.model_validate(
+                {**MINIMAL_SESSION, "handoff": {"expected_hops": 2.5}}
+            )
+        s = SddSession.model_validate(
+            {**MINIMAL_SESSION, "handoff": {"expected_hops": 3}}
+        )
         assert type(s.handoff.expected_hops) is int
+
+    def test_spawn_policy_unquoted_off_coerces_to_off(self):
+        # YAML 1.1 unquoted `off` -> False; the Handoff validator coerces to "off"
+        assert Handoff(expected_hops=1, spawn_policy=False).spawn_policy == "off"
+
+    def test_spawn_policy_bare_on_rejected(self):
+        with pytest.raises(ValidationError) as exc:
+            Handoff(expected_hops=1, spawn_policy=True)
+        assert "on" in str(exc.value).lower()
