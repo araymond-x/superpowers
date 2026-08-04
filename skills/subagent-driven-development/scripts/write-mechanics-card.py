@@ -6,14 +6,16 @@ fresh SDD controller needs for its first checkpoint. Deterministic for fixed
 inputs (no timestamps of its own). Invoked by spawn-handoff-session.sh via
 $PYTHON, and standalone by the manual-fallback path. NOT hook-invoked, so the
 venv (PyYAML + pydantic) is a hard dependency — exit 2 if imports fail."""
+
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))                    # _handoff_support
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # _handoff_support
 sys.path.insert(0, str(Path(__file__).resolve().parent / "../../scripts/models"))
 
 from _handoff_support import derive_expected_hops, hop_ceiling  # noqa: E402
@@ -23,11 +25,14 @@ try:
     from implementer_report import ImplementerReport  # noqa: F401,E402  (skeleton mirrors its fields)
     from _report_utils import REQUIRED_SECTIONS  # noqa: E402
 except ImportError as exc:  # pragma: no cover
-    print(f"write-mechanics-card.py requires the venv (PyYAML/pydantic): {exc}", file=sys.stderr)
+    print(
+        f"write-mechanics-card.py requires the venv (PyYAML/pydantic): {exc}",
+        file=sys.stderr,
+    )
     sys.exit(2)
 
 CHECKPOINT = str(Path(__file__).resolve().parent / "controller-checkpoint.py")
-F = "`" * 3   # markdown fence, composed so this source embeds cleanly in fenced docs
+F = "`" * 3  # markdown fence, composed so this source embeds cleanly in fenced docs
 
 
 def _read(path):
@@ -45,11 +50,20 @@ def _last_line(text):
 def _skeleton():
     """Fields mirror ImplementerReport; sections mirror REQUIRED_SECTIONS —
     imported, not retyped, so model drift breaks this file's tests."""
-    fm = {"schema_version": 1, "task_id": 999, "task_type": "implementation",
-          "status": "DONE",
-          "files_changed": [{"path": "path/to/file", "description": "what changed"}],
-          "tests": {"written": 1, "passing": 1, "command": "pytest ...", "result": "PASS"}}
-    ImplementerReport.model_validate(fm)          # self-check: skeleton is model-valid
+    fm = {
+        "schema_version": 1,
+        "task_id": 999,
+        "task_type": "implementation",
+        "status": "DONE",
+        "files_changed": [{"path": "path/to/file", "description": "what changed"}],
+        "tests": {
+            "written": 1,
+            "passing": 1,
+            "command": "pytest ...",
+            "result": "PASS",
+        },
+    }
+    ImplementerReport.model_validate(fm)  # self-check: skeleton is model-valid
     body = "".join(f"\n## {name}\n\n(fill in)\n" for name, _ in REQUIRED_SECTIONS)
     return "---\n" + yaml.safe_dump(fm, sort_keys=False) + "---\n" + body
 
@@ -65,32 +79,60 @@ def main():
     except (OSError, json.JSONDecodeError) as exc:
         print(f"cannot read manifest: {exc}", file=sys.stderr)
         return 2
-    git_root = subprocess.run(["git", "rev-parse", "--show-toplevel"],
-                              capture_output=True, text=True,
-                              cwd=str(mp.parent)).stdout.strip() or str(mp.parent)
+    git_root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+        cwd=str(mp.parent),
+    ).stdout.strip() or str(mp.parent)
     paths = manifest.get("paths", {})
     feature_dir = paths.get("feature_dir", str(mp.parent))
-    reports = os.path.join(git_root, paths.get("reports_dir", os.path.join(feature_dir, "reports")))
+    reports = os.path.join(
+        git_root, paths.get("reports_dir", os.path.join(feature_dir, "reports"))
+    )
     hops = (_read(os.path.join(reports, ".handoff-hops")) or "0").strip()
     expected = derive_expected_hops(manifest)
-    ceiling = os.environ.get("SUPERPOWERS_CMUX_MAX_HOPS") or hop_ceiling(expected)
-    obs_line = _last_line(_read(os.path.join(reports, "context-observations.log"))) or "(none recorded)"
+    _raw_max_hops = os.environ.get("SUPERPOWERS_CMUX_MAX_HOPS")
+    ceiling = (
+        _raw_max_hops
+        if (_raw_max_hops and re.fullmatch(r"[0-9]+", _raw_max_hops))
+        else hop_ceiling(expected)
+    )
+    obs_line = (
+        _last_line(_read(os.path.join(reports, "context-observations.log")))
+        or "(none recorded)"
+    )
     spawn_log = _read(os.path.join(reports, "handoff-spawn.log")) or ""
-    outcome = _last_line("\n".join(l for l in spawn_log.splitlines() if " outcome " in l)) or "(none recorded)"
+    outcome = (
+        _last_line("\n".join(l for l in spawn_log.splitlines() if " outcome " in l))
+        or "(none recorded)"
+    )
     csum_at = (manifest.get("enforcement") or {}).get("context_summary_at")
-    csum = ("not required (micro tier)" if csum_at is None else
-            f"context summary due at task {csum_at} — "
-            + ("present" if os.path.isfile(os.path.join(reports, "context-summary.md"))
-               else "ABSENT (write before the midpoint dispatch)"))
+    csum = (
+        "not required (micro tier)"
+        if csum_at is None
+        else f"context summary due at task {csum_at} — "
+        + (
+            "present"
+            if os.path.isfile(os.path.join(reports, "context-summary.md"))
+            else "ABSENT (write before the midpoint dispatch)"
+        )
+    )
     manifest_abs = os.path.join(git_root, feature_dir, ".sdd-session.json")
-    deviations_abs = os.path.join(git_root, paths.get("deviations_file", os.path.join(feature_dir, "deviations.md")))
-    module_line = (f"- Active module plan: `{os.path.join(git_root, feature_dir, manifest['active_module_file'])}`\n"
-                   if manifest.get("active_module_file") else "")
+    deviations_abs = os.path.join(
+        git_root,
+        paths.get("deviations_file", os.path.join(feature_dir, "deviations.md")),
+    )
+    module_line = (
+        f"- Active module plan: `{os.path.join(git_root, feature_dir, manifest['active_module_file'])}`\n"
+        if manifest.get("active_module_file")
+        else ""
+    )
     card = f"""# SDD Handoff Mechanics Card
 
 Generated by write-mechanics-card.py for the successor session. Paths are
 absolute for THIS machine; regenerate standalone with:
-`$PYTHON {Path(__file__).resolve()} --manifest {manifest_abs}`
+`{sys.executable} {Path(__file__).resolve()} --manifest {manifest_abs}`
 
 ## Checkpoint invocations (copy verbatim)
 
