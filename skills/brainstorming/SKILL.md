@@ -34,6 +34,18 @@ Create a task for each of these items and complete them in order:
      - Dir exists, all plan tasks completed → auto-clean, proceed
      - Dir exists, incomplete work → prompt: resume or archive
      - Dir exists, no plan → prompt: resume or start fresh
+3.6. **Establish execution mode (`handoff_spawn`)** — right after the feature name, present the plan-time execution-mode choice. This is a mandatory plan execution variable; record the answer in the spec so writing-plans reads it (session memory does not survive a separate writing-plans invocation — the same carrier `entry_mode` / `enforcement_tier` use).
+
+   Present this choice (its own message; "press enter to accept the default", like the feature-name prompt):
+
+   > "How should this feature's SDD session hand off when the controller's context fills (cmux auto-spawn consent)? Recorded in the spec, materialized into the plan.
+   > - **auto** (default) — the successor SDD session spawns automatically in cmux; degrades to a manual handoff when cmux is unreachable.
+   > - **ask** — auto-spawn, but the controller asks you first each hop.
+   > - **off** — never auto-spawn; the controller hands off manually (you run `/pickup`) at each boundary.
+   >
+   > Press enter to accept **auto**, or type `ask` / `off`."
+
+   Remember the answer; you will record it as a Contract Fact when the spec is written (step 6) and carry it into the distilled spec.
 4. **Propose 2-3 approaches** — with trade-offs and your recommendation
 5. **Present design** — in sections scaled to their complexity, get user approval after each section
 6. **Write design doc** — save to `<feature-dir>/spec.md` and commit
@@ -143,7 +155,7 @@ The plan writer consumes the **distilled spec**, NOT the full design. The full d
 
 3. **Scope fences preserved**: Out-of-scope, non-goals, deferred-work, and "do not modify" lists are **negative contract material, not rationale** — they are what stops an implementation agent from "helpfully" building deferred work mid-task. Rule 2 strips WHY alternatives were rejected; it never strips WHAT is fenced out. Carry every fence item as its own line (keeping its deferral target) under the distilled spec's `## Out of scope — do not build` heading — do not merge, summarize, or demote fence items into prose in another section.
 
-4. **Contract facts promoted**: Any field types, format constraints, data shapes, or invariants are moved to a "Contract Facts" section at the TOP of the distilled spec — not buried in decision rationale.
+4. **Contract facts promoted**: Any field types, format constraints, data shapes, or invariants are moved to a "Contract Facts" section at the TOP of the distilled spec — not buried in decision rationale. Record the execution mode from step 3.6 as a Contract Fact: `handoff_spawn: <auto|ask|off>` — a plan execution variable the plan writer materializes into plan frontmatter.
 
 5. **Ambiguity resolved or flagged**: Anything in the original spec that was ambiguous or had multiple valid interpretations is either:
    - Resolved in the distilled version with a definitive statement, OR
