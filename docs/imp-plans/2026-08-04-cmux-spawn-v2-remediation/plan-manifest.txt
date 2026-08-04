@@ -1,0 +1,5 @@
+docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/plan.md
+docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-1-consent-model-coercion.md
+docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-2-consent-ux-docs.md
+docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-3-discoverability-killswitch.md
+docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-4-hook-papercuts.md
