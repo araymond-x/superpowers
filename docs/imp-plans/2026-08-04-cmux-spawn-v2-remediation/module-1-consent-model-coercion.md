@@ -346,7 +346,7 @@ git commit -m "fix(n83): coerce unquoted spawn_policy off->off on Handoff (sdd_s
 
 **Why materialize also normalizes:** materialize re-reads the raw plan frontmatter with PyYAML, independently of the Plan model, so it sees `False` for unquoted `off`. Without normalization it would write `false` into the manifest; the `Handoff` validator (Task 2) would then coerce it, but normalizing here keeps the stored value clean and is the load-bearing site now that Gate 1b passes and materialize actually runs.
 
-- [ ] **Step 1: Flip the existing pre-fix test + add the coercion assertion (use the real `_mf` helper)**
+- [x] **Step 1: Flip the existing pre-fix test + add the coercion assertion (use the real `_mf` helper)**
 
 `tests/unit/test_materialize_manifest.py` already has `class TestHandoffBlockMaterialization` with a helper `self._mf(ok=True, **kw)` (make_plan + run_materialize + cleanup) returning a dict with `["handoff"]["spawn_policy"]`, `["exit_code"]`, and `["stderr"]`. It already uses `extra_frontmatter="handoff_spawn: ask"`.
 
@@ -371,14 +371,14 @@ Rename it and flip the second assertion so unquoted `off` now **succeeds** and m
 
 (The absent-default `auto` case is already covered by `test_manifest_gains_handoff_block`.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_materialize_manifest.py -k "coerces_to_off or bare_off" -v`
 Expected: `test_bare_off_coerces_to_off_policy` FAILs on the second assertion — materialize currently makes unquoted `off` (False) fail SddSession construction (`spawn_policy: False` rejected).
 
 **Pre-execution audit note (Order 1):** because Pydantic runs nested-model field validators during parent construction, once Task 2's `Handoff` `mode="before"` validator has landed, `SddSession(handoff={"spawn_policy": False, ...})` already coerces to `"off"` on its own — this assertion may therefore **already PASS** before this task's own code change lands. That is expected and fine, not a TDD violation: Task 3's normalization in the handoff-block-building code is defense-in-depth (it protects the case where `handoff_spawn` reaches `SddSession` construction through a path other than this dict, e.g. a manually authored manifest), not the sole load-bearing site once Task 2 exists. If the assertion already passes, skip straight to Step 3, apply the normalization change anyway per this defense-in-depth rationale, and note in the task report that the test was already green pre-change rather than treating it as a broken red→green cycle.
 
-- [ ] **Step 3: Normalize in the handoff block**
+- [x] **Step 3: Normalize in the handoff block**
 
 In `materialize-manifest.py`, change the handoff block (lines ~117-120) from:
 
@@ -399,19 +399,19 @@ to:
     # bare `on` (True) is rejected upstream by the Plan gate and the Handoff validator.
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_materialize_manifest.py -k "coerces_to_off or bare_off" -v`
 Expected: all PASS.
 
-- [ ] **Step 5: Verify the script's reason=policy-off end-to-end (read-only check)**
+- [x] **Step 5: Verify the script's reason=policy-off end-to-end (read-only check)**
 
 Confirm `spawn-handoff-session.sh` already refuses with `reason=policy-off` when the manifest carries `spawn_policy=off` (Precondition 2b, line ~210-212). Grep for an existing test:
 
 Run: `/usr/bin/grep -rn "reason=policy-off\|spawn_policy=off\|policy-off" tests/unit/`
 Expected: an existing assertion in `test_spawn_handoff_v2.py` (or sibling). If NONE exists, add a bash-driven test using the `pytest-bash-stub-harness` (a manifest with `spawn_policy: off` → the script exits 3 and prints `reason=policy-off`). Do not duplicate an existing one.
 
-- [ ] **Step 6: Run the full Module 1 test surface + commit**
+- [x] **Step 6: Run the full Module 1 test surface + commit**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py tests/unit/test_models/test_sdd_session_model.py tests/unit/test_materialize_manifest.py tests/unit/test_n83_yaml_contract.py -q`
 Expected: all PASS.
@@ -423,9 +423,9 @@ git commit -m "fix(n83): materialize normalizes unquoted off->off; per-reader pr
 
 ## Acceptance Criteria (Module 1)
 
-- [ ] `Plan(handoff_spawn=False)` → `"off"`; `Plan(handoff_spawn=True)` → `ValidationError` mentioning `on`; `"auto"/"ask"/"off"` unchanged; default `auto`.
-- [ ] `Handoff(spawn_policy=False)` → `"off"`; `Handoff(spawn_policy=True)` → `ValidationError`.
-- [ ] `validators.py plan <file>` exits 0 on unquoted `handoff_spawn: off`, exit 1 on `handoff_spawn: on`.
-- [ ] `materialize-manifest.py` on an unquoted-`off` plan yields manifest `handoff.spawn_policy == "off"`; quoted `"off"` and absent (→`auto`) also correct.
-- [ ] `spawn-handoff-session.sh` refuses with `reason=policy-off` for a `spawn_policy=off` manifest (verified; test present).
-- [ ] `validate-plan.py` remains stdlib-only (no new pydantic import in its import chain).
+- [x] `Plan(handoff_spawn=False)` → `"off"`; `Plan(handoff_spawn=True)` → `ValidationError` mentioning `on`; `"auto"/"ask"/"off"` unchanged; default `auto`.
+- [x] `Handoff(spawn_policy=False)` → `"off"`; `Handoff(spawn_policy=True)` → `ValidationError`.
+- [x] `validators.py plan <file>` exits 0 on unquoted `handoff_spawn: off`, exit 1 on `handoff_spawn: on`.
+- [x] `materialize-manifest.py` on an unquoted-`off` plan yields manifest `handoff.spawn_policy == "off"`; quoted `"off"` and absent (→`auto`) also correct.
+- [x] `spawn-handoff-session.sh` refuses with `reason=policy-off` for a `spawn_policy=off` manifest (verified; test present).
+- [x] `validate-plan.py` remains stdlib-only (no new pydantic import in its import chain).
