@@ -116,8 +116,11 @@ def materialize(plan_file: str, feature_dir: str) -> int:
 
     # --- Handoff block (cmux-spawn-v2) ---
     spawn_policy = frontmatter.get("handoff_spawn")
-    if spawn_policy is None:                 # NOT `or` — bare `off` is YAML 1.1 False
+    if spawn_policy is None:                 # absent -> default
         spawn_policy = "auto"
+    elif spawn_policy is False:              # unquoted `off` -> YAML 1.1 False
+        spawn_policy = "off"
+    # bare `on` (True) is rejected upstream by the Plan gate and the Handoff validator.
     handoff = {"expected_hops": expected_hops(total_tasks, tier),
                "spawn_policy": spawn_policy}
 

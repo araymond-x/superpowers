@@ -339,7 +339,8 @@ class TestHandoffBlockMaterialization:
     def test_micro_tier_expected_hops_is_one(self):   # default 5 tasks: micro=1 vs standard=2
         assert self._mf(tier="micro")["handoff"]["expected_hops"] == 1
 
-    def test_off_survives_and_bare_off_is_never_coerced_to_auto(self):   # YAML 1.1: bare off is False
+    def test_bare_off_coerces_to_off_policy(self):   # N83: YAML 1.1 unquoted off (False) -> "off"
+        # quoted "off" already worked
         assert self._mf(extra_frontmatter='handoff_spawn: "off"')["handoff"]["spawn_policy"] == "off"
-        r = self._mf(extra_frontmatter="handoff_spawn: off", ok=False)
-        assert r["exit_code"] != 0 and "spawn_policy" in r["stderr"]
+        # unquoted off (parsed False) now normalizes to "off" instead of failing
+        assert self._mf(extra_frontmatter="handoff_spawn: off")["handoff"]["spawn_policy"] == "off"
