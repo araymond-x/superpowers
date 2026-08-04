@@ -9,7 +9,7 @@ files_changed:
   - path: "tests/unit/test_mechanics_card.py"
     description: "Extended _run_card(wt, feat) with an env_extra=None parameter merged in after the ambient SUPERPOWERS_CMUX_* strip; added test_card_regen_line_uses_real_interpreter and test_card_ceiling_validates_max_hops."
 tests:
-  written: 2
+  written: 9
   passing: 9
   command: ".venv/bin/python3 -m pytest tests/unit/ -k \"card\" -q"
   result: PASS
@@ -37,6 +37,7 @@ Fixed two display-consistency bugs in `write-mechanics-card.py`: the standalone 
 None found in `skills/subagent-driven-development/` or `tests/` directories.
 
 **Deviations from Plan:**
+- Controller correction: `tests.written` was originally set to 2 (new-assertions count) against `tests.passing: 9` (the full `-k "card"` command-scope count), which validate-report.py's Pydantic model rejects (passing > written). Corrected `written` to 9 to match the actual command scope run — fourth recurrence of this exact pattern in this session (see Tasks 2, 6, 7).
 - The plan's illustrative pseudocode asserted `sys.executable in card` directly. In practice `VENV_PY` (the worktree's `.venv/bin/python3`) is a symlink to the main checkout's venv, and Python's own `sys.executable` resolves one level of that symlink — so the value embedded in the card differs from the raw `VENV_PY` string used to invoke the subprocess. Fixed the test to compute the expected value by actually running `VENV_PY -c "import sys; print(sys.executable)"` and asserting that resolved string appears in the card, rather than hardcoding either the symlink path or a naive `os.path.realpath()` (which over-resolved through a second-level Homebrew symlink chain and did not match what the script's own `sys.executable` reports).
 
 **Self-Review Findings:**
