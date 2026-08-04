@@ -171,6 +171,8 @@ def test_card_ceiling_validates_max_hops(...):
 
 Adapt to the file's actual render entry point and how it captures env.
 
+**Pre-execution audit note (Order 2):** `tests/unit/test_mechanics_card.py`'s `_run_card(wt, feat)` (line ~34) currently strips **all** `SUPERPOWERS_CMUX_*` env vars by design before invoking the script (comment: ambient knobs would skew the card's ceiling line) — every existing call site (`test_card_deterministic_with_contents`, `test_report_skeleton_passes_validate_report`, etc.) relies on that isolation. Extend `_run_card`'s signature with an `env_extra=None` parameter, merged in **after** the ambient-strip, so the new ceiling tests can inject `SUPERPOWERS_CMUX_MAX_HOPS` without breaking that isolation guarantee for existing callers. Do not add a plain unfiltered `env=` passthrough — it would leak ambient `SUPERPOWERS_CMUX_*` values into every other test in the file.
+
 - [ ] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k "card and (regen or ceiling)" -v`

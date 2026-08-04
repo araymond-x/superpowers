@@ -374,7 +374,9 @@ Rename it and flip the second assertion so unquoted `off` now **succeeds** and m
 - [ ] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_materialize_manifest.py -k "coerces_to_off or bare_off" -v`
-Expected: `test_bare_off_coerces_to_off_policy` FAILs on the second assertion — materialize currently makes unquoted `off` (False) fail SddSession construction (`spawn_policy: False` rejected). It goes green after Steps 2-3 land Task 2's Handoff coercion + this task's materialize normalization. (If Task 2 already landed, the failure may instead be that materialize stores `False` — confirm the actual failure mode before fixing.)
+Expected: `test_bare_off_coerces_to_off_policy` FAILs on the second assertion — materialize currently makes unquoted `off` (False) fail SddSession construction (`spawn_policy: False` rejected).
+
+**Pre-execution audit note (Order 1):** because Pydantic runs nested-model field validators during parent construction, once Task 2's `Handoff` `mode="before"` validator has landed, `SddSession(handoff={"spawn_policy": False, ...})` already coerces to `"off"` on its own — this assertion may therefore **already PASS** before this task's own code change lands. That is expected and fine, not a TDD violation: Task 3's normalization in the handoff-block-building code is defense-in-depth (it protects the case where `handoff_spawn` reaches `SddSession` construction through a path other than this dict, e.g. a manually authored manifest), not the sole load-bearing site once Task 2 exists. If the assertion already passes, skip straight to Step 3, apply the normalization change anyway per this defense-in-depth rationale, and note in the task report that the test was already green pre-change rather than treating it as a broken red→green cycle.
 
 - [ ] **Step 3: Normalize in the handoff block**
 
