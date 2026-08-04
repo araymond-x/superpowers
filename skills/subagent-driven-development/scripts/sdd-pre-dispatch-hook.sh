@@ -839,11 +839,11 @@ if [ "$IS_IMPLEMENTER" = true ]; then
       CTX_TIER=$(ctx_tier "$CTX_T")
       if [ "$CTX_TIER" = hard ]; then
         ctx_log implementer probe hard block "$CTX_T"
-        echo "BLOCKED (context): controller context is ~$CTX_T tokens (>= HARD $CTX_HARD). Do NOT retry this dispatch — retrying is wrong. This is a clean task boundary: commit pending state, build a fresh-session handoff (invoke the handoff skill, entry skill superpowers:subagent-driven-development), tell the user to start a fresh session from the worktree and run /pickup, then STOP. See skills/subagent-driven-development/references/context-handoff-protocol.md." >&2
+        echo "BLOCKED (context): controller context is ~$CTX_T tokens (>= HARD $CTX_HARD). Do NOT retry this dispatch — retrying is wrong. This is a clean handoff boundary: commit pending state, then hand off. DEFAULT (cmux auto-spawn): build the fresh-session handoff bundle (invoke the handoff skill, entry skill superpowers:subagent-driven-development), then run spawn-handoff-session.sh <bundle> to launch the successor automatically. FALLBACK (cmux unreachable, or handoff_spawn/SUPERPOWERS_CMUX_AUTOSPAWN opted out): tell the user to start a fresh session from the worktree and run /pickup. Either way STOP after handing off. See skills/subagent-driven-development/references/context-handoff-protocol.md." >&2
         exit 2
       elif [ "$CTX_TIER" = soft ]; then
         ctx_log implementer probe soft nudge "$CTX_T"
-        CTX_NUDGE="CONTEXT NUDGE: controller context is ~$CTX_T tokens — this is a clean task boundary. Consider handing off to a fresh session now (see references/context-handoff-protocol.md) rather than starting task ${TASK_NUMBER}."
+        CTX_NUDGE="CONTEXT NUDGE: controller context is ~$CTX_T tokens — this is a clean task boundary. Consider handing off to a fresh session now rather than starting task ${TASK_NUMBER}: the default is the cmux auto-spawn (build a handoff bundle, then spawn-handoff-session.sh <bundle>); manual /pickup is the fallback. See references/context-handoff-protocol.md."
       else
         ctx_log implementer probe below allow "$CTX_T"
       fi

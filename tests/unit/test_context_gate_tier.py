@@ -37,6 +37,7 @@ def test_soft_nudges(tmp_path):
     assert r.returncode == 0
     ctx = json.loads(r.stdout)["hookSpecificOutput"]["additionalContext"]
     assert "CONTEXT NUDGE" in ctx and "350000" in ctx
+    assert "spawn-handoff-session.sh" in ctx
 
 
 def test_hard_blocks(tmp_path):
@@ -45,6 +46,7 @@ def test_hard_blocks(tmp_path):
     assert r.returncode == 2
     assert "do not retry" in r.stderr.lower()
     assert "context-handoff-protocol" in r.stderr
+    assert "spawn-handoff-session.sh" in r.stderr
 
 
 def test_reviewer_never_blocks_even_over_hard(tmp_path):
