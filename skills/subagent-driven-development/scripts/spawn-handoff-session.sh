@@ -147,6 +147,26 @@ Then STOP the current session (do not dispatch the next task here).
 EOF
 }
 
+# --- Precondition 0: auto-spawn enable switch (nothing reserved yet) ---------
+# Plan-less, per-run kill switch, complementary to the plan-level handoff_spawn:off.
+# 0/false disables auto-spawn entirely and exits 3 (manual fallback) with an honest
+# reason, BEFORE the cmux-reachability probe. Invalid values warn and leave auto-spawn
+# ENABLED (the default) — fail-safe like the other knobs. No cmux notify: nothing is
+# reserved and the user chose this; the printed manual instructions carry it.
+AUTOSPAWN="${SUPERPOWERS_CMUX_AUTOSPAWN:-1}"
+case "$AUTOSPAWN" in
+  0|false|FALSE|no|NO|off|OFF)
+    echo "[spawn-handoff] refused: auto-spawn disabled by config (SUPERPOWERS_CMUX_AUTOSPAWN=$AUTOSPAWN, reason=autospawn-disabled). Resume manually." >&2
+    print_manual_instructions
+    exit 3
+    ;;
+  1|true|TRUE|yes|YES|on|ON|"")
+    : ;;  # enabled (default)
+  *)
+    echo "WARNING: invalid SUPERPOWERS_CMUX_AUTOSPAWN ($AUTOSPAWN) — auto-spawn stays enabled (default)." >&2
+    ;;
+esac
+
 # --- Precondition 1: clean tree --------------------------------------------
 if [ -n "$(git status --porcelain)" ]; then
   echo "REFUSED: worktree not clean — commit pending state first (protocol step 2)" >&2; exit 1; fi

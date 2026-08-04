@@ -174,6 +174,50 @@ def test_ping_failure_exits_3(tmp_path):
     assert r.returncode == 3
 
 
+def test_autospawn_disabled_zero_refuses_before_cmux(tmp_path):
+    # SUPERPOWERS_CMUX_AUTOSPAWN=0 must refuse with reason=autospawn-disabled
+    # BEFORE the cmux-reachability probe runs — the default stub in run_spawn()
+    # answers `ping` with PONG (reachable), so if this fired later the run would
+    # proceed past Precondition 3 instead of refusing here.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", env_extra={"SUPERPOWERS_CMUX_AUTOSPAWN": "0"})
+    out = r.stdout + r.stderr
+    assert r.returncode == 3
+    assert "reason=autospawn-disabled" in out
+    assert "not in a reachable cmux" not in out
+
+
+def test_autospawn_disabled_false_refuses(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx, tmp_path, "b1", env_extra={"SUPERPOWERS_CMUX_AUTOSPAWN": "false"}
+    )
+    out = r.stdout + r.stderr
+    assert r.returncode == 3 and "reason=autospawn-disabled" in out
+
+
+def test_autospawn_invalid_warns_and_proceeds(tmp_path):
+    # An invalid value must WARN and leave auto-spawn ENABLED (fail-safe default),
+    # not silently disable it.
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(
+        ctx, tmp_path, "b1", "--dry-run", env_extra={"SUPERPOWERS_CMUX_AUTOSPAWN": "banana"}
+    )
+    out = r.stdout + r.stderr
+    assert "invalid SUPERPOWERS_CMUX_AUTOSPAWN" in out
+    assert "reason=autospawn-disabled" not in out
+
+
+def test_autospawn_unset_proceeds(tmp_path):
+    ctx = setup_worktree(tmp_path)
+    _spawnable(tmp_path, ctx)
+    r = run_spawn(ctx, tmp_path, "b1", "--dry-run")
+    assert "reason=autospawn-disabled" not in (r.stdout + r.stderr)
+
+
 def test_hop_limit_exits_3(tmp_path):
     ctx = setup_worktree(tmp_path)
     install_bundle(tmp_path, "b1", "valid-manifest.json", ctx["repo_id"])
