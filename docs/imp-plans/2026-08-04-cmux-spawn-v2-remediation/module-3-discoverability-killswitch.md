@@ -267,18 +267,18 @@ git commit -m "docs(n55): document SUPERPOWERS_CMUX_AUTOSPAWN in both env regist
 
 Records a durable answer to "which skills need to know about auto-spawn, and does each carry the awareness."
 
-- [ ] **Step 1: Assess each skill**
+- [x] **Step 1: Assess each skill**
 
 For each of SDD, writing-plans, brainstorming, `executing-plans`, `using-superpowers`: determine whether its flow reaches the context-pressure gate / auto-spawn, and whether it now carries the awareness. Specifically verify:
 - SDD, writing-plans, brainstorming — edited in this feature (confirm the awareness landed).
 - `executing-plans` — read `skills/executing-plans/SKILL.md`: does its inline/batch execution path reach the pre-dispatch context gate (which fires on implementer Agent dispatches)? Record whether it dispatches implementers via the Agent tool (gate applies) or executes inline (gate may not fire), and whether a pointer is warranted.
 - `using-superpowers` — the bootstrap; confirm no change is needed (it does not orchestrate dispatches).
 
-- [ ] **Step 2: Write the findings doc**
+- [x] **Step 2: Write the findings doc**
 
 Create `docs/process-improvement-findings/2026-08-04-cmux-autospawn-skill-awareness-audit.md` with a per-skill table (skill | reaches gate? | awareness present? | action taken / none needed) and a one-paragraph conclusion. If `executing-plans` warrants a pointer, note it as a follow-up (do NOT edit executing-plans here unless the assessment shows a clear gap — flag it for the plan/BACKLOG instead to keep scope tight).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/process-improvement-findings/2026-08-04-cmux-autospawn-skill-awareness-audit.md
@@ -287,8 +287,8 @@ git commit -m "docs(discoverability): skill-awareness audit for cmux auto-spawn"
 
 ## Acceptance Criteria (Module 3)
 
-- [ ] SDD `SKILL.md` Context Health Protocol names the cmux auto-spawn as the default block-response (manual as fallback); `wc -w` under 5000; regression no new FAIL.
-- [ ] Both the SOFT nudge and HARD block hook messages name `spawn-handoff-session.sh` as the default response; existing assertions (Do NOT retry / STOP) preserved; hook baseline re-captured in the same commit.
-- [ ] `SUPERPOWERS_CMUX_AUTOSPAWN=0`/`false` → exit 3 `reason=autospawn-disabled` before the cmux-reachability check; invalid warns-and-proceeds; unset proceeds.
-- [ ] `SUPERPOWERS_CMUX_AUTOSPAWN` documented in `context-handoff-protocol.md` and `CLAUDE.md`.
-- [ ] Skill-awareness audit result recorded for SDD, writing-plans, brainstorming, executing-plans, using-superpowers.
+- [x] SDD `SKILL.md` Context Health Protocol names the cmux auto-spawn as the default block-response (manual as fallback); `wc -w` under 5000; regression no new FAIL.
+- [x] Both the SOFT nudge and HARD block hook messages name `spawn-handoff-session.sh` as the default response; existing assertions (Do NOT retry / STOP) preserved; hook baseline re-captured in the same commit.
+- [x] `SUPERPOWERS_CMUX_AUTOSPAWN=0`/`false` → exit 3 `reason=autospawn-disabled` before the cmux-reachability check; invalid warns-and-proceeds; unset proceeds.
+- [x] `SUPERPOWERS_CMUX_AUTOSPAWN` documented in `context-handoff-protocol.md` and `CLAUDE.md`.
+- [x] Skill-awareness audit result recorded for SDD, writing-plans, brainstorming, executing-plans, using-superpowers.

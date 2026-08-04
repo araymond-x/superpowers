@@ -1,0 +1,3 @@
+# Partner Review — Task 10 (Minimum Tier)
+
+**Tier rationale:** Task 10 creates a single new findings doc (`docs/process-improvement-findings/2026-08-04-cmux-autospawn-skill-awareness-audit.md`) — a research/documentation task with no code, no external contract dependency, and no interaction with shared infrastructure. Minimum tier applies per subagent-driven-development skill guidance for simple single-file changes. Controller has confirmed the plan's per-skill assessment list (SDD, writing-plans, brainstorming, executing-plans, using-superpowers) and the explicit scope guard: if `executing-plans` warrants a pointer, flag as a BACKLOG follow-up rather than editing it in this task.
