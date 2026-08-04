@@ -51,11 +51,11 @@
 - Modify: `skills/subagent-driven-development/SKILL.md` (extract Context Budget detail, rewrite Context Health Protocol)
 - Modify: `skills/subagent-driven-development/references/context-health-protocol.md` (receive extracted detail)
 
-- [ ] **Step 1: Measure the baseline**
+- [x] **Step 1: Measure the baseline**
 
 Run: `wc -w skills/subagent-driven-development/SKILL.md` (expect 4993).
 
-- [ ] **Step 2: Extract the Context Budget Management detail FIRST (ceiling offset)**
+- [x] **Step 2: Extract the Context Budget Management detail FIRST (ceiling offset)**
 
 Move the verdict bullets + subagent-budget detail from `## Context Budget Management` (SKILL.md ~lines 259-270) into `references/context-health-protocol.md` (append a `## Context Budget (task-token estimation)` subsection with that content). In SKILL.md, replace with a short pointer:
 
@@ -65,7 +65,7 @@ Move the verdict bullets + subagent-budget detail from `## Context Budget Manage
 The pre-dispatch hook runs `estimate-task-tokens.py` automatically for every implementer dispatch and acts on the verdict (`OK` proceeds, `WARNING`/≥25% injects a focus note, `TOO_LARGE`/≥50% BLOCKS — split the task). This is deterministic and hook-enforced; there is no manual step and no override. See `references/context-health-protocol.md` for the verdict thresholds and subagent budget allocations.
 ```
 
-- [ ] **Step 3: Rewrite the Context Health Protocol section**
+- [x] **Step 3: Rewrite the Context Health Protocol section**
 
 Replace the `## Context Health Protocol` block (SKILL.md ~lines 276-280) with:
 
@@ -77,7 +77,7 @@ See `references/context-health-protocol.md` for managing controller context accu
 When the pre-dispatch hook BLOCKS a dispatch for context pressure (hard threshold), the block is not a fix-and-retry — it is a clean handoff boundary. The **default block-response is the cmux auto-spawn**: commit pending state, build a fresh-session handoff bundle (invoke the handoff skill, entry skill `superpowers:subagent-driven-development`), then run `spawn-handoff-session.sh <bundle>` to launch the successor session automatically. It **degrades to a manual `/pickup` handoff** when cmux is unreachable or when the plan's `handoff_spawn` / `SUPERPOWERS_CMUX_AUTOSPAWN` opts out. Either way: commit, hand off, and STOP — do not retry. Full runtime protocol: `references/context-handoff-protocol.md`.
 ```
 
-- [ ] **Step 4: Verify the word ceiling (explicit number) + regression**
+- [x] **Step 4: Verify the word ceiling (explicit number) + regression**
 
 Run: `wc -w skills/subagent-driven-development/SKILL.md`
 Expected: **under 5000** (the Context Budget extraction frees ~140 words; the rewrite adds ~55; expect ~4900).
@@ -85,7 +85,7 @@ Expected: **under 5000** (the Context Budget extraction frees ~140 words; the re
 Run: `.venv/bin/python3 tests/ARaymond-skill-regression/validate-all-skills.py 2>&1 | tail -8`
 Expected: no new FAIL; SDD SKILL.md not over the hard word limit; the `references/context-health-protocol.md` cross-reference resolves.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/SKILL.md skills/subagent-driven-development/references/context-health-protocol.md
