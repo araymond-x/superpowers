@@ -52,7 +52,7 @@ This is a blocking Task 0. It anchors Tasks 1–3 to the actual PyYAML behavior 
 
 > **Known pre-fix test to flip (do NOT fix here — Task 3 owns it):** `tests/unit/test_materialize_manifest.py::TestHandoffBlockMaterialization::test_off_survives_and_bare_off_is_never_coerced_to_auto` currently asserts the *buggy* behavior as correct (unquoted `handoff_spawn: off` makes materialize FAIL). It is green today and will invert once the N83 fix lands — Task 3 renames it and flips the assertion. Existing `handoff_spawn`/`spawn_policy` coverage also already lives in `tests/unit/test_models/test_plan_model.py::TestHandoffSpawn` and `tests/unit/test_models/test_sdd_session_model.py::TestHandoffBlock` — Tasks 1 and 2 extend those classes, they do not create new flat-path files (a duplicate basename under `tests/unit/` would break pytest collection).
 
-- [ ] **Step 1: Write the fixtures module**
+- [x] **Step 1: Write the fixtures module**
 
 Create `tests/fixtures/n83_yaml_cases.py`:
 
@@ -83,7 +83,7 @@ COERCION_EXPECTATIONS = [
 ]
 ```
 
-- [ ] **Step 2: Write the contract test**
+- [x] **Step 2: Write the contract test**
 
 Create `tests/unit/test_n83_yaml_contract.py`:
 
@@ -140,12 +140,12 @@ def test_script_emits_policy_off_reason():
     assert "reason=policy-off" in src
 ```
 
-- [ ] **Step 3: Run the contract test — it must PASS now (pre-fix)**
+- [x] **Step 3: Run the contract test — it must PASS now (pre-fix)**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_n83_yaml_contract.py -v`
 Expected: all PASS (these are current-state facts).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/fixtures/n83_yaml_cases.py tests/unit/test_n83_yaml_contract.py
@@ -162,7 +162,7 @@ git commit -m "test(n83): contract fixtures + YAML coercion ground truth (Task 0
 
 **Pattern References:** `plan.py` `IntegrationTest.path_must_be_relative_and_safe` — same `@field_validator` + `@classmethod` idiom (with `mode="before"` here).
 
-- [ ] **Step 1: Write the failing tests (extend the existing `TestHandoffSpawn` class)**
+- [x] **Step 1: Write the failing tests (extend the existing `TestHandoffSpawn` class)**
 
 Add to the existing `class TestHandoffSpawn` in `tests/unit/test_models/test_plan_model.py` (which already covers default `auto`, accept `ask`/`off`, reject invalid, and pins the Literal). It uses `Plan.model_validate(MINIMAL_PLAN)` and `{**MINIMAL_PLAN, "handoff_spawn": v}`; `Plan`, `ValidationError`, `pytest`, and `MINIMAL_PLAN` are already imported/defined in the file. Add:
 
@@ -181,12 +181,12 @@ Add to the existing `class TestHandoffSpawn` in `tests/unit/test_models/test_pla
 
 (Quoted `"off"` and the `auto` default are already covered by the class's existing `test_accepts_ask_and_off` / `test_defaults_to_auto`.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -k "unquoted_off or bare_on" -v`
 Expected: `test_unquoted_off_coerces_to_off` FAILs (currently `False` is rejected by the Literal); `test_bare_on_rejected_with_actionable_message` currently raises but with a generic `literal_error` (no "on" text) — both go green after Step 3.
 
-- [ ] **Step 3: Add the validator**
+- [x] **Step 3: Add the validator**
 
 In `skills/scripts/models/plan.py`, add to the `Plan` class (place with the other validators, after the field declarations):
 
@@ -209,12 +209,12 @@ In `skills/scripts/models/plan.py`, add to the `Plan` class (place with the othe
 
 (`field_validator` is already imported at `plan.py:5`.)
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -k "unquoted_off or bare_on" -v`
 Expected: all PASS.
 
-- [ ] **Step 5: Prove the gate layer (validators.py CLI)**
+- [x] **Step 5: Prove the gate layer (validators.py CLI)**
 
 Add a subprocess test asserting the ACTUAL gate layer (Gate 1b runs `validators.py plan <file>` under this same venv python). Add it to `tests/unit/test_models/test_plan_model.py` (module-level functions are fine alongside the class). NOTE the path depth: this file lives at `tests/unit/test_models/`, so the repo root is **three** `..` up:
 
@@ -258,7 +258,7 @@ def test_validators_cli_rejects_bare_on(tmp_path):
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_plan_model.py -k "unquoted_off or bare_on or validators_cli" -v` → all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/scripts/models/plan.py tests/unit/test_models/test_plan_model.py
@@ -275,7 +275,7 @@ git commit -m "fix(n83): coerce unquoted handoff_spawn off->off, reject bare on 
 
 **Pattern References:** same `@field_validator` idiom as Task 1.
 
-- [ ] **Step 1: Write the failing tests (extend the existing `TestHandoffBlock` class)**
+- [x] **Step 1: Write the failing tests (extend the existing `TestHandoffBlock` class)**
 
 Add to the existing `class TestHandoffBlock` in `tests/unit/test_models/test_sdd_session_model.py` (which already has `test_handoff_block_validates`, `test_spawn_policy_defaults_auto`, `test_spawn_policy_literal_is_closed_set`, `test_rejects_invalid_spawn_policy`). `Handoff`, `ValidationError`, and `pytest` are already imported. `Handoff` requires `expected_hops` (`ge=1`). Add:
 
@@ -292,12 +292,12 @@ Add to the existing `class TestHandoffBlock` in `tests/unit/test_models/test_sdd
 
 (Quoted `"off"` is already covered by `test_off_survives_*` / `test_handoff_block_validates`; the closed Literal and invalid-value rejection are already pinned.)
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_sdd_session_model.py -k "unquoted_off or bare_on" -v`
 Expected: `test_spawn_policy_unquoted_off_coerces_to_off` FAILs.
 
-- [ ] **Step 3: Add the import and validator**
+- [x] **Step 3: Add the import and validator**
 
 In `skills/scripts/models/sdd_session.py`, change the pydantic import (line 4) to include `field_validator`:
 
@@ -324,12 +324,12 @@ Add to the `Handoff` class (after the field declarations):
         return v
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_models/test_sdd_session_model.py -k "unquoted_off or bare_on" -v`
 Expected: all PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/scripts/models/sdd_session.py tests/unit/test_models/test_sdd_session_model.py

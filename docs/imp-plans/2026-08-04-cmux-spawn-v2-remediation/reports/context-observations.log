@@ -1,1 +1,13 @@
 2026-08-04T20:44:55Z task= type=other tokens=179519 source=probe tier=below action=allow
+2026-08-04T20:52:56Z task= type=partner-review tokens=206878 source=probe tier=below action=allow
+2026-08-04T20:55:46Z task=0 type=implementer tokens=232570 source=probe tier=below action=allow
+2026-08-04T20:57:39Z task= type=spec-review tokens=238970 source=probe tier=below action=allow
+2026-08-04T20:59:21Z task= type=quality-review tokens=245111 source=probe tier=below action=allow
+2026-08-04T21:07:25Z task= type=partner-review tokens=263519 source=probe tier=below action=allow
+2026-08-04T21:09:54Z task=1 type=implementer tokens=268667 source=probe tier=below action=allow
+2026-08-04T21:12:49Z task= type=spec-review tokens=287163 source=probe tier=below action=allow
+2026-08-04T21:14:15Z task= type=quality-review tokens=291256 source=probe tier=below action=allow
+2026-08-04T21:16:37Z task= type=partner-review tokens=301943 source=probe tier=soft action=allow
+2026-08-04T21:19:51Z task=2 type=implementer tokens=317173 source=probe tier=soft action=nudge
+2026-08-04T21:23:34Z task= type=spec-review tokens=328353 source=probe tier=soft action=allow
+2026-08-04T21:24:12Z task= type=quality-review tokens=331390 source=probe tier=soft action=allow
