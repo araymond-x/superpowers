@@ -50,7 +50,7 @@
 
 **Pattern References:** `stop-hook-tests`, `regen-check-hooks-baseline`.
 
-- [ ] **Step 1: Un-xfail the N86 fixed-behavior test + write the N84 metachar test**
+- [x] **Step 1: Un-xfail the N86 fixed-behavior test + write the N84 metachar test**
 
 In `tests/unit/test_honesty_log_capture.py`:
 (a) Remove the `@pytest.mark.xfail(strict=True, reason=...)` decorator from `test_composes_with_checkpoint_fail_message` (it already asserts the FIXED behavior: a checkpoint FAIL + unmatched bundle land in one `systemMessage` containing both).
@@ -84,12 +84,12 @@ def test_bundle_id_metachar_does_not_false_match(self):
         shutil.rmtree(vault_dir, ignore_errors=True)
 ```
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_honesty_log_capture.py -k "composes_with_checkpoint_fail or metachar" -v`
 Expected: `test_composes_with_checkpoint_fail_message` FAILs (gate still swallows the FAIL; was xfail, now live) and `test_bundle_id_metachar_does_not_false_match` FAILs (unescaped `.` false-matches the decoy).
 
-- [ ] **Step 3: Fix N86 — drop the `$? -ne 0` disjunct**
+- [x] **Step 3: Fix N86 — drop the `$? -ne 0` disjunct**
 
 In `sdd-stop-hook.sh`, change the checkpoint-prerequisite gate (line ~181) from:
 
@@ -112,7 +112,7 @@ if [ -z "$CHECKPOINT_OUTPUT" ]; then
 fi
 ```
 
-- [ ] **Step 4: Fix N84 — regex-escape `$BID`**
+- [x] **Step 4: Fix N84 — regex-escape `$BID`**
 
 In `sdd-stop-hook.sh`, just before the `grep -qE` at line ~89, compute a regex-safe bundle id and use it:
 
@@ -125,17 +125,17 @@ In `sdd-stop-hook.sh`, just before the `grep -qE` at line ~89, compute a regex-s
 
 (Keep the existing surrounding lines; only `$BID`→`$BID_RE` in the grep pattern plus the `BID_RE=` line change. Note: the original used `\$` inside the double-quoted string for the end-anchor; `( |$)` is equivalent and clearer — verify the anchor still matches end-of-line in your final form with the metachar test.)
 
-- [ ] **Step 5: Run to verify pass**
+- [x] **Step 5: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/test_honesty_log_capture.py -v`
 Expected: all PASS (including the un-xfailed test and the new metachar test; no XPASS).
 
-- [ ] **Step 6: Re-capture the hook baseline (SAME commit)**
+- [x] **Step 6: Re-capture the hook baseline (SAME commit)**
 
 Run: `bash tests/ARaymond-hook-baseline/check-hooks.sh --capture`
 Run: `bash tests/ARaymond-hook-baseline/check-hooks.sh` (verify in-sync).
 
-- [ ] **Step 7: Commit (hook + tests + baseline together)**
+- [x] **Step 7: Commit (hook + tests + baseline together)**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-stop-hook.sh tests/unit/test_honesty_log_capture.py tests/ARaymond-hook-baseline/baseline.txt
