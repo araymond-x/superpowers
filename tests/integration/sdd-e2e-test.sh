@@ -607,7 +607,7 @@ rm -rf "$CTX_WORK" "$CTX_OUT" "$CTX_OUT.err"
 echo "PASS: Step 13 — context gate blocks over-HARD implementer dispatch + logs source=probe"
 
 echo ""
-echo "=== Step 14: spawn-handoff-session.sh end-to-end (v2 surface topology + handshake + policy dial) ==="
+echo "=== Step 14: spawn-handoff-session.sh end-to-end (v2 surface topology + handshake + policy dial + kill switch) ==="
 # NOTE: exercises THIS checkout's script. The installed live path resolves to the
 # main checkout — a post-merge live smoke is required separately (spec §7).
 #
@@ -879,8 +879,33 @@ grep "notify" "$SPAWN_WORK/cmux-over.log" | grep -qi "expected" \
   || { echo "FAIL: over-expected missing advisory notify mentioning 'expected'"; cat "$SPAWN_WORK/cmux-over.log"; exit 1; }
 echo "PASS: Step 14c — over-expected advisory notify fires without a stall refusal"
 
+# ── Sub-run 4: SUPERPOWERS_CMUX_AUTOSPAWN=0 refusal (Precondition 0) ─────────
+# The kill switch (N83's Task 9 sibling — see CLAUDE.md's "cmux auto-spawn env
+# vars" bullet) is Precondition 0: it fires FIRST, before the clean-tree check
+# (Precondition 1), the consent-policy gate (2b), and the cmux-reachability
+# probe (Precondition 3). Prove it with a FRESH/unused CMUX_LOG path — the cmux
+# stub logs every verb except `ping` via `echo "$@" >> "$CMUX_LOG"`, so a log
+# file that never gets created (not even touched) means no non-ping verb ran;
+# combined with the reason code being autospawn-disabled (not
+# cmux-unreachable, which only Precondition 3's `cmux ping` probe can produce)
+# this establishes the refusal fired before that probe, not merely that it
+# refused eventually. Nothing is reserved (mirrors sub-run 2's no-op checks).
+HOP_BEFORE=$(cat "$HOPS_FILE")
+INTENT_N_BEFORE=$(grep -c " intent " "$SPAWN_LOG" || true)
+SUPERPOWERS_CMUX_AUTOSPAWN=0 spawn_run "$SPAWN_WORK/out-autospawn" "$SPAWN_WORK/cmux-autospawn.log"
+[ "$SPAWN_RC" -eq 3 ] || { echo "FAIL: AUTOSPAWN=0 expected rc 3, got $SPAWN_RC"; cat "$SPAWN_WORK/out-autospawn"; exit 1; }
+grep -q "reason=autospawn-disabled" "$SPAWN_WORK/out-autospawn" \
+  || { echo "FAIL: AUTOSPAWN=0 missing reason=autospawn-disabled"; cat "$SPAWN_WORK/out-autospawn"; exit 1; }
+[ ! -e "$SPAWN_WORK/cmux-autospawn.log" ] \
+  || { echo "FAIL: AUTOSPAWN=0 invoked a cmux verb before refusing (log non-empty)"; cat "$SPAWN_WORK/cmux-autospawn.log"; exit 1; }
+[ "$(cat "$HOPS_FILE")" = "$HOP_BEFORE" ] || { echo "FAIL: AUTOSPAWN=0 consumed a hop"; exit 1; }
+INTENT_N_AFTER=$(grep -c " intent " "$SPAWN_LOG" || true)
+[ "$INTENT_N_AFTER" -eq "$INTENT_N_BEFORE" ] \
+  || { echo "FAIL: AUTOSPAWN=0 wrote an intent record ($INTENT_N_BEFORE -> $INTENT_N_AFTER)"; cat "$SPAWN_LOG"; exit 1; }
+echo "PASS: Step 14d — SUPERPOWERS_CMUX_AUTOSPAWN=0 refuses (rc 3, reason=autospawn-disabled, fires before the cmux probe)"
+
 rm -rf "$SPAWN_WORK"
-echo "PASS: Step 14 — spawn end-to-end: surface topology, handshake, policy dial, bookkeeping commit"
+echo "PASS: Step 14 — spawn end-to-end: surface topology, handshake, policy dial, kill switch, bookkeeping commit"
 
 echo ""
 echo "E2E PIPELINE PASS - 15 steps composed correctly"
