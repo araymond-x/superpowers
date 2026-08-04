@@ -256,18 +256,7 @@ This prevents the "built from scratch, corrected 10 times" failure mode where ev
 
 ## Context Budget Management
 
-The pre-dispatch hook runs `estimate-task-tokens.py` automatically for every implementer dispatch and acts on the verdict — there is no manual step for you to run:
-
-- `OK`: dispatch proceeds.
-- `WARNING` (≥25% of the context budget): dispatch proceeds; the hook injects a note instructing the subagent to focus narrowly and ask questions rather than read broadly.
-- `TOO_LARGE` (≥50% of the budget): the hook BLOCKS the dispatch. Split the task into subtasks following the plan's decomposition patterns, update the plan file, and re-dispatch.
-
-This is a deterministic, hook-enforced check — do not reproduce it by hand, and there is no judgment override: if the hook reports `TOO_LARGE`, the task is too large. Split it.
-
-**Context budget allocation for subagents:**
-- Implementation subagents: 200K token context budget (default)
-- Reviewer subagents: 200K token context budget
-- The controller's own context is not measured by this script — track it by observing response quality degradation
+The pre-dispatch hook runs `estimate-task-tokens.py` automatically for every implementer dispatch and acts on the verdict (`OK` proceeds, `WARNING`/≥25% injects a focus note, `TOO_LARGE`/≥50% BLOCKS — split the task). This is deterministic and hook-enforced; there is no manual step and no override. See `references/context-health-protocol.md` for the verdict thresholds and subagent budget allocations.
 
 ## Controller Health Checkpoints
 
@@ -277,7 +266,7 @@ See `references/controller-health-checkpoints.md` for the three deterministic `c
 
 See `references/context-health-protocol.md` for managing controller context accumulation, signs of context pressure, and when to generate context summaries.
 
-When the pre-dispatch hook BLOCKS a dispatch for context pressure (hard threshold), follow `references/context-handoff-protocol.md` — the block is not a fix-and-retry; commit, build a fresh-session handoff, and stop.
+When the pre-dispatch hook BLOCKS a dispatch for context pressure (hard threshold), the block is not a fix-and-retry — it is a clean handoff boundary. The **default block-response is the cmux auto-spawn**: commit pending state, build a fresh-session handoff bundle (invoke the handoff skill, entry skill `superpowers:subagent-driven-development`), then run `spawn-handoff-session.sh <bundle>` to launch the successor session automatically. It **degrades to a manual `/pickup` handoff** when cmux is unreachable or when the plan's `handoff_spawn` / `SUPERPOWERS_CMUX_AUTOSPAWN` opts out. Either way: commit, hand off, and STOP — do not retry. Full runtime protocol: `references/context-handoff-protocol.md`.
 
 ## Review Enforcement — Non-Negotiable
 

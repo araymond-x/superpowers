@@ -27,3 +27,18 @@ As the controller processes tasks, its own context accumulates. After 5+ tasks, 
 - Save execution state to files (context-summary.md is sufficient)
 - Report to the human: "I've completed N of M tasks. My context is heavy. Recommend continuing in a fresh session — all state is in plan checkboxes + deviations.md + reports/."
 - This is not failure — it is disciplined context management
+
+## Context Budget (task-token estimation)
+
+The pre-dispatch hook runs `estimate-task-tokens.py` automatically for every implementer dispatch and acts on the verdict — there is no manual step for you to run:
+
+- `OK`: dispatch proceeds.
+- `WARNING` (≥25% of the context budget): dispatch proceeds; the hook injects a note instructing the subagent to focus narrowly and ask questions rather than read broadly.
+- `TOO_LARGE` (≥50% of the budget): the hook BLOCKS the dispatch. Split the task into subtasks following the plan's decomposition patterns, update the plan file, and re-dispatch.
+
+This is a deterministic, hook-enforced check — do not reproduce it by hand, and there is no judgment override: if the hook reports `TOO_LARGE`, the task is too large. Split it.
+
+**Context budget allocation for subagents:**
+- Implementation subagents: 200K token context budget (default)
+- Reviewer subagents: 200K token context budget
+- The controller's own context is not measured by this script — track it by observing response quality degradation
