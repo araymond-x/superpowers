@@ -18,3 +18,5 @@
 [Requirements that changed during execution]
 
 | 2026-08-04T21:45:49Z | Module transition: Consent model + YAML coercion (N83) → Plan-time consent UX + author docs | FYI | Accepted |
+
+| 2026-08-04T22:05:12Z | Module transition: Plan-time consent UX + author docs → Discoverability sweep + kill switch | FYI | Accepted |
