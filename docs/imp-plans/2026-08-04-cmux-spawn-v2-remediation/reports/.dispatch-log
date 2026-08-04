@@ -3,3 +3,7 @@
 2026-08-04T23:02:15Z DISPATCH implementer task=11 type=implementer
 2026-08-04T23:08:30Z DISPATCH reviewer task=11 type=spec-review
 2026-08-04T23:10:20Z DISPATCH reviewer task=11 type=quality-review
+2026-08-04T23:14:36Z DISPATCH reviewer task=12 type=partner-review
+2026-08-04T23:16:08Z DISPATCH implementer task=12 type=implementer
+2026-08-04T23:26:57Z DISPATCH reviewer task=12 type=spec-review
+2026-08-04T23:28:38Z DISPATCH reviewer task=12 type=quality-review

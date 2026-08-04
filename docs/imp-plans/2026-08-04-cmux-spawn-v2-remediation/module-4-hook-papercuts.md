@@ -150,7 +150,7 @@ git commit -m "fix(n84,n86): regex-escape \$BID + fail-closed checkpoint gate; u
 - Modify: `skills/subagent-driven-development/scripts/write-mechanics-card.py` (lines ~76, ~93)
 - Test: the existing card test (find it: `/usr/bin/grep -rln "write-mechanics-card\|handoff-mechanics\|mechanics_card" tests/unit/`)
 
-- [ ] **Step 1: Write/extend the failing test**
+- [x] **Step 1: Write/extend the failing test**
 
 Assert card↔script consistency:
 
@@ -173,12 +173,12 @@ Adapt to the file's actual render entry point and how it captures env.
 
 **Pre-execution audit note (Order 2):** `tests/unit/test_mechanics_card.py`'s `_run_card(wt, feat)` (line ~34) currently strips **all** `SUPERPOWERS_CMUX_*` env vars by design before invoking the script (comment: ambient knobs would skew the card's ceiling line) — every existing call site (`test_card_deterministic_with_contents`, `test_report_skeleton_passes_validate_report`, etc.) relies on that isolation. Extend `_run_card`'s signature with an `env_extra=None` parameter, merged in **after** the ambient-strip, so the new ceiling tests can inject `SUPERPOWERS_CMUX_MAX_HOPS` without breaking that isolation guarantee for existing callers. Do not add a plain unfiltered `env=` passthrough — it would leak ambient `SUPERPOWERS_CMUX_*` values into every other test in the file.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k "card and (regen or ceiling)" -v`
 Expected: FAIL (literal `$PYTHON`; unvalidated ceiling shows `banana`).
 
-- [ ] **Step 3: Fix the ceiling (validate like the script)**
+- [x] **Step 3: Fix the ceiling (validate like the script)**
 
 In `write-mechanics-card.py`, change the `ceiling` computation (line ~76) from:
 
@@ -193,7 +193,7 @@ to validate the env value the way `spawn-handoff-session.sh` does (numeric → u
     ceiling = _raw_max_hops if (_raw_max_hops and re.fullmatch(r"[0-9]+", _raw_max_hops)) else hop_ceiling(expected)
 ```
 
-- [ ] **Step 4: Fix the regen line (`$PYTHON` → `{sys.executable}`)**
+- [x] **Step 4: Fix the regen line (`$PYTHON` → `{sys.executable}`)**
 
 Change the regen-command line (line ~93) from the literal `$PYTHON` form to `{sys.executable}`, matching the checkpoint lines (~98-99):
 
@@ -201,12 +201,12 @@ Change the regen-command line (line ~93) from the literal `$PYTHON` form to `{sy
 `{sys.executable} {Path(__file__).resolve()} --manifest {manifest_abs}`
 ```
 
-- [ ] **Step 5: Run to verify pass**
+- [x] **Step 5: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k "card" -q`
 Expected: all PASS.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/write-mechanics-card.py tests/unit/
