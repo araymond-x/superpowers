@@ -153,7 +153,7 @@ git commit -m "docs(discoverability): context-gate hook names spawn-handoff-sess
 
 **Pattern References:** `env-knob-validate-warn-revert`, `pytest-bash-stub-harness`.
 
-- [ ] **Step 1: Write the failing tests (extend the bash-stub harness)**
+- [x] **Step 1: Write the failing tests (extend the bash-stub harness)**
 
 Using the existing `run_spawn()` driver / PATH stubs (see `tests/unit/spawn_handoff_helpers.py`), add tests asserting the below. NOTE the real `run_spawn` signature uses **`env_extra=`** (NOT `env=`) to inject env vars — match the existing call sites in `test_spawn_handoff.py`:
 
@@ -184,12 +184,12 @@ def test_autospawn_unset_proceeds(...):
 
 Match the harness's fixture setup (clean tree, valid bundle, manifest with `spawn_policy=auto`) so the disabled tests exercise a case that would otherwise proceed. Confirm the exact `run_spawn` keyword by reading `tests/unit/spawn_handoff_helpers.py` first.
 
-- [ ] **Step 2: Run to verify failure**
+- [x] **Step 2: Run to verify failure**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k autospawn -v`
 Expected: the new tests FAIL (no such precondition yet).
 
-- [ ] **Step 3: Add Precondition 0**
+- [x] **Step 3: Add Precondition 0**
 
 In `spawn-handoff-session.sh`, insert immediately before `# --- Precondition 1: clean tree ---` (line ~150; `print_manual_instructions` is defined at ~line 140, so it is in scope):
 
@@ -215,12 +215,12 @@ case "$AUTOSPAWN" in
 esac
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [x] **Step 4: Run to verify pass**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k "autospawn or spawn_handoff" -q`
 Expected: all PASS. Also run `bash scripts/lint-shell.sh` if available (no new ShellCheck warnings).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add skills/subagent-driven-development/scripts/spawn-handoff-session.sh tests/unit/

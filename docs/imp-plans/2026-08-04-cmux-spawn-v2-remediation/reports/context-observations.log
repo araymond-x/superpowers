@@ -32,3 +32,7 @@
 2026-08-04T22:17:00Z task=7 type=implementer tokens=147891 source=probe tier=below action=allow
 2026-08-04T22:19:25Z task= type=spec-review tokens=160895 source=probe tier=below action=allow
 2026-08-04T22:21:11Z task= type=quality-review tokens=169691 source=probe tier=below action=allow
+2026-08-04T22:23:24Z task= type=partner-review tokens=184717 source=probe tier=below action=allow
+2026-08-04T22:26:09Z task=8 type=implementer tokens=201787 source=probe tier=below action=allow
+2026-08-04T22:34:06Z task= type=spec-review tokens=217373 source=probe tier=below action=allow
+2026-08-04T22:42:46Z task= type=quality-review tokens=220436 source=probe tier=below action=allow
