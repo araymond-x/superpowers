@@ -103,7 +103,7 @@ git commit -m "docs(discoverability): SDD SKILL.md names cmux auto-spawn as defa
 
 **Pattern References:** `regen-check-hooks-baseline`.
 
-- [ ] **Step 1: Update the HARD block message**
+- [x] **Step 1: Update the HARD block message**
 
 Replace the HARD-block `echo` (currently: "…build a fresh-session handoff (invoke the handoff skill…), tell the user to start a fresh session from the worktree and run /pickup, then STOP. See …context-handoff-protocol.md.") with wording that names the auto-spawn as the default and manual as the fallback, still stop-and-hand-off:
 
@@ -111,7 +111,7 @@ Replace the HARD-block `echo` (currently: "…build a fresh-session handoff (inv
         echo "BLOCKED (context): controller context is ~$CTX_T tokens (>= HARD $CTX_HARD). Do NOT retry this dispatch — retrying is wrong. This is a clean handoff boundary: commit pending state, then hand off. DEFAULT (cmux auto-spawn): build the fresh-session handoff bundle (invoke the handoff skill, entry skill superpowers:subagent-driven-development), then run spawn-handoff-session.sh <bundle> to launch the successor automatically. FALLBACK (cmux unreachable, or handoff_spawn/SUPERPOWERS_CMUX_AUTOSPAWN opted out): tell the user to start a fresh session from the worktree and run /pickup. Either way STOP after handing off. See skills/subagent-driven-development/references/context-handoff-protocol.md." >&2
 ```
 
-- [ ] **Step 2: Update the SOFT nudge message**
+- [x] **Step 2: Update the SOFT nudge message**
 
 Replace the SOFT `CTX_NUDGE=` assignment with:
 
@@ -119,24 +119,24 @@ Replace the SOFT `CTX_NUDGE=` assignment with:
         CTX_NUDGE="CONTEXT NUDGE: controller context is ~$CTX_T tokens — this is a clean task boundary. Consider handing off to a fresh session now rather than starting task ${TASK_NUMBER}: the default is the cmux auto-spawn (build a handoff bundle, then spawn-handoff-session.sh <bundle>); manual /pickup is the fallback. See references/context-handoff-protocol.md."
 ```
 
-- [ ] **Step 3: Update the message-content tests**
+- [x] **Step 3: Update the message-content tests**
 
 Find the context-gate tests that assert the message strings:
 
 Run: `/usr/bin/grep -rln "CONTEXT NUDGE\|BLOCKED (context)\|context-handoff-protocol" tests/unit/`
 The true positive is `tests/unit/test_context_gate_tier.py` (its existing assertions — `CONTEXT NUDGE`, `do not retry`/`Do NOT retry`, `context-handoff-protocol` — remain valid substrings after the rewrite, so they stay green). **Add** an assertion there that both the HARD block and the SOFT nudge now contain `spawn-handoff-session.sh` (the new default-response naming). Keep all existing assertions intact. If `test_spawn_handoff.py` appears in the grep, it is a **false positive** (unrelated `/pickup <bundle>` CLI-arg tests) — do NOT edit it.
 
-- [ ] **Step 4: Run the context-gate tests**
+- [x] **Step 4: Run the context-gate tests**
 
 Run: `.venv/bin/python3 -m pytest tests/unit/ -k "context_gate or context_probe" -q`
 Expected: all PASS.
 
-- [ ] **Step 5: Re-capture the hook baseline (SAME commit)**
+- [x] **Step 5: Re-capture the hook baseline (SAME commit)**
 
 Run: `bash tests/ARaymond-hook-baseline/check-hooks.sh --capture`
 Run: `bash tests/ARaymond-hook-baseline/check-hooks.sh` (verify — expect in-sync).
 
-- [ ] **Step 6: Commit (hook + baseline together)**
+- [x] **Step 6: Commit (hook + baseline together)**
 
 ```bash
 git add skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh tests/ARaymond-hook-baseline/baseline.txt tests/unit/

@@ -28,3 +28,7 @@
 2026-08-04T22:07:11Z task=6 type=implementer tokens=316795 source=probe tier=soft action=nudge
 2026-08-04T22:09:09Z task= type=spec-review tokens=328590 source=probe tier=soft action=allow
 2026-08-04T22:10:15Z task= type=quality-review tokens=333854 source=probe tier=soft action=allow
+2026-08-04T22:15:33Z task= type=partner-review tokens=138424 source=probe tier=below action=allow
+2026-08-04T22:17:00Z task=7 type=implementer tokens=147891 source=probe tier=below action=allow
+2026-08-04T22:19:25Z task= type=spec-review tokens=160895 source=probe tier=below action=allow
+2026-08-04T22:21:11Z task= type=quality-review tokens=169691 source=probe tier=below action=allow

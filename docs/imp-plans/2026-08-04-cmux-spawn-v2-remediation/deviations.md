@@ -7,6 +7,7 @@
 |------|------|-------------|-------------|
 | Task 1 | IndependentDecision | Moved os/subprocess/sys/textwrap imports and VALIDATORS path constant to module level instead of inline mid-file; dropped unused tempfile import. Content/behavior unchanged from plan. | Accepted |
 | Task 1 | IndependentDecision | Repo pre-commit hook (formatter) reformatted plan.py/test_plan_model.py slightly at commit time (multi-line Literal wrap, wrapped path join, whitespace). Content/behavior unchanged; all 56 tests in file pass post-format. | Accepted |
+| Task 7 | IndependentDecision | Plan predicted `test_spawn_handoff.py` would match the Step-3 grep as a false positive requiring explicit exclusion. Running the plan's exact grep pattern showed it did not match (only `test_context_gate_tier.py` and `test_mechanics_card.py` matched). No functional effect — file correctly untouched either way. A reviewer's advisory flagging this as a report inaccuracy was itself based on a different, broader grep pattern than the plan specified; controller independently re-ran the plan's actual pattern and confirmed the implementer's report was accurate. | Accepted |
 
 ## Deferred Work
 [Items deferred from plan scope]
