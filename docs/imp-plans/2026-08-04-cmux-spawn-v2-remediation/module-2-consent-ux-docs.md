@@ -89,7 +89,7 @@ git commit -m "feat(consent): brainstorming presents execution-mode choice at fe
 
 **Pattern References:** the three existing "Declaring X" sections (§387/§416/§435) — mirror their structure and tone.
 
-- [ ] **Step 1: Extract the Plan Document Header example to references/ (ceiling offset — do this FIRST)**
+- [x] **Step 1: Extract the Plan Document Header example to references/ (ceiling offset — do this FIRST)**
 
 The additions below add ~270 words; writing-plans is at 4726, so extract first. Move the fenced ```markdown example block inside `## Plan Document Header` (the `# [Feature Name] Implementation Plan` … Code Footprint table block, ~lines 189-219) to a new `skills/writing-plans/references/plan-header-template.md`, and replace it in SKILL.md with a one-line pointer:
 
@@ -101,7 +101,7 @@ The additions below add ~270 words; writing-plans is at 4726, so extract first. 
 
 Keep the explanatory prose that follows the block (the paragraphs describing Source Contracts / Contract Constraints / Shared Constants fields) in SKILL.md — only the example block moves.
 
-- [ ] **Step 2: Add the "Declaring `handoff_spawn` per Plan" author section**
+- [x] **Step 2: Add the "Declaring `handoff_spawn` per Plan" author section**
 
 Add after "Declaring `integration_test` per Plan" (~line 439):
 
@@ -119,7 +119,7 @@ Every plan declares `handoff_spawn` in its YAML frontmatter — a **mandatory ex
 Write `off` unquoted or quoted — both are accepted (the model coerces YAML-1.1 `off`→`False`→`"off"`); `handoff_spawn: on` is rejected. Consent is plan-level (whole feature); handoffs happen at task boundaries. For a per-run, plan-less opt-out without editing the plan, set `SUPERPOWERS_CMUX_AUTOSPAWN=0` (see `subagent-driven-development/references/context-handoff-protocol.md`).
 ```
 
-- [ ] **Step 3: Add the Step 0.5 direct-path choice + materialization**
+- [x] **Step 3: Add the Step 0.5 direct-path choice + materialization**
 
 In the checklist item **0.5 "Resolve feature directory"** (the "Entry mode recording" area, ~line 43), add:
 
@@ -131,7 +131,7 @@ In the checklist item **0.5 "Resolve feature directory"** (the "Entry mode recor
 Write the resolved value as `handoff_spawn: <choice>` in the plan's YAML frontmatter (mandatory execution variable).
 ```
 
-- [ ] **Step 4: List `handoff_spawn` as a mandatory execution variable in the frontmatter reference**
+- [x] **Step 4: List `handoff_spawn` as a mandatory execution variable in the frontmatter reference**
 
 In the "YAML Frontmatter (Required)" example (~line 234), add `handoff_spawn` next to `enforcement_tier`:
 
@@ -140,7 +140,7 @@ enforcement_tier: standard  # micro | standard (default: standard)
 handoff_spawn: auto  # auto | ask | off (default: auto) — cmux auto-spawn consent; see "Declaring handoff_spawn per Plan"
 ```
 
-- [ ] **Step 5: Verify word ceiling (explicit number) + regression**
+- [x] **Step 5: Verify word ceiling (explicit number) + regression**
 
 Run: `wc -w skills/writing-plans/SKILL.md`
 Expected: **under 5000** (extraction of the header block offsets the ~270 added words; expect ~4750).
@@ -148,7 +148,7 @@ Expected: **under 5000** (extraction of the header block offsets the ~270 added 
 Run: `.venv/bin/python3 tests/ARaymond-skill-regression/validate-all-skills.py 2>&1 | tail -8`
 Expected: no new FAIL; writing-plans not over the hard word limit; the new `references/plan-header-template.md` cross-reference resolves.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add skills/writing-plans/SKILL.md skills/writing-plans/references/plan-header-template.md
@@ -158,5 +158,5 @@ git commit -m "feat(consent): writing-plans Declaring handoff_spawn + Step 0.5 c
 ## Acceptance Criteria (Module 2)
 
 - [x] `brainstorming/SKILL.md` presents the `auto`/`ask`/`off` choice at the feature-name step and records it in the spec as a Contract Fact (plan execution variable).
-- [ ] `writing-plans/SKILL.md` has a "Declaring `handoff_spawn` per Plan" section; Step 0.5 presents/reads the choice; the YAML frontmatter reference lists `handoff_spawn` alongside `enforcement_tier` as a mandatory execution variable.
-- [ ] The Plan Document Header example was extracted to `references/plan-header-template.md`; `wc -w skills/writing-plans/SKILL.md` is under 5000; regression test has no new FAIL.
+- [x] `writing-plans/SKILL.md` has a "Declaring `handoff_spawn` per Plan" section; Step 0.5 presents/reads the choice; the YAML frontmatter reference lists `handoff_spawn` alongside `enforcement_tier` as a mandatory execution variable.
+- [x] The Plan Document Header example was extracted to `references/plan-header-template.md`; `wc -w skills/writing-plans/SKILL.md` is under 5000; regression test has no new FAIL.
