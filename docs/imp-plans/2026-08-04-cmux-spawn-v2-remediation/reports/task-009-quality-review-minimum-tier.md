@@ -1,0 +1,3 @@
+# Code Quality Review — Task 9 (Minimum Tier, Skipped)
+
+**Tier rationale:** Task 9 is doc-only (one bullet added to `context-handoff-protocol.md`'s Env knobs list, one sentence appended to CLAUDE.md's existing "cmux auto-spawn env vars" bullet) — no code, no behavior change, no external contract dependency. Per subagent-driven-development skill guidance, code quality review may be skipped for simple config/doc changes with no external contract dependency. Spec compliance review (PASS, see `task-009-spec-review.md`) independently verified the doc content accurately describes the real Precondition 0 behavior implemented in Task 8, cross-checked against the actual script code line-by-line.

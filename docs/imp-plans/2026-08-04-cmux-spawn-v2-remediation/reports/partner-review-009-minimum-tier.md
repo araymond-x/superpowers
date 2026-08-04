@@ -1,0 +1,3 @@
+# Partner Review — Task 9 (Minimum Tier)
+
+**Tier rationale:** Task 9 is a doc-only addition (one bullet in `context-handoff-protocol.md`'s Env knobs list, one bullet extension in `CLAUDE.md`'s cmux-auto-spawn env-var registry) with no external contract dependency and no code/behavior change. Controller pre-verified both insertion points exist exactly where the plan expects (`## Env knobs (defaults)` at context-handoff-protocol.md:186; the "cmux auto-spawn env vars" bullet at CLAUDE.md:334) before dispatch. Minimum tier applies per subagent-driven-development skill guidance for simple config/doc changes with no external contract dependency.

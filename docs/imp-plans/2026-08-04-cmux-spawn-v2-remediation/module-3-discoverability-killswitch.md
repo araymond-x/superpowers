@@ -235,7 +235,7 @@ git commit -m "feat(n55): SUPERPOWERS_CMUX_AUTOSPAWN kill switch as precondition
 - Modify: `skills/subagent-driven-development/references/context-handoff-protocol.md` (the `## Env knobs (defaults)` list, ~line 186)
 - Modify: `CLAUDE.md` (the "cmux auto-spawn env vars" bullet in Hook Development Gotchas)
 
-- [ ] **Step 1: Add the knob to the protocol's Env knobs list**
+- [x] **Step 1: Add the knob to the protocol's Env knobs list**
 
 In `context-handoff-protocol.md`, in the `## Env knobs (defaults)` list, add:
 
@@ -243,15 +243,15 @@ In `context-handoff-protocol.md`, in the `## Env knobs (defaults)` list, add:
 - **`SUPERPOWERS_CMUX_AUTOSPAWN`** — the plan-less, per-run kill switch. Default enabled. Set to `0`/`false` to disable auto-spawn entirely: the script exits 3 with `reason=autospawn-disabled` at **Precondition 0** (before the cmux-reachability probe), and you resume manually. Invalid values warn and leave it enabled. Complementary to the plan-level `handoff_spawn: off` (durable) — this is the per-run opt-out.
 ```
 
-- [ ] **Step 2: Add the knob to CLAUDE.md's env-var registry**
+- [x] **Step 2: Add the knob to CLAUDE.md's env-var registry**
 
 In `CLAUDE.md`, in the "**cmux auto-spawn env vars**" bullet (Hook Development Gotchas → the de-facto env-var registry), add `SUPERPOWERS_CMUX_AUTOSPAWN` with a one-line description matching the script's contract (0/false → exit 3 reason=autospawn-disabled at Precondition 0, before cmux reachability; invalid warns-and-stays-enabled; complementary to plan-level `handoff_spawn: off`).
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `/usr/bin/grep -rn "SUPERPOWERS_CMUX_AUTOSPAWN" skills/ CLAUDE.md` → appears in the script (Task 8), the protocol doc, and CLAUDE.md.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/subagent-driven-development/references/context-handoff-protocol.md CLAUDE.md
