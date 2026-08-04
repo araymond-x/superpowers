@@ -209,6 +209,7 @@ reverts to the default (it never exits).
 - **`SUPERPOWERS_CMUX_QUOTA_TOOL`** — the quota binary. Default `$HOME/.claude/bin/claude-usage-pace`
   (an explicit override is authoritative — a bad override classifies `unchecked`, it never
   silently falls back).
+- **`SUPERPOWERS_CMUX_AUTOSPAWN`** — the plan-less, per-run kill switch. Default enabled. Set to `0`/`false` to disable auto-spawn entirely: the script exits 3 with `reason=autospawn-disabled` at **Precondition 0** (before the cmux-reachability probe), and you resume manually. Invalid values warn and leave it enabled. Complementary to the plan-level `handoff_spawn: off` (durable) — this is the per-run opt-out.
 
 ## The mechanics card (`reports/handoff-mechanics.md`)
 
