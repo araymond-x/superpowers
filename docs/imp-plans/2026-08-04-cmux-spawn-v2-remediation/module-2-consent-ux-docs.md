@@ -39,7 +39,7 @@
 
 Brainstorming has ample word headroom (2481/5000) — no extraction needed.
 
-- [ ] **Step 1: Add the execution-mode choice after the feature name is established**
+- [x] **Step 1: Add the execution-mode choice after the feature name is established**
 
 In `skills/brainstorming/SKILL.md`, immediately after the step **3.5 "Establish feature name"** block (which ends with the conflict-detection bullets, ~line 37), add a new step:
 
@@ -58,7 +58,7 @@ In `skills/brainstorming/SKILL.md`, immediately after the step **3.5 "Establish 
    Remember the answer; you will record it as a Contract Fact when the spec is written (step 6) and carry it into the distilled spec.
 ````
 
-- [ ] **Step 2: Record the choice as a Contract Fact in the spec**
+- [x] **Step 2: Record the choice as a Contract Fact in the spec**
 
 In the **Spec Distillation** section's "Contract Facts" guidance (the description of what belongs in Contract Facts), add one line so the chosen mode lands durably:
 
@@ -66,13 +66,13 @@ In the **Spec Distillation** section's "Contract Facts" guidance (the descriptio
 - Record the execution mode from step 3.6 as a Contract Fact: `handoff_spawn: <auto|ask|off>` — a plan execution variable the plan writer materializes into plan frontmatter.
 ```
 
-- [ ] **Step 3: Verify word ceiling + regression**
+- [x] **Step 3: Verify word ceiling + regression**
 
 Run: `wc -w skills/brainstorming/SKILL.md` (must stay well under 5000 — expect ~2550).
 Run: `.venv/bin/python3 tests/ARaymond-skill-regression/validate-all-skills.py 2>&1 | tail -5`
 Expected: no new FAIL; brainstorming not over the hard word limit.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add skills/brainstorming/SKILL.md
@@ -157,6 +157,6 @@ git commit -m "feat(consent): writing-plans Declaring handoff_spawn + Step 0.5 c
 
 ## Acceptance Criteria (Module 2)
 
-- [ ] `brainstorming/SKILL.md` presents the `auto`/`ask`/`off` choice at the feature-name step and records it in the spec as a Contract Fact (plan execution variable).
+- [x] `brainstorming/SKILL.md` presents the `auto`/`ask`/`off` choice at the feature-name step and records it in the spec as a Contract Fact (plan execution variable).
 - [ ] `writing-plans/SKILL.md` has a "Declaring `handoff_spawn` per Plan" section; Step 0.5 presents/reads the choice; the YAML frontmatter reference lists `handoff_spawn` alongside `enforcement_tier` as a mandatory execution variable.
 - [ ] The Plan Document Header example was extracted to `references/plan-header-template.md`; `wc -w skills/writing-plans/SKILL.md` is under 5000; regression test has no new FAIL.
