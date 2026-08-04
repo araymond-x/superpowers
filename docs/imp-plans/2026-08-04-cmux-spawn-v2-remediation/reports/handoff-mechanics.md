@@ -15,24 +15,24 @@ absolute for THIS machine; regenerate standalone with:
 
 - Manifest: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/.sdd-session.json`
 - Plan: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/plan.md`
-- Active module plan: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-3-discoverability-killswitch.md`
+- Active module plan: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/module-4-hook-papercuts.md`
 - Deviations: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/deviations.md`
 - Reports: `/Users/araymond/projects/claude-custom/superpowers/.worktrees/cmux-spawn-v2-remediation/docs/imp-plans/2026-08-04-cmux-spawn-v2-remediation/reports`
 
 ## Hop state
 
-- hops used: 1
+- hops used: 2
 - expected: 6
 - ceiling: 12
 
 ## Context status
 
-- Last observation: `2026-08-04T22:10:15Z task= type=quality-review tokens=333854 source=probe tier=soft action=allow`
-- Check 6b: context summary due at task 8 — present
+- Last observation: `2026-08-04T23:10:20Z task= type=quality-review tokens=342870 source=probe tier=soft action=allow`
+- Check 6b: context summary due at task 12 — present
 
 ## cmux location
 
-- Last spawn outcome: `2026-08-04T22:13:38Z bcfc817f-05ee-4514-b700-9d6d96c2c5ec outcome hop=1 workspace=5BC6A8A3-28EE-4B50-885E-53C729464DA8 surface=surface:162 launch=auto bundle=2026-08-04T22-12-45Z-cmux-spawn-v2-remediation quota=ok:83.0 tasks_done=7 handshake=ok post_spawn=partial:rename`
+- Last spawn outcome: `2026-08-04T23:12:51Z 320ea461-6878-45e6-ac7f-cf159725ea75 outcome hop=2 workspace=5BC6A8A3-28EE-4B50-885E-53C729464DA8 surface=surface:165 launch=auto bundle=2026-08-04T23-12-28Z-cmux-spawn-v2-remediation quota=ok:79.0 tasks_done=12 handshake=ok post_spawn=partial:rename`
 
 ## Session setup
 
