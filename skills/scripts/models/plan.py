@@ -1,4 +1,5 @@
 """Pydantic model for Plan artifacts (YAML frontmatter)."""
+
 import os
 from typing import Literal
 
@@ -7,7 +8,9 @@ from pydantic import Field, field_validator, model_validator
 from _base import StrictModel, SchemaVersionedModel
 from sdd_session import Tier
 
-FeatureArchetype = Literal["greenfield", "replacement", "extension", "refactor", "migration"]
+FeatureArchetype = Literal[
+    "greenfield", "replacement", "extension", "refactor", "migration"
+]
 
 
 class SharedConstant(StrictModel):
@@ -67,6 +70,21 @@ class Plan(SchemaVersionedModel):
     integration_test: IntegrationTest | None = None
     tasks: list[Task]
 
+    @field_validator("handoff_spawn", mode="before")
+    @classmethod
+    def _coerce_yaml_bool_handoff_spawn(cls, v: object) -> object:
+        # PyYAML (YAML 1.1) coerces unquoted `off`->False, `on`->True. The consent
+        # opt-out is `off`, so accept the coerced False as "off". Reject True: bare
+        # `on` is not a valid mode (and there is no "on" policy).
+        if v is False:
+            return "off"
+        if v is True:
+            raise ValueError(
+                "handoff_spawn: bare `on` is YAML 1.1 True, not a valid mode. "
+                "Use one of auto/ask/off (write `off` unquoted or quoted — both accepted)."
+            )
+        return v
+
     @model_validator(mode="after")
     def tasks_have_unique_sequential_ids(self) -> "Plan":
         ids = [t.id for t in self.tasks]
@@ -100,7 +118,9 @@ class Plan(SchemaVersionedModel):
     def shared_constants_used_are_declared(self) -> "Plan":
         declared_paths = {c.path for c in self.shared_constants}
         for task in self.tasks:
-            undeclared = [p for p in task.shared_constants_used if p not in declared_paths]
+            undeclared = [
+                p for p in task.shared_constants_used if p not in declared_paths
+            ]
             if undeclared:
                 raise ValueError(
                     f"Task {task.id} uses shared_constants {undeclared} but they're not in plan.shared_constants"
@@ -123,7 +143,9 @@ class Plan(SchemaVersionedModel):
         if self.modules is None:
             return self
         if not self.tasks:
-            return self  # parent modular plan — task IDs are module-local, no global check
+            return (
+                self  # parent modular plan — task IDs are module-local, no global check
+            )
         seen: dict[int, int] = {}
         for mod in self.modules:
             for tid in mod.task_ids:

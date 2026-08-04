@@ -1,5 +1,9 @@
 """Tests for Plan Pydantic model and its cross-field validators."""
 
+import os
+import subprocess
+import sys
+import textwrap
 from typing import get_args
 
 import pytest
@@ -10,6 +14,17 @@ from plan import (
     Task,
 )
 from _base import CURRENT_SCHEMA_VERSION
+
+VALIDATORS = os.path.join(
+    os.path.dirname(__file__),
+    "..",
+    "..",
+    "..",
+    "skills",
+    "scripts",
+    "models",
+    "validators.py",
+)
 
 
 MINIMAL_PLAN = {
@@ -404,3 +419,49 @@ class TestHandoffSpawn:
     def test_schema_version_not_bumped(self):
         """Adding handoff_spawn is non-breaking — schema version must NOT change."""
         assert CURRENT_SCHEMA_VERSION == 1
+
+    def test_unquoted_off_coerces_to_off(self):
+        # yaml.safe_load("handoff_spawn: off") -> False (YAML 1.1); model coerces to "off"
+        data = {**MINIMAL_PLAN, "handoff_spawn": False}
+        assert Plan.model_validate(data).handoff_spawn == "off"
+
+    def test_bare_on_rejected_with_actionable_message(self):
+        data = {**MINIMAL_PLAN, "handoff_spawn": True}
+        with pytest.raises(ValidationError) as exc:
+            Plan.model_validate(data)
+        assert "on" in str(exc.value).lower()
+
+
+def _write_plan(tmp_path, handoff_line):
+    body = textwrap.dedent(f"""\
+        ---
+        schema_version: 1
+        feature_archetype: extension
+        {handoff_line}
+        tasks:
+          - id: 0
+            title: t
+        ---
+        # Plan
+        ### Task 0: t
+        - [ ] do it
+        """)
+    p = os.path.join(tmp_path, "plan.md")
+    open(p, "w").write(body)
+    return p
+
+
+def test_validators_cli_accepts_unquoted_off(tmp_path):
+    p = _write_plan(tmp_path, "handoff_spawn: off")  # unquoted -> False in YAML
+    r = subprocess.run(
+        [sys.executable, VALIDATORS, "plan", p], capture_output=True, text=True
+    )
+    assert r.returncode == 0, r.stderr
+
+
+def test_validators_cli_rejects_bare_on(tmp_path):
+    p = _write_plan(tmp_path, "handoff_spawn: on")
+    r = subprocess.run(
+        [sys.executable, VALIDATORS, "plan", p], capture_output=True, text=True
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
