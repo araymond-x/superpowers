@@ -86,7 +86,10 @@ if [ -n "$SESSION_START" ] && [ -d "$BUNDLES_DIR" ]; then
     BSKILL=$(jq -r '.session.entry_skill // ""' "$bdir/manifest.json" 2>/dev/null)
     BREPO=$(jq -r '.project.repo_id // ""' "$bdir/manifest.json" 2>/dev/null)
     [ "$BTYPE" = "work" ] && [ "$BSKILL" = "superpowers:subagent-driven-development" ] && [ "$BREPO" = "$REPO_ID" ] || continue
-    if [ -f "$SPAWN_LOG_FILE" ] && grep -qE "( outcome .*bundle=$BID( |\$))|( decline bundle=$BID( |\$))" "$SPAWN_LOG_FILE"; then
+    # Regex-escape $BID: it is interpolated into an ERE below, and a validated
+    # bundle id may contain '.', which would otherwise match any char (N84).
+    BID_RE=$(printf '%s' "$BID" | sed 's/[][\\.^$*+?(){}|/]/\\&/g')
+    if [ -f "$SPAWN_LOG_FILE" ] && grep -qE "( outcome .*bundle=$BID_RE( |$))|( decline bundle=$BID_RE( |$))" "$SPAWN_LOG_FILE"; then
       continue
     fi
     SPAWN_WARN="WARNING: handoff bundle $BID was created this session but reports/handoff-spawn.log has no outcome or decline record for it. Either run spawn-handoff-session.sh $BID (protocol step 4), or record the decline: printf '%s - decline bundle=%s reason=<word>\n' \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" $BID >> $SPAWN_LOG_FILE"
@@ -178,7 +181,12 @@ CHECKPOINT_OUTPUT=$(
     2>/dev/null
 )
 
-if [ $? -ne 0 ] || [ -z "$CHECKPOINT_OUTPUT" ]; then
+# Key off emptiness ALONE. controller-checkpoint.py prints its JSON to stdout
+# BEFORE choosing an exit code and returns 1 on status=FAIL / 2 on advisory
+# WARNING — so a non-zero exit with non-empty output is a real gate result that
+# must be surfaced below, not swallowed. Only a genuine crash (except-path prints
+# to stderr) leaves stdout empty; that alone is the don't-block case.
+if [ -z "$CHECKPOINT_OUTPUT" ]; then
   exit 0
 fi
 

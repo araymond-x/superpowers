@@ -5,7 +5,7 @@
 802ab2aab3b2db3795ccbd369a8b3130946d625e2907563552817016622cb7ab  hooks/session-start
 8ca1878c5800f34f397e6586c473b83a8e652ebb0079eb4426fa08916777fb82  skills/subagent-driven-development/scripts/sdd-pre-dispatch-hook.sh
 0a2aa424ae18615af035727aaf63f039b796e42ef1cec134895f9a9917ef45f4  skills/subagent-driven-development/scripts/sdd-report-guard.sh
-dc21031974efc37055a3d92d12ff4f49bae563c6a2fb7940bc1efc67dd831fe8  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
+8b1d645083438beb15a3758d6863136201ea779a21e2c557d8a77fafeb97546b  skills/subagent-driven-development/scripts/sdd-stop-hook.sh
 95c1d9580b9cb6278f9be844d5b71f1d126034d336bc08aad4c580d1e20ca44b  skills/subagent-driven-development/scripts/sdd-skill-enforcement-hook.sh
 57ecd1d07272abc209f28dfbcc6cd794818c8f03c0800c9bae4fb8625c933d6e  skills/handoff-acceptance/scripts/handoff-gate-hook.sh
 7ebf94c7631c1ec899107bccced884396a1ce859fa6a87f6cf9b0f425fdc5539  skills/writing-plans/scripts/plan-validation-gate-hook.sh

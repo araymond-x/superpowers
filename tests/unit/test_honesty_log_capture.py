@@ -454,26 +454,32 @@ class TestSpawnOutcomeWarning:
             shutil.rmtree(home, ignore_errors=True)
             shutil.rmtree(vault_dir, ignore_errors=True)
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "Pre-existing latent bug in sdd-stop-hook.sh (predates Task 14, "
-            "out of scope to fix here): the checkpoint prerequisite gate is "
-            '`if [ $? -ne 0 ] || [ -z "$CHECKPOINT_OUTPUT" ]; then exit 0; fi`. '
-            "controller-checkpoint.py prints its JSON to stdout BEFORE choosing "
-            "an exit code (main() at the bottom of the file) and returns exit 1 "
-            "on status=FAIL — so `$?` is 1, `CHECKPOINT_OUTPUT` is non-empty "
-            "valid JSON, and the gate's `-ne 0` half fires anyway, exiting the "
-            "hook silently before STATUS is ever inspected. The FAIL branch "
-            "below (and this test's target) is unreachable until the gate is "
-            'changed to key off emptiness alone (`-z "$CHECKPOINT_OUTPUT"`), '
-            "which already correctly discriminates a real infra crash (the "
-            "`except Exception` path prints to stderr, not stdout, so "
-            "CHECKPOINT_OUTPUT is empty only in that case). strict=True: this "
-            "flips to a hard failure the day someone fixes the gate, which is "
-            "the intended signal that the composition logic below is now live."
-        ),
-    )
+    def test_bundle_id_metachar_does_not_false_match(self):
+        tmpdir, home, vault_dir = self._new_dirs()
+        try:
+            _clean_workspace(tmpdir)
+            transcript = os.path.join(tmpdir, "transcript.jsonl")
+            _write_transcript(transcript)
+            repo_id = _repo_id_for(tmpdir)
+            # This-session bundle id contains a regex metachar '.'
+            bid = "2026-07-30T00-00-00Z-test.bundle"
+            _write_bundle(home, bid, repo_id)
+            # A DIFFERENT bundle's outcome record that would match if '.' were unescaped
+            _append_spawn_log(
+                os.path.join(tmpdir, "reports"),
+                "2026-07-30T00:00:01Z uuid-1 outcome hop=1 workspace=w surface=s "
+                "launch=auto bundle=2026-07-30T00-00-00Z-testXbundle quota=ok "
+                "tasks_done=0 handshake=ok",
+            )
+            result = _run_stop_hook(tmpdir, vault_dir, transcript_path=transcript, home=home)
+            assert result.returncode == 0, result.stderr
+            # The warning MUST still fire — the decoy record is for a different bundle.
+            assert bid in json.loads(result.stdout).get("systemMessage", "")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+            shutil.rmtree(home, ignore_errors=True)
+            shutil.rmtree(vault_dir, ignore_errors=True)
+
     def test_composes_with_checkpoint_fail_message(self):
         """A checkpoint FAIL (guaranteed here: no dispatch log / reviews / honesty
         check / trace audit exist for this minimal fixture) plus an unmatched
