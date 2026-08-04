@@ -16,3 +16,5 @@
 
 ## Scope Changes
 [Requirements that changed during execution]
+
+| 2026-08-04T21:45:49Z | Module transition: Consent model + YAML coercion (N83) → Plan-time consent UX + author docs | FYI | Accepted |
