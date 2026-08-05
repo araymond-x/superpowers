@@ -206,11 +206,11 @@ M3 must complete before M4.
 
 ## Acceptance Criteria (feature-level; each module repeats its own subset)
 
-- [ ] Unquoted `handoff_spawn: off` passes `validators.py plan <file>` (exit 0) and yields `spawn_policy: off` in the materialized manifest and a `reason=policy-off` refusal from the script; `handoff_spawn: on` is rejected with an actionable message; quoted `"off"` is unchanged.
-- [ ] Brainstorming presents the execution-mode choice at the feature-name step; writing-plans presents it (direct path) and writes `handoff_spawn` into plan frontmatter; `writing-plans/SKILL.md` has a "Declaring `handoff_spawn` per Plan" section listing it as a mandatory execution variable.
-- [ ] SDD `SKILL.md` names the cmux auto-spawn as the default block-response (proactive discovery); both the SOFT nudge and HARD block hook messages name `spawn-handoff-session.sh` as the default response with manual as the alternative.
-- [ ] A skill-awareness audit result is recorded for every skill assessed (SDD, writing-plans, brainstorming, executing-plans, using-superpowers).
-- [ ] `SUPERPOWERS_CMUX_AUTOSPAWN=0` makes the spawn script exit 3 with `reason=autospawn-disabled` before the cmux-reachability check; documented in both env registries.
-- [ ] N84 (`$BID` regex-safe), N86 (checkpoint gate fail-closed; the `xfail(strict=True)` tripwire un-marked and passing), N85 (card `sys.executable` + validated ceiling) fixed; hook baseline re-captured in the same commit as each baselined-hook edit.
-- [ ] All suites green (unit, e2e, regression, install, hook baseline); SKILL.md additions offset by `references/` extraction (an explicit `wc -w` number recorded per SKILL.md edit, under 5000).
-- [ ] BACKLOG rows N55, N83, N84, N85, N86 updated/closed at merge (flag-not-overwrite; BACKLOG.md may be owned by a concurrent session).
+- [x] Unquoted `handoff_spawn: off` passes `validators.py plan <file>` (exit 0) and yields `spawn_policy: off` in the materialized manifest and a `reason=policy-off` refusal from the script; `handoff_spawn: on` is rejected with an actionable message; quoted `"off"` is unchanged.
+- [x] Brainstorming presents the execution-mode choice at the feature-name step; writing-plans presents it (direct path) and writes `handoff_spawn` into plan frontmatter; `writing-plans/SKILL.md` has a "Declaring `handoff_spawn` per Plan" section listing it as a mandatory execution variable.
+- [x] SDD `SKILL.md` names the cmux auto-spawn as the default block-response (proactive discovery); both the SOFT nudge and HARD block hook messages name `spawn-handoff-session.sh` as the default response with manual as the alternative.
+- [x] A skill-awareness audit result is recorded for every skill assessed (SDD, writing-plans, brainstorming, executing-plans, using-superpowers).
+- [x] `SUPERPOWERS_CMUX_AUTOSPAWN=0` makes the spawn script exit 3 with `reason=autospawn-disabled` before the cmux-reachability check; documented in both env registries.
+- [x] N84 (`$BID` regex-safe), N86 (checkpoint gate fail-closed; the `xfail(strict=True)` tripwire un-marked and passing), N85 (card `sys.executable` + validated ceiling) fixed; hook baseline re-captured in the same commit as each baselined-hook edit.
+- [x] All suites green (unit, e2e, regression, install, hook baseline); SKILL.md additions offset by `references/` extraction (an explicit `wc -w` number recorded per SKILL.md edit, under 5000).
+- [x] BACKLOG rows N55, N83, N84, N85, N86 updated/closed at merge (flag-not-overwrite; BACKLOG.md may be owned by a concurrent session).
