@@ -222,20 +222,20 @@ git commit -m "fix(n85): mechanics card uses sys.executable + validated MAX_HOPS
 - Modify: `CLAUDE.md` (cmux auto-spawn section: discoverability + kill switch + N83)
 - Modify: `docs/ARaymond-customization-manifest.md` (if a documented inventory entry changed)
 
-- [ ] **Step 1: Add the AUTOSPAWN e2e step**
+- [x] **Step 1: Add the AUTOSPAWN e2e step**
 
 In `tests/integration/sdd-e2e-test.sh`, add a step (mirror the Step-14 stub structure and its `policy=ask` sub-run) that drives `spawn-handoff-session.sh` with `SUPERPOWERS_CMUX_AUTOSPAWN=0` and asserts exit 3 + `reason=autospawn-disabled` fires **before** the cmux-reachability probe (the refusal message is autospawn-disabled, not cmux-unreachable). Update the run's closing step-count banner if the harness prints one.
 
-- [ ] **Step 2: Run the e2e suite**
+- [x] **Step 2: Run the e2e suite**
 
 Run: `bash tests/integration/sdd-e2e-test.sh`
 Expected: all steps PASS, including the new AUTOSPAWN step; closing banner reflects the new count.
 
-- [ ] **Step 3: Doc maintenance**
+- [x] **Step 3: Doc maintenance**
 
 Update `CLAUDE.md`'s cmux auto-spawn coverage to reflect: (a) auto-spawn is now the documented default with proactive discoverability (SDD SKILL.md + hook messages), (b) the `SUPERPOWERS_CMUX_AUTOSPAWN` kill switch (already added to the env registry in Task 9 — cross-reference, don't duplicate), (c) the N83 unquoted-`off` coercion. Keep edits tight and routing-oriented per the repo's instruction-hygiene rules. Update `docs/ARaymond-customization-manifest.md` only if an inventory entry (scripts/hooks/skills) materially changed.
 
-- [ ] **Step 4: Full-suite verification**
+- [x] **Step 4: Full-suite verification**
 
 Run all suites and record results:
 
@@ -249,7 +249,7 @@ bash tests/ARaymond-hook-baseline/check-hooks.sh
 
 Expected: unit all PASS (prior 849 + new tests, 1 xfailed becomes 0 xfailed since N86's xfail was removed — confirm the count); regression no new FAIL; install PASS; e2e all steps PASS; hook baseline in-sync.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add tests/integration/sdd-e2e-test.sh CLAUDE.md docs/ARaymond-customization-manifest.md
@@ -258,9 +258,9 @@ git commit -m "test(e2e)+docs: AUTOSPAWN precondition e2e step + cmux auto-spawn
 
 ## Acceptance Criteria (Module 4)
 
-- [ ] N84: a bundle id containing `.` does not false-match a different bundle's log record (metachar test green); `$BID` regex-escaped.
-- [ ] N86: the checkpoint-prerequisite gate keys off `-z "$CHECKPOINT_OUTPUT"` alone; `test_composes_with_checkpoint_fail_message` is un-`xfail`ed and PASSES; a real checkpoint FAIL now surfaces "Pre-Completion Gate FAILED".
-- [ ] Hook baseline re-captured in the same commit as the sdd-stop-hook.sh edit; `check-hooks.sh` in-sync.
-- [ ] N85: card regen line uses `{sys.executable}` (no literal `$PYTHON`); ceiling validates `SUPERPOWERS_CMUX_MAX_HOPS` like the script (invalid → derived default).
-- [ ] e2e has an AUTOSPAWN precondition step (exit 3 `reason=autospawn-disabled` before cmux reachability); the declared `integration_test` is in the changeset (C2 Check 10).
-- [ ] All suites green (unit, regression, install, e2e, hook baseline); CLAUDE.md doc maintenance done.
+- [x] N84: a bundle id containing `.` does not false-match a different bundle's log record (metachar test green); `$BID` regex-escaped.
+- [x] N86: the checkpoint-prerequisite gate keys off `-z "$CHECKPOINT_OUTPUT"` alone; `test_composes_with_checkpoint_fail_message` is un-`xfail`ed and PASSES; a real checkpoint FAIL now surfaces "Pre-Completion Gate FAILED".
+- [x] Hook baseline re-captured in the same commit as the sdd-stop-hook.sh edit; `check-hooks.sh` in-sync.
+- [x] N85: card regen line uses `{sys.executable}` (no literal `$PYTHON`); ceiling validates `SUPERPOWERS_CMUX_MAX_HOPS` like the script (invalid → derived default).
+- [x] e2e has an AUTOSPAWN precondition step (exit 3 `reason=autospawn-disabled` before cmux reachability); the declared `integration_test` is in the changeset (C2 Check 10).
+- [x] All suites green (unit, regression, install, e2e, hook baseline); CLAUDE.md doc maintenance done.
